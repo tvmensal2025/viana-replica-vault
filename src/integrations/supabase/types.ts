@@ -180,6 +180,7 @@ export type Database = {
           created_at: string
           data_nascimento: string | null
           debitos_aberto: boolean | null
+          desconto_cliente: number | null
           distribuidora: string | null
           document_back_url: string | null
           document_front_url: string | null
@@ -190,6 +191,7 @@ export type Database = {
           error_message: string | null
           id: string
           igreen_link: string | null
+          media_consumo: number | null
           name: string | null
           nome_mae: string | null
           nome_pai: string | null
@@ -220,6 +222,7 @@ export type Database = {
           created_at?: string
           data_nascimento?: string | null
           debitos_aberto?: boolean | null
+          desconto_cliente?: number | null
           distribuidora?: string | null
           document_back_url?: string | null
           document_front_url?: string | null
@@ -230,6 +233,7 @@ export type Database = {
           error_message?: string | null
           id?: string
           igreen_link?: string | null
+          media_consumo?: number | null
           name?: string | null
           nome_mae?: string | null
           nome_pai?: string | null
@@ -260,6 +264,7 @@ export type Database = {
           created_at?: string
           data_nascimento?: string | null
           debitos_aberto?: boolean | null
+          desconto_cliente?: number | null
           distribuidora?: string | null
           document_back_url?: string | null
           document_front_url?: string | null
@@ -270,6 +275,7 @@ export type Database = {
           error_message?: string | null
           id?: string
           igreen_link?: string | null
+          media_consumo?: number | null
           name?: string | null
           nome_mae?: string | null
           nome_pai?: string | null
