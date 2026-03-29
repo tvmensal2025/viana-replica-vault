@@ -59,9 +59,10 @@ export async function connectInstance(instanceName: string) {
 }
 
 export async function getConnectionState(instanceName: string) {
-  return request<{ state: "open" | "close" | "connecting" }>(
+  const response = await request<{ instance: { instanceName: string; state: string } }>(
     `${getBaseUrl()}/instance/connectionState/${instanceName}`
   );
+  return { state: response?.instance?.state as "open" | "close" | "connecting" };
 }
 
 export async function deleteInstance(instanceName: string) {
