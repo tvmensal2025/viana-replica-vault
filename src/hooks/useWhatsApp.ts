@@ -49,6 +49,22 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => reject(new Error("timeout")), ms);
+
+    promise
+      .then((value) => {
+        clearTimeout(timeoutId);
+        resolve(value);
+      })
+      .catch((err) => {
+        clearTimeout(timeoutId);
+        reject(err);
+      });
+  });
+}
+
 function normalizeSlug(value: string): string {
   return value
     .normalize("NFD")
@@ -80,8 +96,10 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
   const [error, setError] = useState<string | null>(null);
   const [connectionLog, setConnectionLog] = useState<string[]>([]);
   const { toast } = useToast();
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevStatusRef = useRef<ConnectionStatus>("disconnected");
+  const pollActiveRef = useRef(false);
+  const pollInFlightRef = useRef(false);
 
   const addLog = useCallback((msg: string) => {
     setConnectionLog((prev) => [...prev.slice(-9), logEntry(sanitizeVisibleMessage(msg))]);
@@ -101,14 +119,19 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
   }, [consultantId]);
 
   const clearPolling = useCallback(() => {
+    pollActiveRef.current = false;
+
     if (intervalRef.current) {
-      clearInterval(intervalRef.current);
+      clearTimeout(intervalRef.current);
       intervalRef.current = null;
     }
   }, []);
 
   const pollConnectionState = useCallback(
     async (name: string) => {
+      if (pollInFlightRef.current) return;
+      pollInFlightRef.current = true;
+
       try {
         const result = await getConnectionState(name);
         const state = result?.state;
@@ -132,7 +155,9 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
           setQrCode(null);
         }
       } catch {
-        // Instance may not exist anymore on Evolution API — don't crash
+        // Instance may not exist anymore on connection service — don't crash
+      } finally {
+        pollInFlightRef.current = false;
       }
     },
     [toast, addLog]
@@ -141,12 +166,20 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
   const startPolling = useCallback(
     (name: string) => {
       clearPolling();
-      const getInterval = () =>
-        prevStatusRef.current === "connecting" ? 5000 : 30000;
+      pollActiveRef.current = true;
 
-      intervalRef.current = setInterval(() => {
-        pollConnectionState(name);
-      }, getInterval());
+      const runPoll = async () => {
+        if (!pollActiveRef.current) return;
+
+        await pollConnectionState(name);
+
+        if (!pollActiveRef.current) return;
+
+        const nextDelay = prevStatusRef.current === "connecting" ? 5000 : 30000;
+        intervalRef.current = setTimeout(runPoll, nextDelay);
+      };
+
+      runPoll();
     },
     [clearPolling, pollConnectionState]
   );
@@ -180,20 +213,26 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       // Clean ALL ghost instances from the server (not just DB records)
       addLog("Verificando instâncias existentes no servidor...");
       try {
-        const allInstances = await fetchInstances();
+        const allInstances = await withTimeout(fetchInstances(), 12000);
         const igreenInstances = (allInstances || []).filter(
           (i) => i.instance?.instanceName?.startsWith("igreen-")
         );
         if (igreenInstances.length > 0) {
           addLog(`Removendo ${igreenInstances.length} instância(s) anterior(es)...`);
-          for (const inst of igreenInstances) {
-            try {
-              await deleteInstance(inst.instance.instanceName);
-            } catch {
-              // ignore individual delete failures
-            }
+
+          const deleteResults = await Promise.allSettled(
+            igreenInstances.map((inst) =>
+              withTimeout(deleteInstance(inst.instance.instanceName), 8000)
+            )
+          );
+
+          const removedCount = deleteResults.filter((result) => result.status === "fulfilled").length;
+
+          if (removedCount > 0) {
+            addLog(`✅ ${removedCount} instância(s) anterior(es) removida(s)`);
+          } else {
+            addLog("⚠️ Não foi possível remover instâncias anteriores");
           }
-          addLog("✅ Instâncias anteriores removidas");
         }
       } catch {
         addLog("⚠️ Não foi possível listar instâncias do servidor");
