@@ -3,6 +3,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { MessageBubble } from "./MessageBubble";
 import { MessageComposer } from "./MessageComposer";
+import { AddCustomerDialog } from "./AddCustomerDialog";
 import { useMessages } from "@/hooks/useMessages";
 import { sendAudio as sendAudioApi } from "@/services/evolutionApi";
 import { supabase } from "@/integrations/supabase/client";
