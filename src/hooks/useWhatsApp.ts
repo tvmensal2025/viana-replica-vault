@@ -28,6 +28,18 @@ function logEntry(msg: string): string {
   return `[${ts}] ${msg}`;
 }
 
+function isAlreadyInUseError(message: string): boolean {
+  return message.includes("already in use") || message.includes("[403]");
+}
+
+function isWorkerLimitError(message: string): boolean {
+  return /WORKER_LIMIT|\[546\]|not having enough compute resources/i.test(message);
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("disconnected");
   const [instanceName, setInstanceName] = useState<string | null>(null);
