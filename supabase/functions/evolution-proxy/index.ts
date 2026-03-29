@@ -77,14 +77,31 @@ Deno.serve(async (req) => {
     }
 
     let evolutionResponse: Response;
+    const controller = new AbortController();
+    const timeoutMs = 15000;
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
     try {
-      evolutionResponse = await fetch(targetUrl, fetchOptions);
-    } catch (_networkError) {
-      console.error("[evolution-proxy] Network error connecting to Evolution API");
+      evolutionResponse = await fetch(targetUrl, {
+        ...fetchOptions,
+        signal: controller.signal,
+      });
+    } catch (networkError) {
+      if (networkError instanceof DOMException && networkError.name === "AbortError") {
+        console.error(`[evolution-proxy] Timeout after ${timeoutMs}ms for ${method || "GET"} ${targetUrl}`);
+        return new Response(
+          JSON.stringify({ error: `Tempo limite ao chamar a API do WhatsApp (${timeoutMs}ms)` }),
+          { status: 504, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      console.error("[evolution-proxy] Network error connecting to Evolution API", networkError);
       return new Response(
         JSON.stringify({ error: "Erro ao conectar com a API do WhatsApp" }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    } finally {
+      clearTimeout(timeoutId);
     }
 
     // Retransmit Evolution API response
