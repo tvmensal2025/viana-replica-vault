@@ -5,7 +5,7 @@ import { MessageBubble } from "./MessageBubble";
 import { MessageComposer } from "./MessageComposer";
 import { AddCustomerDialog } from "./AddCustomerDialog";
 import { useMessages } from "@/hooks/useMessages";
-import { sendAudio as sendAudioApi } from "@/services/evolutionApi";
+import { sendAudio as sendAudioApi, sendMedia as sendMediaApi } from "@/services/evolutionApi";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import type { MessageTemplate } from "@/types/whatsapp";
