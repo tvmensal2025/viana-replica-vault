@@ -64,7 +64,7 @@ async function proxyToEvolution(
   fetchOptions: RequestInit,
 ): Promise<Response> {
   const timeoutMs = getTimeoutMs(safePath);
-  const attempts = safePath === "instance/create" ? 2 : 1;
+  const attempts = 1;
 
   let lastError: unknown;
 
