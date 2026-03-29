@@ -1,72 +1,42 @@
 
 
-# Plano: Corrigir Conexao WhatsApp + Diagnostico
+# Plano: Resolver timeout e exibir QR Code
 
-## Analise dos Problemas Encontrados
+## Problema Raiz
 
-1. **Instancia fantasma**: A Evolution API tem a instancia `igreen-0c2711ad-...` registrada, mas a tabela `whatsapp_instances` no Supabase esta VAZIA. O fluxo tenta criar, recebe 403, e o recovery nao consegue resolver porque nao deleta/recria.
+Existem dois problemas distintos:
 
-2. **CORS incompletos**: A edge function `evolution-proxy` esta com headers CORS desatualizados (faltam `x-supabase-client-platform`, etc.), o que pode causar falhas silenciosas no preflight.
+1. **Edge function desatualizada**: A resposta ainda mostra `"15000ms"` no erro, indicando que a versao antiga do `evolution-proxy` ainda esta ativa. Precisa ser reimplantada.
 
-3. **Corpo do erro perdido**: `handleResponse` descarta o JSON de erro e so usa `statusText` ("Forbidden"), dificultando diagnostico.
+2. **A Evolution API esta demorando mais de 55 segundos para responder** ao `POST /instance/create`. Isso pode ser porque:
+   - A URL configurada no secret `EVOLUTION_API_URL` pode estar usando `http://` em vez de `https://` (o servidor Evolution esta configurado para HTTPS)
+   - A URL pode conter `/manager` no final, causando path incorreto
+   - O servidor pode estar sobrecarregado com instancias antigas nao removidas
 
-4. **Sem reset automatico**: Quando ha conflito 403, o usuario quer que o sistema delete a instancia existente e recrie automaticamente, mas o fluxo atual so tenta reconectar.
+## Plano
 
-5. **Sem visibilidade**: Nenhum feedback sobre qual etapa esta falhando (auth, proxy, create, state, connect).
+### 1. Reimplantar edge function `evolution-proxy`
+O codigo ja esta correto (55s timeout, mensagem sanitizada). So precisa ser redeployado para a versao atualizada entrar em vigor.
 
-## Plano de Implementacao
+### 2. Verificar e corrigir o secret `EVOLUTION_API_URL`
+Com base na configuracao do servidor que voce forneceu, a URL correta deve ser `https://igreen-evolution-api.0sw627.easypanel.host` (HTTPS, sem `/manager`, sem barra final). Preciso verificar o valor atual do secret e atualizar se necessario.
 
-### 1. Atualizar CORS da Edge Function
-**Arquivo**: `supabase/functions/evolution-proxy/index.ts`
-- Adicionar headers CORS completos do Supabase
-- Adicionar logging de debug (url montada, status retornado, path recebido) via `console.log`
+### 3. Verificar o secret `EVOLUTION_API_KEY`
+O valor deve ser `429683C4C977415CAAFCCE10F7D57E11` (conforme `AUTHENTICATION_API_KEY` na configuracao que voce compartilhou).
 
-### 2. Melhorar tratamento de erros no servico
-**Arquivo**: `src/services/evolutionApi.ts`
-- `handleResponse`: ler o body JSON antes de lançar o erro, incluindo a mensagem real da Evolution API
-- Incluir status code na mensagem de erro para facilitar diagnostico
+### 4. Adicionar log da URL completa no proxy
+Adicionar `console.log` da `EVOLUTION_API_URL` raw (valor real, nao so boolean) para diagnosticar se o valor do secret esta correto. Isso fica apenas nos logs do servidor, invisivel ao cliente.
 
-### 3. Implementar estrategia de reset automatico
-**Arquivo**: `src/hooks/useWhatsApp.ts`
-- Quando receber 403 ("already in use"), executar `deleteInstance(name)` primeiro
-- Depois recriar com `createInstance(name)` 
-- Manter o `ensureLocalAndConnect` como fallback caso o delete+create falhe
-- Adicionar estado de `connectionLog` (array de strings) para rastrear cada etapa
-
-### 4. Criar painel de diagnostico na UI
-**Arquivo**: `src/components/whatsapp/ConnectionPanel.tsx`
-- Adicionar prop `connectionLog: string[]` 
-- Exibir lista de etapas executadas com timestamps durante o processo de conexao
-- Mostrar icones de check/erro para cada etapa
-- Visivel apenas durante loading ou erro
-
-### 5. Conectar diagnostico ao WhatsAppTab
-**Arquivo**: `src/components/whatsapp/WhatsAppTab.tsx`
-- Passar `connectionLog` do hook para o `ConnectionPanel`
-
-## Fluxo Corrigido
-
-```text
-Usuario clica "Conectar"
-  |
-  v
-[1] createInstance(name)
-  |-- Sucesso? -> upsert DB + exibir QR + polling
-  |-- 403 "already in use"?
-        |
-        v
-      [2] deleteInstance(name) -- reset automatico
-        |
-        v
-      [3] createInstance(name) -- retry
-        |-- Sucesso? -> upsert DB + exibir QR + polling
-        |-- Falha? -> exibir erro detalhado
-```
+### 5. Limpar instancias fantasma
+Antes de criar uma nova instancia, o hook ja tenta deletar as anteriores. O problema e que se a Evolution API nao responde, essas delecoes tambem falham. Adicionar um fetch direto ao endpoint `instance/fetchInstances` para listar e limpar TODAS as instancias existentes no servidor.
 
 ## Detalhes Tecnicos
 
-- Edge function: atualizar `Access-Control-Allow-Headers` para incluir `x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version`
-- `handleResponse`: fazer `await response.json()` antes de throw, usar `error.message` ou `error.response.message` do body
-- `connectionLog` sera um `string[]` no state do hook, populado com entries tipo `"[10:28:45] Criando instancia..."`, `"[10:28:46] ✓ QR Code recebido"`
-- O painel mostra max 10 linhas com scroll, fonte mono, fundo escuro
+**Arquivo**: `supabase/functions/evolution-proxy/index.ts`
+- Adicionar log do valor real (primeiros 30 chars) da `EVOLUTION_API_URL` para debug
+- Reimplantar via Supabase CLI
+
+**Arquivo**: `src/hooks/useWhatsApp.ts`
+- Antes de `createInstance`, chamar `fetchInstances` para listar todas existentes e deletar cada uma
+- Adicionar tratamento para timeout (504) com mensagem amigavel e sugestao de retry
 
