@@ -1,117 +1,72 @@
 
 
-# Plano: Documentacao Completa de Todas as Funcoes
+# Plano: Corrigir Conexao WhatsApp + Diagnostico
 
-Criar o arquivo `DOCUMENTATION.md` na raiz do projeto com documentacao exaustiva de todas as funcoes, hooks, servicos, edge functions, componentes, paginas, tipos e tabelas do banco de dados.
+## Analise dos Problemas Encontrados
 
-## Estrutura do Documento
+1. **Instancia fantasma**: A Evolution API tem a instancia `igreen-0c2711ad-...` registrada, mas a tabela `whatsapp_instances` no Supabase esta VAZIA. O fluxo tenta criar, recebe 403, e o recovery nao consegue resolver porque nao deleta/recria.
 
-### 1. Visao Geral
-- Arquitetura: React + Vite + TypeScript + Tailwind + Supabase + Evolution API + MinIO
-- Rotas da aplicacao (6 rotas)
+2. **CORS incompletos**: A edge function `evolution-proxy` esta com headers CORS desatualizados (faltam `x-supabase-client-platform`, etc.), o que pode causar falhas silenciosas no preflight.
 
-### 2. Utilitarios (`src/lib/`)
-- `cn(...inputs)` - Merge de classes Tailwind
+3. **Corpo do erro perdido**: `handleResponse` descarta o JSON de erro e so usa `statusText` ("Forbidden"), dificultando diagnostico.
 
-### 3. Servico Evolution API (`src/services/evolutionApi.ts`) - 16 funcoes
-- `getBaseUrl()`, `getApiKey()`, `getHeaders()` - Configuracao
-- `handleResponse<T>()` - Tratamento de resposta HTTP
-- `request<T>()` - Wrapper generico de fetch
-- `createInstance()` - Criar instancia WhatsApp
-- `connectInstance()` - Conectar instancia (gerar QR)
-- `getConnectionState()` - Estado da conexao
-- `deleteInstance()` - Deletar instancia
-- `findChats()` - Listar conversas
-- `findMessages()` - Buscar mensagens de um chat
-- `findContacts()` - Listar contatos
-- `getBase64FromMediaMessage()` - Baixar midia em base64
-- `sendTextMessage()` - Enviar texto
-- `sendMedia()` - Enviar imagem/video/documento
-- `sendAudio()` - Enviar audio
-- `sendDocument()` - Enviar documento
-- `markAsRead()` - Marcar como lido
-- `getProfilePicture()` - Foto de perfil
+4. **Sem reset automatico**: Quando ha conflito 403, o usuario quer que o sistema delete a instancia existente e recrie automaticamente, mas o fluxo atual so tenta reconectar.
 
-### 4. Servico MinIO Upload (`src/services/minioUpload.ts`) - 3 funcoes
-- `uploadMedia()` - Upload via edge function
-- `getAcceptString()` - String accept por tipo
-- `formatFileSize()` - Formatar bytes
+5. **Sem visibilidade**: Nenhum feedback sobre qual etapa esta falhando (auth, proxy, create, state, connect).
 
-### 5. Hooks (`src/hooks/`) - 10 hooks
+## Plano de Implementacao
 
-- **useWhatsApp** - 5 funcoes internas: `clearPolling`, `pollConnectionState`, `startPolling`, `createAndConnect`, `disconnect`, `reconnect`, `checkExistingInstance`
-- **useTemplates** - 4 funcoes: `fetchTemplates`, `createTemplate`, `deleteTemplate`, `applyTemplate` (pura, exportada separadamente)
-- **useChats** - 4 funcoes internas: `extractLastMessage`, `mapChat`, `fetchContacts`, `fetchChats`
-- **useMessages** - 5 funcoes: `mapMessage`, `fetchMessages`, `resolveSendTargetJid`, `loadMedia`, `sendMessage`
-- **useConsultant** - Query por license
-- **useAnalytics** - Query de analytics 30 dias
-- **useTrackView** - Registra page view
-- **useTrackEvent** - 2 funcoes: `trackClickEvent`, `getTrackingMeta` + helper `getDeviceType`, `getUtmParams`
-- **useIsMobile** - Detecta viewport < 768px
-- **useToast** - Sistema de toast (reducer + dispatch + `toast()`)
+### 1. Atualizar CORS da Edge Function
+**Arquivo**: `supabase/functions/evolution-proxy/index.ts`
+- Adicionar headers CORS completos do Supabase
+- Adicionar logging de debug (url montada, status retornado, path recebido) via `console.log`
 
-### 6. Edge Functions (Supabase) - 2 funcoes
+### 2. Melhorar tratamento de erros no servico
+**Arquivo**: `src/services/evolutionApi.ts`
+- `handleResponse`: ler o body JSON antes de lançar o erro, incluindo a mensagem real da Evolution API
+- Incluir status code na mensagem de erro para facilitar diagnostico
 
-- **upload-media** - 3 funcoes internas: `getAllowedTypes`, `getExtension`, handler principal. Upload para MinIO com validacao de tipo/tamanho.
-- **crm-auto-progress** - 2 funcoes: `sendEvolutionMessage`, handler principal. Progressao automatica de deals (30/60/90/120 dias).
+### 3. Implementar estrategia de reset automatico
+**Arquivo**: `src/hooks/useWhatsApp.ts`
+- Quando receber 403 ("already in use"), executar `deleteInstance(name)` primeiro
+- Depois recriar com `createInstance(name)` 
+- Manter o `ensureLocalAndConnect` como fallback caso o delete+create falhe
+- Adicionar estado de `connectionLog` (array de strings) para rastrear cada etapa
 
-### 7. Componentes WhatsApp (`src/components/whatsapp/`) - 12 componentes
-Cada um com suas funcoes internas documentadas:
-- **WhatsAppTab** - Orquestrador principal (fetchCustomers)
-- **ConnectionPanel** - UI de conexao/QR code
-- **ChatSidebar** - Lista de conversas (formatTime)
-- **ChatView** - Visualizacao de chat (handleCustomerAdded, handleSendAudio, handleSendMedia)
-- **MessageBubble** - Bolha de mensagem + sub-componentes: AudioPlayer, ImageViewer, VideoPlayer, DocumentViewer, StickerViewer, StatusIcon, formatTime
-- **MessageComposer** - Compositor (handleSend, handleFileSelect, startRecording, stopRecording, cancelRecording, formatRecordingTime)
-- **MessagePanel** - Envio individual (filterCustomers exportada, handleSend, handleTemplateChange)
-- **BulkSendPanel** - Envio em massa (toggleCustomer, toggleAll, handleBulkSend, handleTemplateChange)
-- **TemplateManager** - Gerenciador de templates (handleFileUpload, handleCreate, mediaIcon, mediaBadge)
-- **KanbanBoard** - CRM Kanban (fetchStages, fetchDeals, handleDragStart, handleDrop, sendAutoMessage, handleAddStage, handleUpdateStage, handleDeleteStage, handleSaveAutoMessage, handleToggleAutoMessage)
-- **CustomerManager** - Gerenciador de clientes (formatPhoneDisplay, formatCpfDisplay, getInitials, getStatusBadge, handleDelete, openEdit, handleSaveEdit, fetchCep)
-- **AddCustomerDialog** - Dialog de adicionar cliente (formatPhone, formatCpf, formatCep, fetchCep, handleSave)
-- **QuickReplyMenu** - Menu de respostas rapidas
-- **SchedulePanel** - Agendamento de mensagens (fetchMessages, handleCreate, handleDelete)
-- **StageAutoMessageConfig** - Config de auto-mensagem por estagio (handleSave, handleClear, insertBold, insertItalic)
+### 4. Criar painel de diagnostico na UI
+**Arquivo**: `src/components/whatsapp/ConnectionPanel.tsx`
+- Adicionar prop `connectionLog: string[]` 
+- Exibir lista de etapas executadas com timestamps durante o processo de conexao
+- Mostrar icones de check/erro para cada etapa
+- Visivel apenas durante loading ou erro
 
-### 8. Componentes Gerais - 4 componentes
-- **ScrollReveal** - Animacao de scroll com IntersectionObserver
-- **SEOHead** - Injeta titulo e meta tags
-- **WhatsAppFloat** - Botao flutuante WhatsApp
-- **LoadingScreen** - Tela de carregamento
-- **NavLink** - Wrapper de NavLink com classes ativas
-- **PixelInjector** - Injeta Facebook Pixel e Google Analytics
+### 5. Conectar diagnostico ao WhatsAppTab
+**Arquivo**: `src/components/whatsapp/WhatsAppTab.tsx`
+- Passar `connectionLog` do hook para o `ConnectionPanel`
 
-### 9. Paginas (`src/pages/`) - 6 paginas
-- **Admin** - Painel do consultor (loadConsultant, handlePhotoChange, handleSave, handleLogout, copyLink) + sub-componentes StatCard, LinkCard
-- **Auth** - Login/Cadastro (handleSubmit)
-- **ConsultantPage** - Landing page cliente
-- **LicenciadaPage** - Landing page licenciado
-- **LicenciadaPreview** - Preview sem dados reais
-- **NotFound** - Pagina 404
-- **Index** - Pagina raiz (redireciona)
+## Fluxo Corrigido
 
-### 10. Tipos TypeScript (`src/types/`)
-- `whatsapp.ts` - WhatsAppInstance, MessageTemplate, TemplateMediaType, ConnectionStatus, BulkSendProgress
-- `consultant.ts` - Consultant
-
-### 11. Interfaces da Evolution API (em evolutionApi.ts)
-- EvolutionChat, EvolutionMessage, EvolutionContact
-
-### 12. Banco de Dados - 11 tabelas
-Cada tabela com colunas, tipos, defaults e politicas RLS:
-consultants, conversations, crm_deals, customer_tags, customers, kanban_stages, message_templates, page_events, page_views, scheduled_messages, settings, whatsapp_instances
-
-### 13. Variaveis de Ambiente
-- Frontend: VITE_EVOLUTION_API_URL, VITE_EVOLUTION_API_KEY, VITE_SUPABASE_*
-- Edge Functions: MINIO_*, EVOLUTION_*, SUPABASE_*
-
-### 14. Integracao Supabase Client
-- `supabase` - Cliente configurado com persistSession e autoRefreshToken
+```text
+Usuario clica "Conectar"
+  |
+  v
+[1] createInstance(name)
+  |-- Sucesso? -> upsert DB + exibir QR + polling
+  |-- 403 "already in use"?
+        |
+        v
+      [2] deleteInstance(name) -- reset automatico
+        |
+        v
+      [3] createInstance(name) -- retry
+        |-- Sucesso? -> upsert DB + exibir QR + polling
+        |-- Falha? -> exibir erro detalhado
+```
 
 ## Detalhes Tecnicos
-- Arquivo: `DOCUMENTATION.md` na raiz
-- Cada funcao com: descricao, parametros (tipo), retorno, observacoes
-- Tabelas em formato markdown com coluna | tipo | nullable | default
-- Estimativa: ~1200 linhas de markdown
-- Idioma: Portugues
+
+- Edge function: atualizar `Access-Control-Allow-Headers` para incluir `x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version`
+- `handleResponse`: fazer `await response.json()` antes de throw, usar `error.message` ou `error.response.message` do body
+- `connectionLog` sera um `string[]` no state do hook, populado com entries tipo `"[10:28:45] Criando instancia..."`, `"[10:28:46] ✓ QR Code recebido"`
+- O painel mostra max 10 linhas com scroll, fonte mono, fundo escuro
 
