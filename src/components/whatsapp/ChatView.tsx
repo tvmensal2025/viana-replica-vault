@@ -1,25 +1,71 @@
-import { useEffect, useRef } from "react";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import { MessageBubble } from "./MessageBubble";
 import { MessageComposer } from "./MessageComposer";
 import { useMessages } from "@/hooks/useMessages";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 import type { MessageTemplate } from "@/types/whatsapp";
 import type { ChatItem } from "@/hooks/useChats";
-import { Loader2, MessageSquareText } from "lucide-react";
+import { Loader2, MessageSquareText, UserPlus, UserCheck } from "lucide-react";
 
 interface ChatViewProps {
   instanceName: string;
   chat: ChatItem | null;
   templates: MessageTemplate[];
+  consultantId: string;
 }
 
-export function ChatView({ instanceName, chat, templates }: ChatViewProps) {
+export function ChatView({ instanceName, chat, templates, consultantId }: ChatViewProps) {
   const { messages, isLoading, sendMessage } = useMessages(
     instanceName,
     chat?.remoteJid || null
   );
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
+  const [isCustomer, setIsCustomer] = useState(false);
+  const [addingCustomer, setAddingCustomer] = useState(false);
+
+  // Check if this contact is already a customer
+  useEffect(() => {
+    if (!chat) { setIsCustomer(false); return; }
+    const phone = chat.remoteJid.split("@")[0];
+    supabase
+      .from("customers")
+      .select("id")
+      .eq("phone_whatsapp", phone)
+      .maybeSingle()
+      .then(({ data }) => setIsCustomer(!!data));
+  }, [chat]);
+
+  const handleAddCustomer = useCallback(async () => {
+    if (!chat) return;
+    setAddingCustomer(true);
+    try {
+      const phone = chat.remoteJid.split("@")[0];
+      const name = chat.name !== phone ? chat.name : null;
+      const { error } = await supabase.from("customers").insert({
+        phone_whatsapp: phone,
+        name: name,
+      });
+      if (error) {
+        if (error.code === "23505") {
+          toast({ title: "Este contato já é um cliente" });
+          setIsCustomer(true);
+        } else {
+          throw error;
+        }
+      } else {
+        setIsCustomer(true);
+        toast({ title: "Cliente adicionado com sucesso!" });
+      }
+    } catch {
+      toast({ title: "Erro ao adicionar cliente", variant: "destructive" });
+    } finally {
+      setAddingCustomer(false);
+    }
+  }, [chat, toast]);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -38,6 +84,8 @@ export function ChatView({ instanceName, chat, templates }: ChatViewProps) {
     );
   }
 
+  const phoneNumber = chat.remoteJid.split("@")[0];
+
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* Chat header */}
@@ -50,10 +98,26 @@ export function ChatView({ instanceName, chat, templates }: ChatViewProps) {
         </Avatar>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-foreground truncate">{chat.name}</p>
-          <p className="text-[10px] text-muted-foreground">
-            {chat.remoteJid.split("@")[0]}
-          </p>
+          <p className="text-[10px] text-muted-foreground">{phoneNumber}</p>
         </div>
+        {/* Add as customer button */}
+        {isCustomer ? (
+          <div className="flex items-center gap-1.5 text-primary">
+            <UserCheck className="h-4 w-4" />
+            <span className="text-[10px] font-medium">Cliente</span>
+          </div>
+        ) : (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-[10px] gap-1 border-primary/30 text-primary hover:bg-primary/10"
+            onClick={handleAddCustomer}
+            disabled={addingCustomer}
+          >
+            <UserPlus className="h-3.5 w-3.5" />
+            {addingCustomer ? "Adicionando..." : "Adicionar Cliente"}
+          </Button>
+        )}
       </div>
 
       {/* Messages area */}
