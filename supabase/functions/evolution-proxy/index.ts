@@ -23,7 +23,7 @@ Deno.serve(async (req) => {
     const evolutionUrl = Deno.env.get("EVOLUTION_API_URL");
     const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
 
-    console.log("[evolution-proxy] EVOLUTION_API_URL configured:", !!evolutionUrl);
+    console.log("[evolution-proxy] EVOLUTION_API_URL:", evolutionUrl ? evolutionUrl.substring(0, 50) : "NOT SET");
     console.log("[evolution-proxy] EVOLUTION_API_KEY configured:", !!evolutionKey);
 
     // Validate Supabase auth token

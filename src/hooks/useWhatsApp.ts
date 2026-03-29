@@ -5,6 +5,7 @@ import {
   connectInstance,
   getConnectionState,
   deleteInstance,
+  fetchInstances,
 } from "@/services/evolutionApi";
 import type { ConnectionStatus } from "@/types/whatsapp";
 import { useToast } from "@/hooks/use-toast";
@@ -175,37 +176,34 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
 
     try {
       const identity = await fetchConsultantIdentity();
-      const previousRowsResult = await supabase
-        .from("whatsapp_instances")
-        .select("instance_name")
-        .eq("consultant_id", consultantId)
-        .order("created_at", { ascending: false });
 
-      const previousNames = Array.from(
-        new Set((previousRowsResult.data || []).map((row) => row.instance_name).filter(Boolean))
-      );
-
-      if (previousNames.length > 0) {
-        addLog("Removendo conexões anteriores...");
-        for (const oldName of previousNames) {
-          try {
-            await deleteInstance(oldName);
-            addLog("✅ Conexão anterior removida");
-          } catch (deleteErr) {
-            const deleteMsg = deleteErr instanceof Error ? deleteErr.message : "";
-            if (isWorkerLimitError(deleteMsg)) {
-              addLog("⚠️ Serviço temporariamente ocupado ao remover conexão antiga");
-            } else {
-              addLog("⚠️ Não foi possível remover uma conexão antiga agora");
+      // Clean ALL ghost instances from the server (not just DB records)
+      addLog("Verificando instâncias existentes no servidor...");
+      try {
+        const allInstances = await fetchInstances();
+        const igreenInstances = (allInstances || []).filter(
+          (i) => i.instance?.instanceName?.startsWith("igreen-")
+        );
+        if (igreenInstances.length > 0) {
+          addLog(`Removendo ${igreenInstances.length} instância(s) anterior(es)...`);
+          for (const inst of igreenInstances) {
+            try {
+              await deleteInstance(inst.instance.instanceName);
+            } catch {
+              // ignore individual delete failures
             }
           }
+          addLog("✅ Instâncias anteriores removidas");
         }
-
-        await supabase
-          .from("whatsapp_instances")
-          .delete()
-          .eq("consultant_id", consultantId);
+      } catch {
+        addLog("⚠️ Não foi possível listar instâncias do servidor");
       }
+
+      // Also clean local DB records
+      await supabase
+        .from("whatsapp_instances")
+        .delete()
+        .eq("consultant_id", consultantId);
 
       let name = buildInstanceName(identity.name, identity.phone, consultantId);
       addLog("Criando nova instância...");
