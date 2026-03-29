@@ -43,7 +43,7 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
     for (let i = 0; i < selected.length; i++) {
       setProgress({ total: selected.length, sent, failed });
       try {
-        const msg = message.includes("{{") ? applyTemplate({ id: "", consultant_id: "", name: "", content: message, created_at: "" }, selected[i]) : message;
+        const msg = message.includes("{{") ? applyTemplate({ id: "", consultant_id: "", name: "", content: message, media_type: "text", media_url: null, created_at: "" }, selected[i]) : message;
         await sendTextMessage(instanceName, selected[i].phone_whatsapp, msg); sent++;
       } catch { failed++; }
       if (i < selected.length - 1) await delay(2000);

@@ -8,6 +8,8 @@ function makeTemplate(content: string): MessageTemplate {
     consultant_id: "c1",
     name: "Test",
     content,
+    media_type: "text",
+    media_url: null,
     created_at: new Date().toISOString(),
   };
 }
