@@ -3,6 +3,7 @@ import { findChats, findContacts, type EvolutionChat, type EvolutionContact } fr
 
 export interface ChatItem {
   remoteJid: string;
+  sendTargetJid?: string;
   name: string;
   lastMessage: string;
   lastMessageTimestamp: number;

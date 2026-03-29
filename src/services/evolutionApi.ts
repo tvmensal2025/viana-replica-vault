@@ -85,7 +85,11 @@ export interface EvolutionChat {
   lastMsgTimestamp?: number;
   unreadMessages?: number;
   lastMessage?: {
-    key: { fromMe: boolean };
+    key: {
+      fromMe: boolean;
+      remoteJid?: string;
+      remoteJidAlt?: string;
+    };
     message?: {
       conversation?: string;
       extendedTextMessage?: { text: string };
