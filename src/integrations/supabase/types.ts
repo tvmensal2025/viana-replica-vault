@@ -217,6 +217,30 @@ export type Database = {
         }
         Relationships: []
       }
+      message_templates: {
+        Row: {
+          consultant_id: string
+          content: string
+          created_at: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          consultant_id: string
+          content: string
+          created_at?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          consultant_id?: string
+          content?: string
+          created_at?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       page_events: {
         Row: {
           consultant_id: string
@@ -322,46 +346,22 @@ export type Database = {
       }
       whatsapp_instances: {
         Row: {
-          id: string
           consultant_id: string
+          created_at: string | null
+          id: string
           instance_name: string
-          created_at: string
         }
         Insert: {
-          id?: string
           consultant_id: string
+          created_at?: string | null
+          id?: string
           instance_name: string
-          created_at?: string
         }
         Update: {
-          id?: string
           consultant_id?: string
+          created_at?: string | null
+          id?: string
           instance_name?: string
-          created_at?: string
-        }
-        Relationships: []
-      }
-      message_templates: {
-        Row: {
-          id: string
-          consultant_id: string
-          name: string
-          content: string
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          consultant_id: string
-          name: string
-          content: string
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          consultant_id?: string
-          name?: string
-          content?: string
-          created_at?: string
         }
         Relationships: []
       }
