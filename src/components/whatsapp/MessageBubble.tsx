@@ -1,8 +1,11 @@
-import { Check, CheckCheck, Clock, FileText, Image, Mic, Video } from "lucide-react";
+import { useState, useCallback } from "react";
+import { Check, CheckCheck, Clock, FileText, Image, Mic, Video, Play, Download, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import type { ChatMessage } from "@/hooks/useMessages";
 
 interface MessageBubbleProps {
   message: ChatMessage;
+  onLoadMedia?: (messageId: string) => Promise<string | null>;
 }
 
 function formatTime(ts: number): string {
@@ -18,24 +21,209 @@ function StatusIcon({ status }: { status?: number }) {
   if (status <= 1) return <Clock className="h-3 w-3 text-muted-foreground" />;
   if (status === 2) return <Check className="h-3 w-3 text-muted-foreground" />;
   if (status === 3) return <CheckCheck className="h-3 w-3 text-muted-foreground" />;
-  if (status >= 4) return <CheckCheck className="h-3 w-3 text-blue-400" />;
+  if (status >= 4) return <CheckCheck className="h-3 w-3 text-primary" />;
   return null;
 }
 
-function MediaIcon({ type }: { type?: ChatMessage["mediaType"] }) {
-  if (!type) return null;
-  const cls = "h-4 w-4 text-muted-foreground mr-1";
-  switch (type) {
-    case "image": return <Image className={cls} />;
-    case "video": return <Video className={cls} />;
-    case "audio": return <Mic className={cls} />;
-    case "document": return <FileText className={cls} />;
-    default: return null;
+function AudioPlayer({ message, onLoadMedia }: { message: ChatMessage; onLoadMedia?: (id: string) => Promise<string | null> }) {
+  const [audioSrc, setAudioSrc] = useState<string | null>(
+    message.mediaUrl?.startsWith("data:") ? message.mediaUrl : null
+  );
+  const [loading, setLoading] = useState(false);
+
+  const handleLoad = useCallback(async () => {
+    if (audioSrc || !onLoadMedia) return;
+    setLoading(true);
+    const src = await onLoadMedia(message.id);
+    if (src) setAudioSrc(src);
+    setLoading(false);
+  }, [audioSrc, onLoadMedia, message.id]);
+
+  if (audioSrc) {
+    return (
+      <audio controls className="max-w-full h-10" preload="auto">
+        <source src={audioSrc} type={message.mediaMimetype || "audio/ogg"} />
+      </audio>
+    );
   }
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="gap-2 text-xs h-8"
+      onClick={handleLoad}
+      disabled={loading}
+    >
+      {loading ? (
+        <Loader2 className="h-4 w-4 animate-spin" />
+      ) : (
+        <Play className="h-4 w-4" />
+      )}
+      <Mic className="h-3.5 w-3.5" />
+      Áudio
+    </Button>
+  );
 }
 
-export function MessageBubble({ message }: MessageBubbleProps) {
-  const { fromMe, text, timestamp, status, mediaType, mediaUrl } = message;
+function ImageViewer({ message, onLoadMedia }: { message: ChatMessage; onLoadMedia?: (id: string) => Promise<string | null> }) {
+  const [imgSrc, setImgSrc] = useState<string | null>(
+    message.mediaUrl?.startsWith("data:") || message.mediaUrl?.startsWith("http") ? message.mediaUrl : null
+  );
+  const [loading, setLoading] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+
+  const handleLoad = useCallback(async () => {
+    if (imgSrc || !onLoadMedia) return;
+    setLoading(true);
+    const src = await onLoadMedia(message.id);
+    if (src) setImgSrc(src);
+    setLoading(false);
+  }, [imgSrc, onLoadMedia, message.id]);
+
+  if (imgSrc) {
+    return (
+      <>
+        <img
+          src={imgSrc}
+          alt={message.mediaCaption || "imagem"}
+          className="rounded max-w-full max-h-60 mb-1 cursor-pointer hover:opacity-90 transition-opacity"
+          loading="lazy"
+          onClick={() => setExpanded(true)}
+        />
+        {expanded && (
+          <div
+            className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center cursor-pointer"
+            onClick={() => setExpanded(false)}
+          >
+            <img src={imgSrc} alt="" className="max-w-[90vw] max-h-[90vh] rounded-lg" />
+          </div>
+        )}
+      </>
+    );
+  }
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="gap-2 text-xs h-8"
+      onClick={handleLoad}
+      disabled={loading}
+    >
+      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Image className="h-4 w-4" />}
+      📷 Carregar imagem
+    </Button>
+  );
+}
+
+function VideoPlayer({ message, onLoadMedia }: { message: ChatMessage; onLoadMedia?: (id: string) => Promise<string | null> }) {
+  const [videoSrc, setVideoSrc] = useState<string | null>(
+    message.mediaUrl?.startsWith("data:") ? message.mediaUrl : null
+  );
+  const [loading, setLoading] = useState(false);
+
+  const handleLoad = useCallback(async () => {
+    if (videoSrc || !onLoadMedia) return;
+    setLoading(true);
+    const src = await onLoadMedia(message.id);
+    if (src) setVideoSrc(src);
+    setLoading(false);
+  }, [videoSrc, onLoadMedia, message.id]);
+
+  if (videoSrc) {
+    return (
+      <video controls className="rounded max-w-full max-h-60 mb-1" preload="metadata">
+        <source src={videoSrc} type={message.mediaMimetype || "video/mp4"} />
+      </video>
+    );
+  }
+
+  return (
+    <Button variant="ghost" size="sm" className="gap-2 text-xs h-8" onClick={handleLoad} disabled={loading}>
+      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Video className="h-4 w-4" />}
+      🎥 Carregar vídeo
+    </Button>
+  );
+}
+
+function DocumentViewer({ message, onLoadMedia }: { message: ChatMessage; onLoadMedia?: (id: string) => Promise<string | null> }) {
+  const [docSrc, setDocSrc] = useState<string | null>(
+    message.mediaUrl?.startsWith("data:") ? message.mediaUrl : null
+  );
+  const [loading, setLoading] = useState(false);
+  const isPdf = message.mediaMimetype?.includes("pdf") || message.fileName?.endsWith(".pdf");
+
+  const handleLoad = useCallback(async () => {
+    if (docSrc || !onLoadMedia) return;
+    setLoading(true);
+    const src = await onLoadMedia(message.id);
+    if (src) setDocSrc(src);
+    setLoading(false);
+  }, [docSrc, onLoadMedia, message.id]);
+
+  if (docSrc && isPdf) {
+    return (
+      <div className="space-y-1">
+        <iframe
+          src={docSrc}
+          className="w-full h-48 rounded border border-border bg-background"
+          title={message.fileName || "PDF"}
+        />
+        <a href={docSrc} download={message.fileName || "documento.pdf"} className="text-[10px] text-primary hover:underline flex items-center gap-1">
+          <Download className="h-3 w-3" />
+          Baixar {message.fileName || "documento.pdf"}
+        </a>
+      </div>
+    );
+  }
+
+  if (docSrc) {
+    return (
+      <a href={docSrc} download={message.fileName || "documento"} className="flex items-center gap-2 text-xs text-primary hover:underline">
+        <Download className="h-4 w-4" />
+        Baixar {message.fileName || "documento"}
+      </a>
+    );
+  }
+
+  return (
+    <Button variant="ghost" size="sm" className="gap-2 text-xs h-8" onClick={handleLoad} disabled={loading}>
+      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+      📄 {message.fileName || "Documento"}
+    </Button>
+  );
+}
+
+function StickerViewer({ message, onLoadMedia }: { message: ChatMessage; onLoadMedia?: (id: string) => Promise<string | null> }) {
+  const [src, setSrc] = useState<string | null>(
+    message.mediaUrl?.startsWith("data:") || message.mediaUrl?.startsWith("http") ? message.mediaUrl : null
+  );
+  const [loading, setLoading] = useState(false);
+
+  const handleLoad = useCallback(async () => {
+    if (src || !onLoadMedia) return;
+    setLoading(true);
+    const result = await onLoadMedia(message.id);
+    if (result) setSrc(result);
+    setLoading(false);
+  }, [src, onLoadMedia, message.id]);
+
+  if (src) {
+    return <img src={src} alt="sticker" className="max-w-[150px] max-h-[150px]" />;
+  }
+
+  return (
+    <Button variant="ghost" size="sm" className="gap-1 text-xs h-8" onClick={handleLoad} disabled={loading}>
+      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "🏷️"} Sticker
+    </Button>
+  );
+}
+
+export function MessageBubble({ message, onLoadMedia }: MessageBubbleProps) {
+  const { fromMe, text, timestamp, status, mediaType } = message;
+  const hasMedia = !!mediaType;
+  const showText = text && mediaType !== "audio" && mediaType !== "sticker";
 
   return (
     <div className={`flex ${fromMe ? "justify-end" : "justify-start"} mb-1`}>
@@ -46,21 +234,17 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             : "bg-secondary text-foreground rounded-bl-none"
         }`}
       >
-        {mediaType === "image" && mediaUrl && (
-          <img
-            src={mediaUrl}
-            alt="media"
-            className="rounded max-w-full max-h-60 mb-1"
-            loading="lazy"
-          />
-        )}
-        {mediaType && mediaType !== "image" && (
-          <div className="flex items-center mb-1">
-            <MediaIcon type={mediaType} />
-            <span className="text-xs text-muted-foreground">{message.fileName || mediaType}</span>
-          </div>
-        )}
-        <p className="text-sm whitespace-pre-wrap break-words">{text}</p>
+        {/* Media content */}
+        {mediaType === "image" && <ImageViewer message={message} onLoadMedia={onLoadMedia} />}
+        {mediaType === "video" && <VideoPlayer message={message} onLoadMedia={onLoadMedia} />}
+        {mediaType === "audio" && <AudioPlayer message={message} onLoadMedia={onLoadMedia} />}
+        {mediaType === "document" && <DocumentViewer message={message} onLoadMedia={onLoadMedia} />}
+        {mediaType === "sticker" && <StickerViewer message={message} onLoadMedia={onLoadMedia} />}
+
+        {/* Text */}
+        {showText && <p className="text-sm whitespace-pre-wrap break-words">{text}</p>}
+
+        {/* Timestamp + status */}
         <div className="flex items-center justify-end gap-1 mt-0.5">
           <span className="text-[10px] text-muted-foreground">{formatTime(timestamp)}</span>
           {fromMe && <StatusIcon status={status} />}

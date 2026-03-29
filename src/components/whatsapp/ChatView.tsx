@@ -18,7 +18,7 @@ interface ChatViewProps {
 }
 
 export function ChatView({ instanceName, chat, templates, consultantId }: ChatViewProps) {
-  const { messages, isLoading, sendMessage } = useMessages(
+  const { messages, isLoading, sendMessage, loadMedia } = useMessages(
     instanceName,
     chat?.remoteJid || null
   );
@@ -137,7 +137,7 @@ export function ChatView({ instanceName, chat, templates, consultantId }: ChatVi
           </div>
         )}
         {messages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} />
+          <MessageBubble key={msg.id} message={msg} onLoadMedia={loadMedia} />
         ))}
       </div>
 

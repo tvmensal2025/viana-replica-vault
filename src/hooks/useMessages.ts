@@ -3,17 +3,21 @@ import {
   findMessages,
   sendTextMessage,
   markAsRead,
+  getBase64FromMediaMessage,
   type EvolutionMessage,
 } from "@/services/evolutionApi";
 
 export interface ChatMessage {
   id: string;
+  remoteJid: string;
   fromMe: boolean;
   text: string;
   timestamp: number;
   status?: number;
   mediaType?: "image" | "audio" | "video" | "document" | "sticker";
   mediaUrl?: string;
+  mediaBase64?: string;
+  mediaMimetype?: string;
   mediaCaption?: string;
   fileName?: string;
 }
@@ -23,6 +27,8 @@ function mapMessage(msg: EvolutionMessage): ChatMessage {
   let text = "";
   let mediaType: ChatMessage["mediaType"];
   let mediaUrl: string | undefined;
+  let mediaBase64: string | undefined;
+  let mediaMimetype: string | undefined;
   let mediaCaption: string | undefined;
   let fileName: string | undefined;
 
@@ -33,36 +39,49 @@ function mapMessage(msg: EvolutionMessage): ChatMessage {
   } else if (m?.imageMessage) {
     mediaType = "image";
     mediaUrl = m.imageMessage.url;
+    mediaBase64 = m.imageMessage.base64;
+    mediaMimetype = m.imageMessage.mimetype || "image/jpeg";
     mediaCaption = m.imageMessage.caption;
-    text = m.imageMessage.caption || "📷 Imagem";
+    text = m.imageMessage.caption || "";
   } else if (m?.videoMessage) {
     mediaType = "video";
     mediaUrl = m.videoMessage.url;
+    mediaBase64 = m.videoMessage.base64;
+    mediaMimetype = m.videoMessage.mimetype || "video/mp4";
     mediaCaption = m.videoMessage.caption;
-    text = m.videoMessage.caption || "🎥 Vídeo";
+    text = m.videoMessage.caption || "";
   } else if (m?.audioMessage) {
     mediaType = "audio";
     mediaUrl = m.audioMessage.url;
-    text = "🎵 Áudio";
+    mediaBase64 = m.audioMessage.base64;
+    mediaMimetype = m.audioMessage.mimetype || "audio/ogg; codecs=opus";
+    text = "";
   } else if (m?.documentMessage) {
     mediaType = "document";
     mediaUrl = m.documentMessage.url;
+    mediaBase64 = m.documentMessage.base64;
+    mediaMimetype = m.documentMessage.mimetype || "application/pdf";
     fileName = m.documentMessage.fileName;
-    text = m.documentMessage.fileName || "📄 Documento";
+    text = m.documentMessage.fileName || "";
   } else if (m?.stickerMessage) {
     mediaType = "sticker";
     mediaUrl = m.stickerMessage.url;
-    text = "🏷️ Sticker";
+    mediaBase64 = m.stickerMessage.base64;
+    mediaMimetype = m.stickerMessage.mimetype || "image/webp";
+    text = "";
   }
 
   return {
     id: msg.key.id,
+    remoteJid: msg.key.remoteJid,
     fromMe: msg.key.fromMe,
     text,
     timestamp: msg.messageTimestamp || 0,
     status: msg.status,
     mediaType,
     mediaUrl,
+    mediaBase64,
+    mediaMimetype,
     mediaCaption,
     fileName,
   };
@@ -83,7 +102,6 @@ export function useMessages(instanceName: string | null, remoteJid: string | nul
         .sort((a, b) => a.timestamp - b.timestamp);
       setMessages(mapped);
 
-      // Mark as read
       try {
         await markAsRead(instanceName, remoteJid);
       } catch {
@@ -107,16 +125,46 @@ export function useMessages(instanceName: string | null, remoteJid: string | nul
     };
   }, [fetchMessages, instanceName, remoteJid]);
 
+  // Function to load media for a specific message
+  const loadMedia = useCallback(
+    async (messageId: string) => {
+      if (!instanceName) return null;
+      const msg = messages.find((m) => m.id === messageId);
+      if (!msg) return null;
+      const result = await getBase64FromMediaMessage(
+        instanceName,
+        messageId,
+        msg.remoteJid,
+        msg.fromMe
+      );
+      if (result?.base64) {
+        const mimetype = result.mimetype || msg.mediaMimetype || "application/octet-stream";
+        const dataUrl = `data:${mimetype};base64,${result.base64}`;
+        // Update message in state
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === messageId
+              ? { ...m, mediaBase64: result.base64, mediaMimetype: mimetype, mediaUrl: dataUrl }
+              : m
+          )
+        );
+        return dataUrl;
+      }
+      return null;
+    },
+    [instanceName, messages]
+  );
+
   const sendMessage = useCallback(
     async (text: string) => {
       if (!instanceName || !remoteJid) return;
       const phone = remoteJid.split("@")[0];
       await sendTextMessage(instanceName, phone, text);
-      // Optimistic add
       setMessages((prev) => [
         ...prev,
         {
           id: `temp-${Date.now()}`,
+          remoteJid,
           fromMe: true,
           text,
           timestamp: Math.floor(Date.now() / 1000),
@@ -127,5 +175,5 @@ export function useMessages(instanceName: string | null, remoteJid: string | nul
     [instanceName, remoteJid]
   );
 
-  return { messages, isLoading, sendMessage, refetch: fetchMessages };
+  return { messages, isLoading, sendMessage, loadMedia, refetch: fetchMessages };
 }
