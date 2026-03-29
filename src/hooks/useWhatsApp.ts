@@ -182,7 +182,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       const message = err instanceof Error ? err.message : "";
 
       // 403 "already in use" → auto-reset: delete + recreate
-      if (message.includes("already in use") || message.includes("[403]")) {
+      if (isAlreadyInUseError(message)) {
         addLog("⚠️ Instância já existe — iniciando reset automático...");
 
         try {
@@ -194,6 +194,10 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
           } catch (delErr) {
             addLog("⚠️ Falha ao deletar (pode já estar removida): " + (delErr instanceof Error ? delErr.message : ""));
           }
+
+          // Give Evolution API a short time to fully release the name
+          addLog("Aguardando liberação da instância...");
+          await delay(1500);
 
           // Recreate
           addLog("Recriando instância...");
@@ -220,25 +224,45 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
             setConnectionStatus("connecting");
             addLog("📱 QR Code gerado — escaneie com seu celular");
           } else {
-            // Try connect to get QR
+            addLog("Instância recriada sem QR imediato — tentando gerar QR...");
             try {
               const connectResponse = await connectInstance(name);
               setQrCode(connectResponse?.base64 || null);
               setConnectionStatus("connecting");
               addLog("📱 QR Code gerado — escaneie com seu celular");
-            } catch {
-              addLog("❌ Falha ao obter QR Code após reset");
-              setError("Não foi possível gerar o QR Code após reset.");
+            } catch (connectErr) {
+              const connectMsg = connectErr instanceof Error ? connectErr.message : "";
+              if (isWorkerLimitError(connectMsg)) {
+                setConnectionStatus("disconnected");
+                setQrCode(null);
+                setError("Instância recriada, mas a API está sobrecarregada. Clique em Reconectar em alguns segundos.");
+                addLog("⚠️ API sobrecarregada ao gerar QR. Use Reconectar em alguns segundos.");
+              } else {
+                addLog("❌ Falha ao obter QR Code após reset: " + connectMsg);
+                setError("Não foi possível gerar o QR Code após reset.");
+              }
             }
           }
         } catch (resetErr) {
           const resetMsg = resetErr instanceof Error ? resetErr.message : "Erro ao resetar instância";
-          addLog("❌ Falha no reset: " + resetMsg);
-          setError(resetMsg);
+          if (isWorkerLimitError(resetMsg)) {
+            setInstanceName(name);
+            setConnectionStatus("disconnected");
+            setError("A API do WhatsApp está sobrecarregada. Aguarde alguns segundos e clique em Reconectar.");
+            addLog("⚠️ API sobrecarregada durante reset automático.");
+          } else {
+            addLog("❌ Falha no reset: " + resetMsg);
+            setError(resetMsg);
+          }
         }
       } else {
-        addLog("❌ Erro: " + message);
-        setError(message || "Erro ao criar instância WhatsApp");
+        if (isWorkerLimitError(message)) {
+          addLog("⚠️ API do WhatsApp sobrecarregada. Tente novamente em alguns segundos.");
+          setError("A API do WhatsApp está sobrecarregada. Tente novamente em alguns segundos.");
+        } else {
+          addLog("❌ Erro: " + message);
+          setError(message || "Erro ao criar instância WhatsApp");
+        }
       }
     } finally {
       setIsLoading(false);
