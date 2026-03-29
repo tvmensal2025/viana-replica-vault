@@ -116,6 +116,7 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
           phoneNumber={phoneNumber}
           isLoading={isLoading}
           error={error}
+          connectionLog={connectionLog}
           onConnect={createAndConnect}
           onDisconnect={disconnect}
           onReconnect={reconnect}
