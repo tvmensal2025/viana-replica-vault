@@ -18,7 +18,7 @@ interface ChatViewProps {
 }
 
 export function ChatView({ instanceName, chat, templates, consultantId }: ChatViewProps) {
-  const { messages, isLoading, sendMessage } = useMessages(
+  const { messages, isLoading, sendMessage, loadMedia } = useMessages(
     instanceName,
     chat?.remoteJid || null
   );
