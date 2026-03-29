@@ -43,33 +43,9 @@ export function ChatView({ instanceName, chat, templates, consultantId }: ChatVi
       .then(({ data }) => setIsCustomer(!!data));
   }, [chat]);
 
-  const handleAddCustomer = useCallback(async () => {
-    if (!chat) return;
-    setAddingCustomer(true);
-    try {
-      const phone = chat.remoteJid.split("@")[0];
-      const name = chat.name !== phone ? chat.name : null;
-      const { error } = await supabase.from("customers").insert({
-        phone_whatsapp: phone,
-        name: name,
-      });
-      if (error) {
-        if (error.code === "23505") {
-          toast({ title: "Este contato já é um cliente" });
-          setIsCustomer(true);
-        } else {
-          throw error;
-        }
-      } else {
-        setIsCustomer(true);
-        toast({ title: "Cliente adicionado com sucesso!" });
-      }
-    } catch {
-      toast({ title: "Erro ao adicionar cliente", variant: "destructive" });
-    } finally {
-      setAddingCustomer(false);
-    }
-  }, [chat, toast]);
+  const handleCustomerAdded = useCallback(() => {
+    setIsCustomer(true);
+  }, []);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
