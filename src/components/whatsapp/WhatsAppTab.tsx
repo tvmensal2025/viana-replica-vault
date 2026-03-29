@@ -173,7 +173,7 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
 
         {activeSubTab === "crm" && (
           <div className="p-4 overflow-auto h-full">
-            <KanbanBoard consultantId={userId} />
+            <KanbanBoard consultantId={userId} instanceName={instanceName} />
           </div>
         )}
 
