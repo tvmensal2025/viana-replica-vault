@@ -112,7 +112,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       setInstanceName(name);
 
       // Evolution API pode retornar qrcode em diferentes formatos
-      const qr = response?.qrcode?.base64 || response?.qrcode?.pairingCode || null;
+      const qr = response?.qrcode?.base64 || (response?.qrcode as any)?.pairingCode || null;
       if (qr) {
         setQrCode(qr);
         setConnectionStatus("connecting");

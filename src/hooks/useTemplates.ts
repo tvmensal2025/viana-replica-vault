@@ -11,8 +11,8 @@ export function applyTemplate(
   customer: { name: string; electricity_bill_value?: number }
 ): string {
   let result = template.content;
-  result = result.replaceAll("{{nome}}", customer.name);
-  result = result.replaceAll(
+  result = result.split("{{nome}}").join(customer.name);
+  result = result.split("{{valor_conta}}").join(
     "{{valor_conta}}",
     customer.electricity_bill_value != null
       ? String(customer.electricity_bill_value)
