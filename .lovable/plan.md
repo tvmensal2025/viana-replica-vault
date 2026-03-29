@@ -1,42 +1,61 @@
 
 
-# Plano: Resolver timeout e exibir QR Code
+## Diagnóstico
 
-## Problema Raiz
+Os logs do edge function mostram claramente o problema:
 
-Existem dois problemas distintos:
+1. **`fetchInstances` sempre dá timeout** (15s) — a Evolution API é lenta demais para listar instâncias
+2. **`instance/create` attempt 1** inicia com timeout de 120s, mas o **Supabase Edge Function tem limite hard de ~60s** e mata a função ("shutdown" nos logs) antes do timeout do código ser atingido
+3. **Attempt 2** inicia com 45s mas também é cortado pelo shutdown do Supabase
 
-1. **Edge function desatualizada**: A resposta ainda mostra `"15000ms"` no erro, indicando que a versao antiga do `evolution-proxy` ainda esta ativa. Precisa ser reimplantada.
+O problema fundamental: **não adianta colocar timeout de 120s se o Supabase mata a edge function em ~60s**.
 
-2. **A Evolution API esta demorando mais de 55 segundos para responder** ao `POST /instance/create`. Isso pode ser porque:
-   - A URL configurada no secret `EVOLUTION_API_URL` pode estar usando `http://` em vez de `https://` (o servidor Evolution esta configurado para HTTPS)
-   - A URL pode conter `/manager` no final, causando path incorreto
-   - O servidor pode estar sobrecarregado com instancias antigas nao removidas
+## Plano de Correção
 
-## Plano
+### 1. Eliminar chamada `fetchInstances` no fluxo de conexão
 
-### 1. Reimplantar edge function `evolution-proxy`
-O codigo ja esta correto (55s timeout, mensagem sanitizada). So precisa ser redeployado para a versao atualizada entrar em vigor.
+A chamada `fetchInstances` **sempre** dá timeout (15s+ desperdiçados). Em vez disso, verificar apenas a instância salva no banco local (`whatsapp_instances`). Isso economiza 15s+ do budget de tempo.
 
-### 2. Verificar e corrigir o secret `EVOLUTION_API_URL`
-Com base na configuracao do servidor que voce forneceu, a URL correta deve ser `https://igreen-evolution-api.0sw627.easypanel.host` (HTTPS, sem `/manager`, sem barra final). Preciso verificar o valor atual do secret e atualizar se necessario.
+**Arquivo:** `src/hooks/useWhatsApp.ts`
+- Remover o bloco `fetchInstances()` + loop de reuse do `createAndConnect`
+- Usar apenas a instância salva no Supabase (já verificada no `useEffect` de mount)
+- Se já existe `instanceName` no state, tentar `tryGetQrFromExisting` direto
 
-### 3. Verificar o secret `EVOLUTION_API_KEY`
-O valor deve ser `429683C4C977415CAAFCCE10F7D57E11` (conforme `AUTHENTICATION_API_KEY` na configuracao que voce compartilhou).
+### 2. Reduzir todos os timeouts do proxy para caber no limite do Supabase
 
-### 4. Adicionar log da URL completa no proxy
-Adicionar `console.log` da `EVOLUTION_API_URL` raw (valor real, nao so boolean) para diagnosticar se o valor do secret esta correto. Isso fica apenas nos logs do servidor, invisivel ao cliente.
+**Arquivo:** `supabase/functions/evolution-proxy/index.ts`
+- `instance/create`: **50s** (máximo seguro dentro do limite de ~60s)
+- `instance/connect/`: **15s**
+- `connectionState`: **10s**
+- `fetchInstances`: **12s**
+- Default: **25s**
+- Remover retry automático de `instance/create` (não há tempo para 2 tentativas)
 
-### 5. Limpar instancias fantasma
-Antes de criar uma nova instancia, o hook ja tenta deletar as anteriores. O problema e que se a Evolution API nao responde, essas delecoes tambem falham. Adicionar um fetch direto ao endpoint `instance/fetchInstances` para listar e limpar TODAS as instancias existentes no servidor.
+### 3. Adicionar client-side timeout + retry no hook
 
-## Detalhes Tecnicos
+**Arquivo:** `src/hooks/useWhatsApp.ts`
+- `createInstance` com `withTimeout` de 55s no client
+- Se timeout/504, esperar 3s e tentar `tryGetQrFromExisting` (a instância pode ter sido criada mesmo com timeout)
+- Se recovery falhar, esperar mais 3s e tentar de novo (total 2 tentativas de recovery)
 
-**Arquivo**: `supabase/functions/evolution-proxy/index.ts`
-- Adicionar log do valor real (primeiros 30 chars) da `EVOLUTION_API_URL` para debug
-- Reimplantar via Supabase CLI
+### 4. Redeploy da edge function
 
-**Arquivo**: `src/hooks/useWhatsApp.ts`
-- Antes de `createInstance`, chamar `fetchInstances` para listar todas existentes e deletar cada uma
-- Adicionar tratamento para timeout (504) com mensagem amigavel e sugestao de retry
+Após editar o proxy, redeploy com as novas configurações de timeout.
+
+---
+
+### Resumo das mudanças
+
+```text
+evolution-proxy/index.ts
+├── Timeouts: create=50s, connect=15s, state=10s, fetch=12s, default=25s
+├── Remover retry de instance/create (1 tentativa só)
+└── Redeploy
+
+useWhatsApp.ts
+├── Remover fetchInstances() do createAndConnect
+├── Usar instância local (whatsapp_instances) para reuse
+├── Client timeout 55s + recovery com tryGetQrFromExisting
+└── Fluxo mais enxuto e rápido
+```
 
