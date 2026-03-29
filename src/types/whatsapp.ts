@@ -5,11 +5,15 @@ export interface WhatsAppInstance {
   created_at: string;
 }
 
+export type TemplateMediaType = "text" | "image" | "audio" | "document";
+
 export interface MessageTemplate {
   id: string;
   consultant_id: string;
   name: string;
   content: string;
+  media_type: TemplateMediaType;
+  media_url: string | null;
   created_at: string;
 }
 
