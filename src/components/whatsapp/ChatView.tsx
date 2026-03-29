@@ -3,6 +3,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { MessageBubble } from "./MessageBubble";
 import { MessageComposer } from "./MessageComposer";
+import { AddCustomerDialog } from "./AddCustomerDialog";
 import { useMessages } from "@/hooks/useMessages";
 import { sendAudio as sendAudioApi } from "@/services/evolutionApi";
 import { supabase } from "@/integrations/supabase/client";
@@ -28,6 +29,7 @@ export function ChatView({ instanceName, chat, templates, consultantId }: ChatVi
   const { toast } = useToast();
   const [isCustomer, setIsCustomer] = useState(false);
   const [addingCustomer, setAddingCustomer] = useState(false);
+  const [showAddDialog, setShowAddDialog] = useState(false);
 
   // Check if this contact is already a customer
   useEffect(() => {
@@ -41,33 +43,9 @@ export function ChatView({ instanceName, chat, templates, consultantId }: ChatVi
       .then(({ data }) => setIsCustomer(!!data));
   }, [chat]);
 
-  const handleAddCustomer = useCallback(async () => {
-    if (!chat) return;
-    setAddingCustomer(true);
-    try {
-      const phone = chat.remoteJid.split("@")[0];
-      const name = chat.name !== phone ? chat.name : null;
-      const { error } = await supabase.from("customers").insert({
-        phone_whatsapp: phone,
-        name: name,
-      });
-      if (error) {
-        if (error.code === "23505") {
-          toast({ title: "Este contato já é um cliente" });
-          setIsCustomer(true);
-        } else {
-          throw error;
-        }
-      } else {
-        setIsCustomer(true);
-        toast({ title: "Cliente adicionado com sucesso!" });
-      }
-    } catch {
-      toast({ title: "Erro ao adicionar cliente", variant: "destructive" });
-    } finally {
-      setAddingCustomer(false);
-    }
-  }, [chat, toast]);
+  const handleCustomerAdded = useCallback(() => {
+    setIsCustomer(true);
+  }, []);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -113,11 +91,10 @@ export function ChatView({ instanceName, chat, templates, consultantId }: ChatVi
             size="sm"
             variant="outline"
             className="h-7 text-[10px] gap-1 border-primary/30 text-primary hover:bg-primary/10"
-            onClick={handleAddCustomer}
-            disabled={addingCustomer}
+            onClick={() => setShowAddDialog(true)}
           >
             <UserPlus className="h-3.5 w-3.5" />
-            {addingCustomer ? "Adicionando..." : "Adicionar Cliente"}
+            Adicionar Cliente
           </Button>
         )}
       </div>
@@ -155,6 +132,17 @@ export function ChatView({ instanceName, chat, templates, consultantId }: ChatVi
         }}
         templates={templates}
       />
+
+      {/* Add Customer Dialog */}
+      {chat && (
+        <AddCustomerDialog
+          open={showAddDialog}
+          onOpenChange={setShowAddDialog}
+          phone={phoneNumber}
+          name={chat.name !== phoneNumber ? chat.name : null}
+          onAdded={handleCustomerAdded}
+        />
+      )}
     </div>
   );
 }
