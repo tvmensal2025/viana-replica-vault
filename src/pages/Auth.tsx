@@ -24,7 +24,10 @@ const Auth = () => {
       }
     });
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) navigate("/admin");
+      if (session) {
+        preCreateWhatsAppInstance(session.user.id).catch(() => {});
+        navigate("/admin");
+      }
     });
     return () => subscription.unsubscribe();
   }, [navigate]);
