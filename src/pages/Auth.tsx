@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { preCreateWhatsAppInstance } from "@/services/preCreateInstance";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,7 +17,11 @@ const Auth = () => {
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session) navigate("/admin");
+      if (session) {
+        // Pre-create WhatsApp instance in background so it's ready when they open the tab
+        preCreateWhatsAppInstance(session.user.id).catch(() => {});
+        navigate("/admin");
+      }
     });
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) navigate("/admin");
