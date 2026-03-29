@@ -1,27 +1,38 @@
 import { useState, useRef, useCallback } from "react";
-import { Send, Paperclip, Mic, MicOff, MessageSquareText, Loader2 } from "lucide-react";
+import { Send, Paperclip, Mic, MicOff, MessageSquareText, Loader2, Image, File, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { QuickReplyMenu } from "./QuickReplyMenu";
+import { Progress } from "@/components/ui/progress";
 import type { MessageTemplate } from "@/types/whatsapp";
+import { uploadMedia, formatFileSize } from "@/services/minioUpload";
+import { toast } from "sonner";
 
 interface MessageComposerProps {
   onSend: (text: string) => Promise<void>;
   onSendAudio?: (audioBase64: string) => Promise<void>;
+  onSendMedia?: (mediaUrl: string, caption: string, mediaType: "image" | "document") => Promise<void>;
   templates: MessageTemplate[];
   disabled?: boolean;
 }
 
-export function MessageComposer({ onSend, onSendAudio, templates, disabled }: MessageComposerProps) {
+export function MessageComposer({ onSend, onSendAudio, onSendMedia, templates, disabled }: MessageComposerProps) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [showQuickReply, setShowQuickReply] = useState(false);
   const [quickSearch, setQuickSearch] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
+
+  // File attach state
+  const [attachedFile, setAttachedFile] = useState<{ url: string; name: string; type: "image" | "document" } | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -39,6 +50,22 @@ export function MessageComposer({ onSend, onSendAudio, templates, disabled }: Me
   );
 
   const handleSend = useCallback(async () => {
+    // If there's a file attached, send it as media
+    if (attachedFile && onSendMedia) {
+      setSending(true);
+      try {
+        await onSendMedia(attachedFile.url, text.trim(), attachedFile.type);
+        setText("");
+        setAttachedFile(null);
+        setShowQuickReply(false);
+      } catch {
+        // handled upstream
+      } finally {
+        setSending(false);
+      }
+      return;
+    }
+
     const trimmed = text.trim();
     if (!trimmed || sending) return;
     setSending(true);
@@ -51,7 +78,7 @@ export function MessageComposer({ onSend, onSendAudio, templates, disabled }: Me
     } finally {
       setSending(false);
     }
-  }, [text, sending, onSend]);
+  }, [text, sending, onSend, onSendMedia, attachedFile]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -72,6 +99,32 @@ export function MessageComposer({ onSend, onSendAudio, templates, disabled }: Me
     textareaRef.current?.focus();
   }, []);
 
+  // ── File Attach ──
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 25 * 1024 * 1024) {
+      toast.error("Arquivo muito grande (máximo 25MB)");
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadProgress(0);
+
+    try {
+      const result = await uploadMedia(file, (pct) => setUploadProgress(pct));
+      const isImage = file.type.startsWith("image/");
+      setAttachedFile({ url: result.url, name: file.name, type: isImage ? "image" : "document" });
+      toast.success(`Arquivo anexado: ${formatFileSize(result.size)}`);
+    } catch (err: any) {
+      toast.error(err.message || "Erro no upload");
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }, []);
+
   // ── Audio Recording ──
   const startRecording = useCallback(async () => {
     try {
@@ -90,7 +143,6 @@ export function MessageComposer({ onSend, onSendAudio, templates, disabled }: Me
       mediaRecorder.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
         const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        // Convert to base64
         const reader = new FileReader();
         reader.onloadend = async () => {
           const base64 = (reader.result as string).split(",")[1];
@@ -136,7 +188,6 @@ export function MessageComposer({ onSend, onSendAudio, templates, disabled }: Me
       mediaRecorderRef.current.ondataavailable = null;
       mediaRecorderRef.current.onstop = null;
       mediaRecorderRef.current.stop();
-      // stop tracks
       mediaRecorderRef.current.stream?.getTracks().forEach((t) => t.stop());
     }
     chunksRef.current = [];
@@ -158,28 +209,15 @@ export function MessageComposer({ onSend, onSendAudio, templates, disabled }: Me
     return (
       <div className="relative border-t border-border bg-card p-2">
         <div className="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-destructive"
-            onClick={cancelRecording}
-          >
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={cancelRecording}>
             <MicOff className="h-4 w-4" />
           </Button>
-
           <div className="flex-1 flex items-center gap-2">
             <div className="h-2 w-2 rounded-full bg-destructive animate-pulse" />
-            <span className="text-sm text-foreground font-mono">
-              {formatRecordingTime(recordingTime)}
-            </span>
+            <span className="text-sm text-foreground font-mono">{formatRecordingTime(recordingTime)}</span>
             <span className="text-xs text-muted-foreground">Gravando...</span>
           </div>
-
-          <Button
-            onClick={stopRecording}
-            size="icon"
-            className="h-8 w-8 bg-primary hover:bg-primary/90"
-          >
+          <Button onClick={stopRecording} size="icon" className="h-8 w-8 bg-primary hover:bg-primary/90">
             <Send className="h-4 w-4" />
           </Button>
         </div>
@@ -198,6 +236,29 @@ export function MessageComposer({ onSend, onSendAudio, templates, disabled }: Me
         />
       )}
 
+      {/* Attached file preview */}
+      {attachedFile && (
+        <div className="flex items-center gap-2 mb-2 px-1 py-1.5 rounded-lg bg-secondary/30 border border-border/30">
+          {attachedFile.type === "image" ? (
+            <Image className="w-4 h-4 text-blue-400 shrink-0" />
+          ) : (
+            <File className="w-4 h-4 text-red-400 shrink-0" />
+          )}
+          <span className="text-xs text-foreground truncate flex-1">{attachedFile.name}</span>
+          <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => setAttachedFile(null)}>
+            <X className="w-3 h-3" />
+          </Button>
+        </div>
+      )}
+
+      {/* Upload progress */}
+      {isUploading && (
+        <div className="mb-2 px-1">
+          <Progress value={uploadProgress} className="h-1" />
+          <p className="text-[10px] text-muted-foreground mt-0.5">Enviando arquivo...</p>
+        </div>
+      )}
+
       <div className="flex items-end gap-1.5">
         {/* Quick Reply button */}
         <Button
@@ -214,11 +275,21 @@ export function MessageComposer({ onSend, onSendAudio, templates, disabled }: Me
           <MessageSquareText className="h-4 w-4" />
         </Button>
 
+        {/* File attach button */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          onChange={handleFileSelect}
+          className="hidden"
+        />
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 shrink-0 text-muted-foreground"
-          disabled={disabled}
+          className="h-8 w-8 shrink-0 text-muted-foreground hover:text-primary"
+          disabled={disabled || isUploading}
+          onClick={() => fileInputRef.current?.click()}
+          title="Anexar arquivo"
         >
           <Paperclip className="h-4 w-4" />
         </Button>
@@ -228,18 +299,18 @@ export function MessageComposer({ onSend, onSendAudio, templates, disabled }: Me
           value={text}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
-          placeholder='Mensagem (use "/" para respostas rápidas)'
+          placeholder={attachedFile ? "Legenda (opcional)..." : 'Mensagem (use "/" para respostas rápidas)'}
           disabled={disabled}
           rows={1}
           className="flex-1 resize-none bg-secondary rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring min-h-[36px] max-h-[120px]"
           style={{ overflow: "auto" }}
         />
 
-        {/* Send text or Record audio */}
-        {text.trim() ? (
+        {/* Send or Record */}
+        {text.trim() || attachedFile ? (
           <Button
             onClick={handleSend}
-            disabled={sending || disabled}
+            disabled={sending || disabled || isUploading}
             size="icon"
             className="h-8 w-8 shrink-0 bg-primary hover:bg-primary/90"
           >

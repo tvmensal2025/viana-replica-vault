@@ -5,7 +5,7 @@ import { MessageBubble } from "./MessageBubble";
 import { MessageComposer } from "./MessageComposer";
 import { AddCustomerDialog } from "./AddCustomerDialog";
 import { useMessages } from "@/hooks/useMessages";
-import { sendAudio as sendAudioApi } from "@/services/evolutionApi";
+import { sendAudio as sendAudioApi, sendMedia as sendMediaApi } from "@/services/evolutionApi";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import type { MessageTemplate } from "@/types/whatsapp";
@@ -129,6 +129,12 @@ export function ChatView({ instanceName, chat, templates, consultantId }: ChatVi
           const phone = targetJid.split("@")[0];
           const audioDataUrl = `data:audio/ogg;base64,${base64}`;
           await sendAudioApi(instanceName, phone, audioDataUrl);
+        }}
+        onSendMedia={async (mediaUrl, caption, mediaType) => {
+          if (!chat) return;
+          const targetJid = chat.sendTargetJid || chat.remoteJid;
+          const phone = targetJid.split("@")[0];
+          await sendMediaApi(instanceName, phone, mediaUrl, caption, mediaType);
         }}
         templates={templates}
       />
