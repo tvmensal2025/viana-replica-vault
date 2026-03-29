@@ -72,14 +72,33 @@ function ImageViewer({ message, onLoadMedia }: { message: ChatMessage; onLoadMed
   );
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [loadAttempted, setLoadAttempted] = useState(false);
 
+  // Auto-load image on mount
   const handleLoad = useCallback(async () => {
-    if (imgSrc || !onLoadMedia) return;
+    if (imgSrc || !onLoadMedia || loadAttempted) return;
+    setLoadAttempted(true);
     setLoading(true);
     const src = await onLoadMedia(message.id);
     if (src) setImgSrc(src);
     setLoading(false);
-  }, [imgSrc, onLoadMedia, message.id]);
+  }, [imgSrc, onLoadMedia, message.id, loadAttempted]);
+
+  // Trigger auto-load
+  useState(() => {
+    if (!imgSrc && onLoadMedia) {
+      handleLoad();
+    }
+  });
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Carregando imagem...
+      </div>
+    );
+  }
 
   if (imgSrc) {
     return (
@@ -111,7 +130,7 @@ function ImageViewer({ message, onLoadMedia }: { message: ChatMessage; onLoadMed
       onClick={handleLoad}
       disabled={loading}
     >
-      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Image className="h-4 w-4" />}
+      <Image className="h-4 w-4" />
       📷 Carregar imagem
     </Button>
   );
