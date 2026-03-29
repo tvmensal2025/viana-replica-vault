@@ -313,15 +313,21 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
         } else if (
           createMsg === "timeout" ||
           createMsg.includes("[504]") ||
-          createMsg.includes("demorou para responder")
+          createMsg.includes("demorou para responder") ||
+          createMsg.includes("Erro de conexão") ||
+          createMsg.includes("Failed to fetch")
         ) {
           addLog("⚠️ Criação demorou, tentando recuperar...");
 
-          await delay(3000);
-          if (await tryGetQrFromExisting(name)) { addLog("✅ Instância recuperada"); return; }
-
-          await delay(3000);
-          if (await tryGetQrFromExisting(name)) { addLog("✅ Instância recuperada"); return; }
+          // Instance may have been created despite timeout — retry recovery
+          for (let recovery = 1; recovery <= 3; recovery++) {
+            await delay(4000);
+            addLog(`🔄 Tentativa de recuperação ${recovery}/3...`);
+            if (await tryGetQrFromExisting(name)) {
+              addLog("✅ Instância recuperada");
+              return;
+            }
+          }
 
           throw new Error("Servidor demorou para responder. Tente novamente.");
         } else {
