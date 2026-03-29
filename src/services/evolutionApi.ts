@@ -8,7 +8,20 @@ async function handleResponse<T>(response: Response): Promise<T> {
     throw new Error("Erro de autenticação com a API do WhatsApp");
   }
   if (!response.ok) {
-    throw new Error(response.statusText || "Erro desconhecido na API");
+    // Try to extract the real error message from Evolution API JSON body
+    let detail = response.statusText || "Erro desconhecido na API";
+    try {
+      const body = await response.json();
+      const msg =
+        body?.response?.message?.[0] ||
+        body?.response?.message ||
+        body?.error ||
+        body?.message;
+      if (msg) detail = typeof msg === "string" ? msg : JSON.stringify(msg);
+    } catch {
+      // body wasn't JSON, keep statusText
+    }
+    throw new Error(`[${response.status}] ${detail}`);
   }
   return response.json();
 }

@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.100.1";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 interface ProxyRequest {
@@ -23,6 +23,9 @@ Deno.serve(async (req) => {
     const evolutionUrl = Deno.env.get("EVOLUTION_API_URL");
     const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
 
+    console.log("[evolution-proxy] EVOLUTION_API_URL configured:", !!evolutionUrl);
+    console.log("[evolution-proxy] EVOLUTION_API_KEY configured:", !!evolutionKey);
+
     // Validate Supabase auth token
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
@@ -37,11 +40,14 @@ Deno.serve(async (req) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
 
     if (authError || !user) {
+      console.log("[evolution-proxy] Auth failed:", authError?.message);
       return new Response(
         JSON.stringify({ error: "Token de autenticação inválido ou ausente" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    console.log("[evolution-proxy] Auth OK, user:", user.id);
 
     // Parse and validate request body
     const { path, method, body } = (await req.json()) as ProxyRequest;
@@ -56,6 +62,8 @@ Deno.serve(async (req) => {
     // Forward request to Evolution API — strip trailing /manager or slashes from base URL
     const cleanUrl = (evolutionUrl || "").replace(/\/manager\/?$/, "").replace(/\/+$/, "");
     const targetUrl = `${cleanUrl}/${path}`;
+    console.log("[evolution-proxy] ->", method || "GET", targetUrl);
+
     const fetchOptions: RequestInit = {
       method: method || "GET",
       headers: {
@@ -72,6 +80,7 @@ Deno.serve(async (req) => {
     try {
       evolutionResponse = await fetch(targetUrl, fetchOptions);
     } catch (_networkError) {
+      console.error("[evolution-proxy] Network error connecting to Evolution API");
       return new Response(
         JSON.stringify({ error: "Erro ao conectar com a API do WhatsApp" }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -80,6 +89,8 @@ Deno.serve(async (req) => {
 
     // Retransmit Evolution API response
     const responseBody = await evolutionResponse.text();
+    console.log("[evolution-proxy] <-", evolutionResponse.status, responseBody.substring(0, 300));
+
     return new Response(responseBody, {
       status: evolutionResponse.status,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

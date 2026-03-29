@@ -44,6 +44,7 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
     phoneNumber,
     isLoading,
     error,
+    connectionLog,
     createAndConnect,
     disconnect,
     reconnect,
