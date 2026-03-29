@@ -96,6 +96,7 @@ export type Database = {
       }
       crm_deals: {
         Row: {
+          approved_at: string | null
           consultant_id: string
           created_at: string
           customer_id: string | null
@@ -106,6 +107,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          approved_at?: string | null
           consultant_id: string
           created_at?: string
           customer_id?: string | null
@@ -116,6 +118,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          approved_at?: string | null
           consultant_id?: string
           created_at?: string
           customer_id?: string | null
@@ -287,6 +290,7 @@ export type Database = {
       }
       kanban_stages: {
         Row: {
+          auto_message_enabled: boolean
           auto_message_media_url: string | null
           auto_message_text: string | null
           auto_message_type: string | null
@@ -299,6 +303,7 @@ export type Database = {
           stage_key: string
         }
         Insert: {
+          auto_message_enabled?: boolean
           auto_message_media_url?: string | null
           auto_message_text?: string | null
           auto_message_type?: string | null
@@ -311,6 +316,7 @@ export type Database = {
           stage_key: string
         }
         Update: {
+          auto_message_enabled?: boolean
           auto_message_media_url?: string | null
           auto_message_text?: string | null
           auto_message_type?: string | null
