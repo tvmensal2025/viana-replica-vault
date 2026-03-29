@@ -157,20 +157,30 @@ export function useMessages(instanceName: string | null, remoteJid: string | nul
 
   const sendMessage = useCallback(
     async (text: string) => {
-      if (!instanceName || !remoteJid) return;
+      if (!instanceName || !remoteJid) {
+        console.error("[useMessages] sendMessage: missing instanceName or remoteJid", { instanceName, remoteJid });
+        return;
+      }
       const phone = remoteJid.split("@")[0];
-      await sendTextMessage(instanceName, phone, text);
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `temp-${Date.now()}`,
-          remoteJid,
-          fromMe: true,
-          text,
-          timestamp: Math.floor(Date.now() / 1000),
-          status: 1,
-        },
-      ]);
+      console.log("[useMessages] sending to:", phone, "instance:", instanceName, "text:", text.slice(0, 50));
+      try {
+        await sendTextMessage(instanceName, phone, text);
+        console.log("[useMessages] message sent successfully");
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `temp-${Date.now()}`,
+            remoteJid,
+            fromMe: true,
+            text,
+            timestamp: Math.floor(Date.now() / 1000),
+            status: 1,
+          },
+        ]);
+      } catch (err) {
+        console.error("[useMessages] sendMessage error:", err);
+        throw err;
+      }
     },
     [instanceName, remoteJid]
   );
