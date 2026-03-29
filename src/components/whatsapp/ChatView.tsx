@@ -21,7 +21,8 @@ interface ChatViewProps {
 export function ChatView({ instanceName, chat, templates, consultantId }: ChatViewProps) {
   const { messages, isLoading, sendMessage, loadMedia } = useMessages(
     instanceName,
-    chat?.remoteJid || null
+    chat?.remoteJid || null,
+    chat?.sendTargetJid || null
   );
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
@@ -147,7 +148,8 @@ export function ChatView({ instanceName, chat, templates, consultantId }: ChatVi
         onSend={sendMessage}
         onSendAudio={async (base64) => {
           if (!chat) return;
-          const phone = chat.remoteJid.split("@")[0];
+          const targetJid = chat.sendTargetJid || chat.remoteJid;
+          const phone = targetJid.split("@")[0];
           const audioDataUrl = `data:audio/ogg;base64,${base64}`;
           await sendAudioApi(instanceName, phone, audioDataUrl);
         }}

@@ -87,10 +87,21 @@ function mapMessage(msg: EvolutionMessage): ChatMessage {
   };
 }
 
-export function useMessages(instanceName: string | null, remoteJid: string | null) {
+export function useMessages(
+  instanceName: string | null,
+  remoteJid: string | null,
+  preferredSendTargetJid: string | null = null
+) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [resolvedSendTargetJid, setResolvedSendTargetJid] = useState<string | null>(
+    preferredSendTargetJid
+  );
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    setResolvedSendTargetJid(preferredSendTargetJid || null);
+  }, [preferredSendTargetJid, remoteJid]);
 
   const fetchMessages = useCallback(async () => {
     if (!instanceName || !remoteJid) return;
@@ -101,6 +112,11 @@ export function useMessages(instanceName: string | null, remoteJid: string | nul
         .map(mapMessage)
         .sort((a, b) => a.timestamp - b.timestamp);
       setMessages(mapped);
+
+      const fallbackSendTarget = raw.find((msg) => msg.key.remoteJidAlt)?.key.remoteJidAlt;
+      if (fallbackSendTarget) {
+        setResolvedSendTargetJid((prev) => prev || fallbackSendTarget);
+      }
 
       try {
         await markAsRead(instanceName, remoteJid);
@@ -161,8 +177,21 @@ export function useMessages(instanceName: string | null, remoteJid: string | nul
         console.error("[useMessages] sendMessage: missing instanceName or remoteJid", { instanceName, remoteJid });
         return;
       }
-      const phone = remoteJid.split("@")[0];
-      console.log("[useMessages] sending to:", phone, "instance:", instanceName, "text:", text.slice(0, 50));
+
+      const targetJid = resolvedSendTargetJid || preferredSendTargetJid || remoteJid;
+      const phone = targetJid.split("@")[0];
+
+      console.log(
+        "[useMessages] sending to:",
+        phone,
+        "targetJid:",
+        targetJid,
+        "instance:",
+        instanceName,
+        "text:",
+        text.slice(0, 50)
+      );
+
       try {
         await sendTextMessage(instanceName, phone, text);
         console.log("[useMessages] message sent successfully");
@@ -182,7 +211,7 @@ export function useMessages(instanceName: string | null, remoteJid: string | nul
         throw err;
       }
     },
-    [instanceName, remoteJid]
+    [instanceName, preferredSendTargetJid, remoteJid, resolvedSendTargetJid]
   );
 
   return { messages, isLoading, sendMessage, loadMedia, refetch: fetchMessages };

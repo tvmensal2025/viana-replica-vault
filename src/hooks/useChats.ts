@@ -3,6 +3,7 @@ import { findChats, findContacts, type EvolutionChat, type EvolutionContact } fr
 
 export interface ChatItem {
   remoteJid: string;
+  sendTargetJid?: string;
   name: string;
   lastMessage: string;
   lastMessageTimestamp: number;
@@ -30,8 +31,13 @@ function mapChat(chat: EvolutionChat, contactsMap: Map<string, EvolutionContact>
   const contact = contactsMap.get(jid);
   // Priority: contact pushName > chat name > phone number
   const displayName = contact?.pushName || chat.name || jid.split("@")[0];
+  const sendTargetJid =
+    chat.lastMessage?.key?.remoteJidAlt ||
+    (jid.endsWith("@lid") ? undefined : jid);
+
   return {
     remoteJid: jid,
+    sendTargetJid,
     name: displayName,
     lastMessage: extractLastMessage(chat),
     lastMessageTimestamp: chat.lastMsgTimestamp || chat.lastMessage?.messageTimestamp || 0,

@@ -85,7 +85,11 @@ export interface EvolutionChat {
   lastMsgTimestamp?: number;
   unreadMessages?: number;
   lastMessage?: {
-    key: { fromMe: boolean };
+    key: {
+      fromMe: boolean;
+      remoteJid?: string;
+      remoteJidAlt?: string;
+    };
     message?: {
       conversation?: string;
       extendedTextMessage?: { text: string };
@@ -107,6 +111,7 @@ export async function findChats(instanceName: string): Promise<EvolutionChat[]> 
 export interface EvolutionMessage {
   key: {
     remoteJid: string;
+    remoteJidAlt?: string;
     fromMe: boolean;
     id: string;
   };
