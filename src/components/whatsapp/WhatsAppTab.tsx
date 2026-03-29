@@ -206,7 +206,7 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
             <TemplateManager
               templates={templates}
               isLoading={templatesLoading}
-              onCreateTemplate={createTemplate}
+              onCreateTemplate={(name, content, mediaType, mediaUrl) => createTemplate(name, content, mediaType, mediaUrl)}
               onDeleteTemplate={deleteTemplate}
             />
           </div>
