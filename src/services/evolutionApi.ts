@@ -43,7 +43,8 @@ async function request<T>(path: string, method: string, body?: unknown): Promise
     return handleResponse<T>(res);
   } catch (error) {
     if (error instanceof TypeError) {
-      throw new Error("Erro de conexão. Verifique sua internet.");
+      console.error("[evolutionApi] fetch TypeError:", error.message);
+      throw new Error("Erro de conexão com o servidor. Verifique sua internet e tente novamente.");
     }
     throw error;
   }
