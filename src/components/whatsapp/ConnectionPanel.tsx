@@ -1,4 +1,4 @@
-import { Smartphone, Wifi, WifiOff, Loader2, QrCode, RefreshCw, Zap } from "lucide-react";
+import { Smartphone, Wifi, WifiOff, Loader2, QrCode, RefreshCw, Zap, CheckCircle2, XCircle, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ConnectionStatus } from "@/types/whatsapp";
 
@@ -9,9 +9,50 @@ interface ConnectionPanelProps {
   phoneNumber: string | null;
   isLoading: boolean;
   error: string | null;
+  connectionLog?: string[];
   onConnect: () => Promise<void>;
   onDisconnect: () => Promise<void>;
   onReconnect: () => Promise<void>;
+}
+
+function DiagnosticPanel({ logs }: { logs: string[] }) {
+  if (logs.length === 0) return null;
+
+  return (
+    <div className="mt-4 rounded-xl border border-border/50 bg-secondary/50 overflow-hidden">
+      <div className="px-3 py-2 border-b border-border/30 flex items-center gap-2">
+        <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+        <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Diagnóstico de Conexão</span>
+      </div>
+      <div className="max-h-[200px] overflow-y-auto p-3 space-y-1">
+        {logs.map((log, i) => {
+          const isSuccess = log.includes("✅");
+          const isError = log.includes("❌");
+          const isWarning = log.includes("⚠️");
+          const isQr = log.includes("📱");
+
+          return (
+            <div key={i} className="flex items-start gap-2">
+              {isSuccess ? (
+                <CheckCircle2 className="w-3.5 h-3.5 text-green-400 mt-0.5 shrink-0" />
+              ) : isError ? (
+                <XCircle className="w-3.5 h-3.5 text-red-400 mt-0.5 shrink-0" />
+              ) : isWarning ? (
+                <Clock className="w-3.5 h-3.5 text-yellow-400 mt-0.5 shrink-0" />
+              ) : isQr ? (
+                <QrCode className="w-3.5 h-3.5 text-blue-400 mt-0.5 shrink-0" />
+              ) : (
+                <div className="w-3.5 h-3.5 flex items-center justify-center mt-0.5 shrink-0">
+                  <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50" />
+                </div>
+              )}
+              <span className="text-[11px] font-mono text-muted-foreground leading-relaxed">{log}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 export function ConnectionPanel({
@@ -21,10 +62,13 @@ export function ConnectionPanel({
   phoneNumber,
   isLoading,
   error,
+  connectionLog = [],
   onConnect,
   onDisconnect,
   onReconnect,
 }: ConnectionPanelProps) {
+  const showDiagnostic = connectionLog.length > 0 && (isLoading || error || connectionStatus === "connecting");
+
   return (
     <div className="relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-card via-card to-green-950/20">
       {/* Glow effect */}
@@ -58,7 +102,7 @@ export function ConnectionPanel({
             <div className="w-full rounded-xl bg-red-500/5 border border-red-500/20 px-5 py-4 text-center backdrop-blur-sm">
               <p className="text-sm text-red-400 font-medium">{error}</p>
             </div>
-            <Button onClick={onReconnect} variant="outline" className="gap-2 rounded-xl border-border/60 hover:border-primary/40 hover:bg-primary/5 transition-all">
+            <Button onClick={onConnect} variant="outline" className="gap-2 rounded-xl border-border/60 hover:border-primary/40 hover:bg-primary/5 transition-all">
               <RefreshCw className="w-4 h-4" /> Tentar novamente
             </Button>
           </div>
@@ -156,6 +200,9 @@ export function ConnectionPanel({
             </Button>
           </div>
         )}
+
+        {/* Diagnostic panel */}
+        {showDiagnostic && <DiagnosticPanel logs={connectionLog} />}
       </div>
     </div>
   );
