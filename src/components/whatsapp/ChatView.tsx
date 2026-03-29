@@ -145,6 +145,12 @@ export function ChatView({ instanceName, chat, templates, consultantId }: ChatVi
       {/* Composer */}
       <MessageComposer
         onSend={sendMessage}
+        onSendAudio={async (base64) => {
+          if (!chat) return;
+          const phone = chat.remoteJid.split("@")[0];
+          const audioDataUrl = `data:audio/ogg;base64,${base64}`;
+          await sendAudioApi(instanceName, phone, audioDataUrl);
+        }}
         templates={templates}
       />
     </div>
