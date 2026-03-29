@@ -53,8 +53,9 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Forward request to Evolution API
-    const targetUrl = `${evolutionUrl}/${path}`;
+    // Forward request to Evolution API — strip trailing /manager or slashes from base URL
+    const cleanUrl = (evolutionUrl || "").replace(/\/manager\/?$/, "").replace(/\/+$/, "");
+    const targetUrl = `${cleanUrl}/${path}`;
     const fetchOptions: RequestInit = {
       method: method || "GET",
       headers: {
