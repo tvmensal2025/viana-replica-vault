@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { Client as MinioClient } from "npm:minio@8.0.5";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -38,106 +39,6 @@ function getExtension(mime: string): string {
   return map[mime] || "bin";
 }
 
-// ── S3v4 Signing (minimal implementation for MinIO) ──
-
-async function hmacSha256(key: Uint8Array, message: string): Promise<Uint8Array> {
-  const cryptoKey = await crypto.subtle.importKey(
-    "raw", key, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
-  );
-  const sig = await crypto.subtle.sign("HMAC", cryptoKey, new TextEncoder().encode(message));
-  return new Uint8Array(sig);
-}
-
-async function sha256Hex(data: Uint8Array): Promise<string> {
-  const hash = await crypto.subtle.digest("SHA-256", data);
-  return [...new Uint8Array(hash)].map(b => b.toString(16).padStart(2, "0")).join("");
-}
-
-function toAmzDate(d: Date): { amzDate: string; dateStamp: string } {
-  const iso = d.toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "");
-  return { amzDate: iso, dateStamp: iso.slice(0, 8) };
-}
-
-async function getSignatureKey(key: string, dateStamp: string, region: string, service: string): Promise<Uint8Array> {
-  let kDate = await hmacSha256(new TextEncoder().encode("AWS4" + key), dateStamp);
-  let kRegion = await hmacSha256(kDate, region);
-  let kService = await hmacSha256(kRegion, service);
-  return hmacSha256(kService, "aws4_request");
-}
-
-interface SignedRequest {
-  url: string;
-  headers: Record<string, string>;
-}
-
-async function signS3Request(
-  method: string,
-  endpoint: string,
-  path: string,
-  accessKey: string,
-  secretKey: string,
-  body: Uint8Array,
-  contentType?: string,
-  queryString = ""
-): Promise<SignedRequest> {
-  const region = "us-east-1";
-  const service = "s3";
-  const now = new Date();
-  const { amzDate, dateStamp } = toAmzDate(now);
-  
-  const url = new URL(endpoint);
-  const host = url.host;
-  
-  const payloadHash = await sha256Hex(body);
-  
-  const headers: Record<string, string> = {
-    "host": host,
-    "x-amz-date": amzDate,
-    "x-amz-content-sha256": payloadHash,
-  };
-  if (contentType) headers["content-type"] = contentType;
-  
-  // Canonical request
-  const signedHeaderKeys = Object.keys(headers).sort();
-  const signedHeaders = signedHeaderKeys.join(";");
-  const canonicalHeaders = signedHeaderKeys.map(k => `${k}:${headers[k]}\n`).join("");
-  
-  const canonicalRequest = [
-    method,
-    path,
-    queryString,
-    canonicalHeaders,
-    signedHeaders,
-    payloadHash,
-  ].join("\n");
-  
-  const canonicalRequestHash = await sha256Hex(new TextEncoder().encode(canonicalRequest));
-  
-  const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
-  const stringToSign = [
-    "AWS4-HMAC-SHA256",
-    amzDate,
-    credentialScope,
-    canonicalRequestHash,
-  ].join("\n");
-  
-  const signingKey = await getSignatureKey(secretKey, dateStamp, region, service);
-  const signatureBytes = await hmacSha256(signingKey, stringToSign);
-  const signature = [...signatureBytes].map(b => b.toString(16).padStart(2, "0")).join("");
-  
-  const authorization = `AWS4-HMAC-SHA256 Credential=${accessKey}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
-  
-  const fullUrl = `${endpoint}${path}${queryString ? "?" + queryString : ""}`;
-  
-  return {
-    url: fullUrl,
-    headers: {
-      ...headers,
-      "Authorization": authorization,
-    },
-  };
-}
-
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -155,8 +56,13 @@ serve(async (req) => {
       );
     }
 
-    console.log("MinIO endpoint:", minioUrl);
-    console.log("Access key length:", accessKey.length, "Secret key length:", secretKey.length);
+    // Parse endpoint
+    const url = new URL(minioUrl);
+    const useSSL = url.protocol === "https:";
+    const endPoint = url.hostname;
+    const port = url.port ? parseInt(url.port) : (useSSL ? 443 : 80);
+
+    console.log("MinIO config:", { endPoint, port, useSSL, accessKeyLen: accessKey.length });
 
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
@@ -185,25 +91,25 @@ serve(async (req) => {
 
     const ext = getExtension(file.type);
     const objectKey = `${crypto.randomUUID()}-${Date.now()}.${ext}`;
-    const fileBytes = new Uint8Array(await file.arrayBuffer());
+    const fileBuffer = new Uint8Array(await file.arrayBuffer());
 
-    // 1. Create bucket (ignore if exists)
-    try {
-      const createBucketReq = await signS3Request(
-        "PUT", minioUrl, `/${BUCKET}`, accessKey, secretKey, new Uint8Array(0)
-      );
-      const cbRes = await fetch(createBucketReq.url, {
-        method: "PUT",
-        headers: createBucketReq.headers,
-      });
-      const cbText = await cbRes.text();
-      console.log("Create bucket status:", cbRes.status, cbText.slice(0, 200));
-    } catch (e) {
-      console.log("Create bucket error (may already exist):", e.message);
-    }
+    // Initialize MinIO client
+    const minioClient = new MinioClient({
+      endPoint,
+      port,
+      useSSL,
+      accessKey,
+      secretKey,
+      region: "us-east-1",
+    });
 
-    // 2. Set public policy
-    try {
+    // Ensure bucket exists
+    const bucketExists = await minioClient.bucketExists(BUCKET);
+    if (!bucketExists) {
+      await minioClient.makeBucket(BUCKET, "us-east-1");
+      console.log("Bucket created:", BUCKET);
+
+      // Set public read policy
       const policy = JSON.stringify({
         Version: "2012-10-17",
         Statement: [{
@@ -213,41 +119,17 @@ serve(async (req) => {
           Resource: [`arn:aws:s3:::${BUCKET}/*`],
         }],
       });
-      const policyBytes = new TextEncoder().encode(policy);
-      const policyReq = await signS3Request(
-        "PUT", minioUrl, `/${BUCKET}`, accessKey, secretKey, policyBytes, "application/json", "policy"
-      );
-      const pRes = await fetch(policyReq.url, {
-        method: "PUT",
-        headers: policyReq.headers,
-        body: policyBytes,
-      });
-      await pRes.text();
-    } catch {
-      // policy may already be set
+      await minioClient.setBucketPolicy(BUCKET, policy);
+      console.log("Public policy set");
     }
 
-    // 3. Upload file
-    const uploadReq = await signS3Request(
-      "PUT", minioUrl, `/${BUCKET}/${objectKey}`, accessKey, secretKey, fileBytes, file.type
-    );
+    // Upload file using Buffer
+    const { Buffer } = await import("node:buffer");
+    const buf = Buffer.from(fileBuffer);
     
-    const uploadRes = await fetch(uploadReq.url, {
-      method: "PUT",
-      headers: uploadReq.headers,
-      body: fileBytes,
+    await minioClient.putObject(BUCKET, objectKey, buf, file.size, {
+      "Content-Type": file.type,
     });
-
-    if (!uploadRes.ok) {
-      const errText = await uploadRes.text();
-      console.error("MinIO upload failed:", uploadRes.status, errText);
-      return new Response(
-        JSON.stringify({ error: "Upload to MinIO failed", detail: errText.slice(0, 500) }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    await uploadRes.text();
 
     const publicUrl = `${minioUrl}/${BUCKET}/${objectKey}`;
     console.log("Upload successful:", publicUrl);
