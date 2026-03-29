@@ -25,7 +25,7 @@ const PixelInjector = ({ facebookPixelId, googleAnalyticsId }: PixelInjectorProp
 
       const noscript = document.createElement("noscript");
       noscript.innerHTML = `<img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=${facebookPixelId}&ev=PageView&noscript=1"/>`;
-      document.head.appendChild(noscript as any);
+      document.head.appendChild(noscript);
     }
 
     if (googleAnalyticsId) {

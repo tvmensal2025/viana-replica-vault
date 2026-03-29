@@ -1,17 +1,7 @@
-function getBaseUrl(): string {
-  return import.meta.env.VITE_EVOLUTION_API_URL;
-}
+import { supabase } from "@/integrations/supabase/client";
 
-function getApiKey(): string {
-  return import.meta.env.VITE_EVOLUTION_API_KEY;
-}
-
-function getHeaders(): Record<string, string> {
-  return {
-    "Content-Type": "application/json",
-    apikey: getApiKey(),
-  };
-}
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 async function handleResponse<T>(response: Response): Promise<T> {
   if (response.status === 401) {
@@ -23,13 +13,21 @@ async function handleResponse<T>(response: Response): Promise<T> {
   return response.json();
 }
 
-async function request<T>(url: string, options?: RequestInit): Promise<T> {
+async function request<T>(path: string, method: string, body?: unknown): Promise<T> {
   try {
-    const response = await fetch(url, {
-      ...options,
-      headers: { ...getHeaders(), ...options?.headers },
+    const session = await supabase.auth.getSession();
+    const token = session.data.session?.access_token;
+
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/evolution-proxy`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token || SUPABASE_ANON_KEY}`,
+        apikey: SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ path, method, body }),
     });
-    return handleResponse<T>(response);
+    return handleResponse<T>(res);
   } catch (error) {
     if (error instanceof TypeError) {
       throw new Error("Erro de conexão. Verifique sua internet.");
@@ -43,26 +41,25 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 export async function createInstance(instanceName: string) {
   return request<{
     instance: { instanceName: string; status: string };
-    qrcode: { base64: string };
-  }>(`${getBaseUrl()}/instance/create`, {
-    method: "POST",
-    body: JSON.stringify({
-      instanceName,
-      qrcode: true,
-      integration: "WHATSAPP-BAILEYS",
-    }),
+    qrcode: { base64: string; pairingCode?: string };
+  }>("instance/create", "POST", {
+    instanceName,
+    qrcode: true,
+    integration: "WHATSAPP-BAILEYS",
   });
 }
 
 export async function connectInstance(instanceName: string) {
   return request<{ base64: string }>(
-    `${getBaseUrl()}/instance/connect/${instanceName}`
+    `instance/connect/${instanceName}`,
+    "GET"
   );
 }
 
 export async function getConnectionState(instanceName: string) {
   const response = await request<{ instance?: { state: string }; state?: string }>(
-    `${getBaseUrl()}/instance/connectionState/${instanceName}`
+    `instance/connectionState/${instanceName}`,
+    "GET"
   );
   const state = response?.instance?.state || response?.state;
   return { state: (state as "open" | "close" | "connecting") || "close" };
@@ -70,8 +67,8 @@ export async function getConnectionState(instanceName: string) {
 
 export async function deleteInstance(instanceName: string) {
   return request<void>(
-    `${getBaseUrl()}/instance/delete/${instanceName}`,
-    { method: "DELETE" }
+    `instance/delete/${instanceName}`,
+    "DELETE"
   );
 }
 
@@ -107,8 +104,9 @@ export interface EvolutionChat {
 
 export async function findChats(instanceName: string): Promise<EvolutionChat[]> {
   return request<EvolutionChat[]>(
-    `${getBaseUrl()}/chat/findChats/${instanceName}`,
-    { method: "POST", body: JSON.stringify({}) }
+    `chat/findChats/${instanceName}`,
+    "POST",
+    {}
   );
 }
 
@@ -142,13 +140,11 @@ export async function getBase64FromMediaMessage(
 ) {
   try {
     const result = await request<{ base64?: string; mimetype?: string }>(
-      `${getBaseUrl()}/chat/getBase64FromMediaMessage/${instanceName}`,
+      `chat/getBase64FromMediaMessage/${instanceName}`,
+      "POST",
       {
-        method: "POST",
-        body: JSON.stringify({
-          message: { key: { remoteJid, fromMe, id: messageId } },
-          convertToMp4: false,
-        }),
+        message: { key: { remoteJid, fromMe, id: messageId } },
+        convertToMp4: false,
       }
     );
     return result;
@@ -163,13 +159,11 @@ export async function findMessages(
   limit = 50
 ): Promise<EvolutionMessage[]> {
   const result = await request<{ messages?: { records: EvolutionMessage[] } } | EvolutionMessage[]>(
-    `${getBaseUrl()}/chat/findMessages/${instanceName}`,
+    `chat/findMessages/${instanceName}`,
+    "POST",
     {
-      method: "POST",
-      body: JSON.stringify({
-        where: { key: { remoteJid } },
-        limit,
-      }),
+      where: { key: { remoteJid } },
+      limit,
     }
   );
   if (Array.isArray(result)) return result;
@@ -185,8 +179,9 @@ export interface EvolutionContact {
 
 export async function findContacts(instanceName: string): Promise<EvolutionContact[]> {
   return request<EvolutionContact[]>(
-    `${getBaseUrl()}/chat/findContacts/${instanceName}`,
-    { method: "POST", body: JSON.stringify({}) }
+    `chat/findContacts/${instanceName}`,
+    "POST",
+    {}
   );
 }
 
@@ -198,11 +193,9 @@ export async function sendTextMessage(
   text: string
 ) {
   return request<{ key: { id: string } }>(
-    `${getBaseUrl()}/message/sendText/${instanceName}`,
-    {
-      method: "POST",
-      body: JSON.stringify({ number: phone, text }),
-    }
+    `message/sendText/${instanceName}`,
+    "POST",
+    { number: phone, text }
   );
 }
 
@@ -214,15 +207,13 @@ export async function sendMedia(
   mediatype: "image" | "video" | "document"
 ) {
   return request<{ key: { id: string } }>(
-    `${getBaseUrl()}/message/sendMedia/${instanceName}`,
+    `message/sendMedia/${instanceName}`,
+    "POST",
     {
-      method: "POST",
-      body: JSON.stringify({
-        number: phone,
-        mediatype,
-        media: mediaUrl,
-        caption,
-      }),
+      number: phone,
+      mediatype,
+      media: mediaUrl,
+      caption,
     }
   );
 }
@@ -233,13 +224,11 @@ export async function sendAudio(
   audioUrl: string
 ) {
   return request<{ key: { id: string } }>(
-    `${getBaseUrl()}/message/sendWhatsAppAudio/${instanceName}`,
+    `message/sendWhatsAppAudio/${instanceName}`,
+    "POST",
     {
-      method: "POST",
-      body: JSON.stringify({
-        number: phone,
-        audio: audioUrl,
-      }),
+      number: phone,
+      audio: audioUrl,
     }
   );
 }
@@ -251,15 +240,13 @@ export async function sendDocument(
   fileName: string
 ) {
   return request<{ key: { id: string } }>(
-    `${getBaseUrl()}/message/sendMedia/${instanceName}`,
+    `message/sendMedia/${instanceName}`,
+    "POST",
     {
-      method: "POST",
-      body: JSON.stringify({
-        number: phone,
-        mediatype: "document",
-        media: docUrl,
-        fileName,
-      }),
+      number: phone,
+      mediatype: "document",
+      media: docUrl,
+      fileName,
     }
   );
 }
@@ -268,22 +255,18 @@ export async function sendDocument(
 
 export async function markAsRead(instanceName: string, remoteJid: string) {
   return request<void>(
-    `${getBaseUrl()}/chat/markMessageAsRead/${instanceName}`,
-    {
-      method: "PUT",
-      body: JSON.stringify({ readMessages: [{ remoteJid }] }),
-    }
+    `chat/markMessageAsRead/${instanceName}`,
+    "PUT",
+    { readMessages: [{ remoteJid }] }
   );
 }
 
 export async function getProfilePicture(instanceName: string, remoteJid: string) {
   try {
     const result = await request<{ profilePictureUrl?: string; wpiPicUrl?: string }>(
-      `${getBaseUrl()}/chat/fetchProfilePictureUrl/${instanceName}`,
-      {
-        method: "POST",
-        body: JSON.stringify({ number: remoteJid }),
-      }
+      `chat/fetchProfilePictureUrl/${instanceName}`,
+      "POST",
+      { number: remoteJid }
     );
     return result?.profilePictureUrl || result?.wpiPicUrl || null;
   } catch {

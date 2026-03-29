@@ -7,19 +7,26 @@ import {
   sendTextMessage,
 } from "./evolutionApi";
 
-const MOCK_URL = "https://test-evolution.example.com";
-const MOCK_KEY = "test-api-key";
+const MOCK_TOKEN = "test-access-token";
+
+vi.mock("@/integrations/supabase/client", () => ({
+  supabase: {
+    auth: {
+      getSession: vi.fn().mockResolvedValue({
+        data: { session: { access_token: "test-access-token" } },
+      }),
+    },
+  },
+}));
 
 beforeEach(() => {
   vi.stubGlobal("fetch", vi.fn());
-  vi.stubEnv("VITE_EVOLUTION_API_URL", MOCK_URL);
-  vi.stubEnv("VITE_EVOLUTION_API_KEY", MOCK_KEY);
 });
 
-function mockFetchSuccess(data: unknown, status = 200) {
+function mockFetchSuccess(data: unknown) {
   (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
     ok: true,
-    status,
+    status: 200,
     json: () => Promise.resolve(data),
   });
 }
@@ -39,9 +46,20 @@ function mockFetchNetworkError() {
   );
 }
 
-describe("evolutionApi", () => {
+/** Helper to extract the fetch call arguments */
+function getFetchCallArgs() {
+  const mockFetch = fetch as ReturnType<typeof vi.fn>;
+  expect(mockFetch).toHaveBeenCalledTimes(1);
+  const [url, options] = mockFetch.mock.calls[0];
+  const parsedBody = options?.body
+    ? JSON.parse(options.body as string)
+    : undefined;
+  return { url: url as string, options, parsedBody };
+}
+
+describe("evolutionApi (proxy-based)", () => {
   describe("createInstance", () => {
-    it("sends POST to /instance/create with correct body and returns data", async () => {
+    it("sends POST to proxy with correct path, method, and body", async () => {
       const responseData = {
         instance: { instanceName: "test-inst", status: "created" },
         qrcode: { base64: "base64-qr-data" },
@@ -50,70 +68,81 @@ describe("evolutionApi", () => {
 
       const result = await createInstance("test-inst");
 
-      expect(fetch).toHaveBeenCalledWith(`${MOCK_URL}/instance/create`, {
+      const { url, options, parsedBody } = getFetchCallArgs();
+      expect(url).toContain("/functions/v1/evolution-proxy");
+      expect(options.method).toBe("POST");
+      expect(options.headers["Authorization"]).toBe(`Bearer ${MOCK_TOKEN}`);
+      expect(options.headers["apikey"]).toBeDefined();
+      expect(parsedBody).toEqual({
+        path: "instance/create",
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: MOCK_KEY,
-        },
-        body: JSON.stringify({
+        body: {
           instanceName: "test-inst",
           qrcode: true,
           integration: "WHATSAPP-BAILEYS",
-        }),
+        },
       });
       expect(result).toEqual(responseData);
     });
   });
 
   describe("connectInstance", () => {
-    it("sends GET to /instance/connect/{instanceName}", async () => {
+    it("sends GET via proxy for instance connect", async () => {
       const responseData = { base64: "qr-code-base64" };
       mockFetchSuccess(responseData);
 
       const result = await connectInstance("my-instance");
 
-      expect(fetch).toHaveBeenCalledWith(
-        `${MOCK_URL}/instance/connect/my-instance`,
-        { headers: { "Content-Type": "application/json", apikey: MOCK_KEY } }
-      );
+      const { url, options, parsedBody } = getFetchCallArgs();
+      expect(url).toContain("/functions/v1/evolution-proxy");
+      expect(options.method).toBe("POST");
+      expect(options.headers["Authorization"]).toBe(`Bearer ${MOCK_TOKEN}`);
+      expect(parsedBody).toEqual({
+        path: "instance/connect/my-instance",
+        method: "GET",
+      });
       expect(result).toEqual(responseData);
     });
   });
 
   describe("getConnectionState", () => {
-    it("sends GET to /instance/connectionState/{instanceName}", async () => {
+    it("sends GET via proxy for connection state", async () => {
       const responseData = { state: "open" };
       mockFetchSuccess(responseData);
 
       const result = await getConnectionState("my-instance");
 
-      expect(fetch).toHaveBeenCalledWith(
-        `${MOCK_URL}/instance/connectionState/my-instance`,
-        { headers: { "Content-Type": "application/json", apikey: MOCK_KEY } }
-      );
-      expect(result).toEqual(responseData);
+      const { url, options, parsedBody } = getFetchCallArgs();
+      expect(url).toContain("/functions/v1/evolution-proxy");
+      expect(options.method).toBe("POST");
+      expect(options.headers["Authorization"]).toBe(`Bearer ${MOCK_TOKEN}`);
+      expect(parsedBody).toEqual({
+        path: "instance/connectionState/my-instance",
+        method: "GET",
+      });
+      expect(result).toEqual({ state: "open" });
     });
   });
 
   describe("deleteInstance", () => {
-    it("sends DELETE to /instance/delete/{instanceName}", async () => {
+    it("sends DELETE via proxy for instance deletion", async () => {
       mockFetchSuccess(undefined);
 
       await deleteInstance("my-instance");
 
-      expect(fetch).toHaveBeenCalledWith(
-        `${MOCK_URL}/instance/delete/my-instance`,
-        {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json", apikey: MOCK_KEY },
-        }
-      );
+      const { url, options, parsedBody } = getFetchCallArgs();
+      expect(url).toContain("/functions/v1/evolution-proxy");
+      expect(options.method).toBe("POST");
+      expect(options.headers["Authorization"]).toBe(`Bearer ${MOCK_TOKEN}`);
+      expect(parsedBody).toEqual({
+        path: "instance/delete/my-instance",
+        method: "DELETE",
+      });
     });
   });
 
   describe("sendTextMessage", () => {
-    it("sends POST to /message/sendText/{instanceName} with phone and text", async () => {
+    it("sends POST via proxy with phone and text in body", async () => {
       const responseData = { key: { id: "msg-123" } };
       mockFetchSuccess(responseData);
 
@@ -123,14 +152,15 @@ describe("evolutionApi", () => {
         "Hello!"
       );
 
-      expect(fetch).toHaveBeenCalledWith(
-        `${MOCK_URL}/message/sendText/my-instance`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", apikey: MOCK_KEY },
-          body: JSON.stringify({ number: "5511999999999", text: "Hello!" }),
-        }
-      );
+      const { url, options, parsedBody } = getFetchCallArgs();
+      expect(url).toContain("/functions/v1/evolution-proxy");
+      expect(options.method).toBe("POST");
+      expect(options.headers["Authorization"]).toBe(`Bearer ${MOCK_TOKEN}`);
+      expect(parsedBody).toEqual({
+        path: "message/sendText/my-instance",
+        method: "POST",
+        body: { number: "5511999999999", text: "Hello!" },
+      });
       expect(result).toEqual(responseData);
     });
   });

@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useAnalytics } from "@/hooks/useAnalytics";
 import type { Consultant } from "@/types/consultant";
+import type { Database } from "@/integrations/supabase/types";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, AreaChart, Area, PieChart, Pie, Cell, Legend,
 } from "recharts";
@@ -52,7 +53,7 @@ const Admin = () => {
         phone: c.phone,
         igreen_id: id,
         cadastro_url: id ? `https://digital.igreenenergy.com.br/?id=${id}&sendcontract=true` : c.cadastro_url,
-        licenciada_cadastro_url: id ? `https://expansao.igreenenergy.com.br/?id=${id}&checkout=true` : (c as any).licenciada_cadastro_url || "",
+        licenciada_cadastro_url: id ? `https://expansao.igreenenergy.com.br/?id=${id}&checkout=true` : c.licenciada_cadastro_url || "",
         facebook_pixel_id: c.facebook_pixel_id || "",
         google_analytics_id: c.google_analytics_id || "",
       });
@@ -80,7 +81,7 @@ const Admin = () => {
         const { data: urlData } = supabase.storage.from("consultant-photos").getPublicUrl(path);
         photo_url = urlData.publicUrl;
       }
-      const payload: any = {
+      const payload: Database["public"]["Tables"]["consultants"]["Insert"] = {
         id: userId, name: form.name, license: form.license.toLowerCase().replace(/\s+/g, "-"),
         phone: form.phone.replace(/\D/g, ""), cadastro_url: form.cadastro_url, igreen_id: form.igreen_id || null,
         licenciada_cadastro_url: form.licenciada_cadastro_url || null,
@@ -91,8 +92,8 @@ const Admin = () => {
       const { error } = await supabase.from("consultants").upsert(payload, { onConflict: "id" });
       if (error) throw error;
       toast({ title: "✅ Dados salvos com sucesso!" });
-    } catch (error: any) {
-      toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
+    } catch (error: unknown) {
+      toast({ title: "Erro ao salvar", description: error instanceof Error ? error.message : "Erro desconhecido", variant: "destructive" });
     } finally { setSaving(false); }
   };
 

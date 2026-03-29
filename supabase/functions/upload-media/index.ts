@@ -8,8 +8,8 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const BUCKET = "media-templates";
-const MAX_SIZE = 25 * 1024 * 1024;
+const BUCKET = Deno.env.get("MINIO_BUCKET") || "media-templates";
+const MAX_SIZE = 100 * 1024 * 1024;
 
 const ALLOWED_TYPES: Record<string, string[]> = {
   image: ["image/jpeg", "image/png", "image/webp", "image/gif"],
@@ -84,7 +84,7 @@ serve(async (req) => {
 
     if (file.size > MAX_SIZE) {
       return new Response(
-        JSON.stringify({ error: "File too large (max 25MB)" }),
+        JSON.stringify({ error: "File too large (max 100MB)" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/components/ui/use-toast";
-import { sendTextMessage } from "@/services/evolutionApi";
+import { sendTextMessage, sendMedia, sendAudio } from "@/services/evolutionApi";
 import type { MessageTemplate } from "@/types/whatsapp";
 
 export type BulkSendResult = { total: number; sent: number; failed: number };
@@ -20,6 +20,7 @@ const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export function BulkSendPanel({ instanceName, customers, templates, applyTemplate }: BulkSendPanelProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState("");
+  const [selectedTemplate, setSelectedTemplate] = useState<MessageTemplate | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [progress, setProgress] = useState<BulkSendResult | null>(null);
   const [result, setResult] = useState<BulkSendResult | null>(null);
@@ -32,19 +33,43 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
     setWarning("");
   }
   function toggleAll() { setSelectedIds(allSelected ? new Set() : new Set(customers.map((c) => c.id))); setWarning(""); }
-  function handleTemplateChange(tid: string) { const t = templates.find((t) => t.id === tid); if (t) setMessage(t.content); }
+  function handleTemplateChange(tid: string) {
+    const t = templates.find((t) => t.id === tid);
+    if (t) {
+      setMessage(t.content);
+      setSelectedTemplate(t);
+    }
+  }
 
   async function handleBulkSend() {
     if (selectedIds.size === 0) { setWarning("Selecione pelo menos um destinatário"); return; }
-    if (!message.trim()) return;
+    if (!message.trim() && !(selectedTemplate?.media_url)) return;
     setWarning(""); setIsSending(true); setResult(null);
     const selected = customers.filter((c) => selectedIds.has(c.id));
     let sent = 0, failed = 0;
+    const tplMediaType = selectedTemplate?.media_type;
+    const tplMediaUrl = selectedTemplate?.media_url;
+
     for (let i = 0; i < selected.length; i++) {
       setProgress({ total: selected.length, sent, failed });
       try {
-        const msg = message.includes("{{") ? applyTemplate({ id: "", consultant_id: "", name: "", content: message, media_type: "text", media_url: null, created_at: "" }, selected[i]) : message;
-        await sendTextMessage(instanceName, selected[i].phone_whatsapp, msg); sent++;
+        const msg = message.includes("{{")
+          ? applyTemplate({ id: "", consultant_id: "", name: "", content: message, media_type: "text", media_url: null, created_at: "" }, selected[i])
+          : message;
+
+        if (tplMediaUrl && tplMediaType === "audio") {
+          // Send audio as voice message
+          await sendAudio(instanceName, selected[i].phone_whatsapp, tplMediaUrl);
+          // Send caption text separately if present
+          if (msg.trim()) await sendTextMessage(instanceName, selected[i].phone_whatsapp, msg);
+        } else if (tplMediaUrl && (tplMediaType === "image" || tplMediaType === "document")) {
+          // Send image or document with caption
+          await sendMedia(instanceName, selected[i].phone_whatsapp, tplMediaUrl, msg, tplMediaType);
+        } else {
+          // Text only
+          await sendTextMessage(instanceName, selected[i].phone_whatsapp, msg);
+        }
+        sent++;
       } catch { failed++; }
       if (i < selected.length - 1) await delay(2000);
     }

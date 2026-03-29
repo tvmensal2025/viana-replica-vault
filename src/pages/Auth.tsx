@@ -45,10 +45,10 @@ const Auth = () => {
           description: "Verifique seu email para confirmar a conta.",
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Erro",
-        description: error.message,
+        description: error instanceof Error ? error.message : "Erro desconhecido",
         variant: "destructive",
       });
     } finally {

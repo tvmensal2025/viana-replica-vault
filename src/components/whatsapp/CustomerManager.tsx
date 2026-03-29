@@ -43,6 +43,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { getProfilePicture } from "@/services/evolutionApi";
 import { AddCustomerDialog } from "./AddCustomerDialog";
+import type { TablesUpdate } from "@/integrations/supabase/types";
 
 interface Customer {
   id: string;
@@ -120,9 +121,7 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
         if (phone.length < 10 || pics[c.id]) continue;
         try {
           const result = await getProfilePicture(instanceName, `${phone}@s.whatsapp.net`);
-          if (result && typeof result === "object" && (result as any).profilePictureUrl) {
-            pics[c.id] = (result as any).profilePictureUrl;
-          } else if (result && typeof result === "string") {
+          if (result && typeof result === "string") {
             pics[c.id] = result;
           }
         } catch {
@@ -180,7 +179,7 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
     if (!editingCustomer) return;
     setSaving(true);
     try {
-      const updateData: Record<string, unknown> = {};
+      const updateData: TablesUpdate<"customers"> = {};
       if (editForm.name) updateData.name = editForm.name;
       if (editForm.cpf) updateData.cpf = editForm.cpf.replace(/\D/g, "");
       if (editForm.data_nascimento) updateData.data_nascimento = editForm.data_nascimento;
@@ -197,7 +196,7 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
       updateData.electricity_bill_value = editForm.electricity_bill_value ? parseFloat(editForm.electricity_bill_value) : null;
       updateData.status = editForm.status || "pending";
 
-      const { error } = await supabase.from("customers").update(updateData as any).eq("id", editingCustomer.id);
+      const { error } = await supabase.from("customers").update(updateData).eq("id", editingCustomer.id);
       if (error) throw error;
       toast({ title: "✅ Cliente atualizado!" });
       setEditingCustomer(null);

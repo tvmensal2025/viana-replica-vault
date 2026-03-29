@@ -11,6 +11,9 @@ import { useToast } from "@/hooks/use-toast";
 import type { MessageTemplate } from "@/types/whatsapp";
 import type { ChatItem } from "@/hooks/useChats";
 import { Loader2, MessageSquareText, UserPlus, UserCheck } from "lucide-react";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("ChatView");
 
 interface ChatViewProps {
   instanceName: string;
@@ -127,14 +130,24 @@ export function ChatView({ instanceName, chat, templates, consultantId }: ChatVi
           if (!chat) return;
           const targetJid = chat.sendTargetJid || chat.remoteJid;
           const phone = targetJid.split("@")[0];
-          const audioDataUrl = `data:audio/ogg;base64,${base64}`;
-          await sendAudioApi(instanceName, phone, audioDataUrl);
+          try {
+            const audioDataUrl = `data:audio/ogg;base64,${base64}`;
+            await sendAudioApi(instanceName, phone, audioDataUrl);
+          } catch (err: unknown) {
+            logger.error("Erro ao enviar áudio:", err);
+            toast({ title: "Erro ao enviar áudio", description: err instanceof Error ? err.message : "Falha no envio", variant: "destructive" });
+          }
         }}
         onSendMedia={async (mediaUrl, caption, mediaType) => {
           if (!chat) return;
           const targetJid = chat.sendTargetJid || chat.remoteJid;
           const phone = targetJid.split("@")[0];
-          await sendMediaApi(instanceName, phone, mediaUrl, caption, mediaType);
+          try {
+            await sendMediaApi(instanceName, phone, mediaUrl, caption, mediaType as "image" | "video" | "document");
+          } catch (err: unknown) {
+            logger.error("Erro ao enviar mídia:", err);
+            toast({ title: "Erro ao enviar mídia", description: err instanceof Error ? err.message : "Falha no envio", variant: "destructive" });
+          }
         }}
         templates={templates}
       />

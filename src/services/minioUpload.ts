@@ -1,4 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("MinIO Upload");
 
 export interface UploadResult {
   url: string;
@@ -42,8 +45,16 @@ export async function uploadMedia(
   onProgress?.(85);
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: "Upload failed" }));
-    throw new Error(err.error || "Upload failed");
+    const errBody = await res.text().catch(() => "");
+    let errMsg = "Upload failed";
+    try {
+      const parsed = JSON.parse(errBody);
+      errMsg = parsed.error || parsed.message || errMsg;
+    } catch {
+      if (errBody) errMsg = errBody;
+    }
+    logger.error("Erro:", res.status, errMsg);
+    throw new Error(`Upload falhou (${res.status}): ${errMsg}`);
   }
 
   const result: UploadResult = await res.json();

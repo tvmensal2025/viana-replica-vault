@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
+import type { TablesInsert } from "@/integrations/supabase/types";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Search, Check, MapPin, CreditCard, Zap, User } from "lucide-react";
 
@@ -129,26 +130,25 @@ export function AddCustomerDialog({
     setSaving(true);
     try {
       const rawPhone = form.phone_whatsapp.replace(/\D/g, "");
-      const insertData: Record<string, unknown> = {
+      const insertData: TablesInsert<"customers"> = {
         phone_whatsapp: rawPhone,
+        ...(form.name && { name: form.name }),
+        ...(form.cpf && { cpf: form.cpf.replace(/\D/g, "") }),
+        ...(form.data_nascimento && { data_nascimento: form.data_nascimento }),
+        ...(form.email && { email: form.email }),
+        ...(form.cep && { cep: form.cep.replace(/\D/g, "") }),
+        ...(form.address_street && { address_street: form.address_street }),
+        ...(form.address_neighborhood && { address_neighborhood: form.address_neighborhood }),
+        ...(form.address_complement && { address_complement: form.address_complement }),
+        ...(form.address_city && { address_city: form.address_city }),
+        ...(form.address_state && { address_state: form.address_state }),
+        ...(form.address_number && { address_number: form.address_number }),
+        ...(form.numero_instalacao && { numero_instalacao: form.numero_instalacao }),
+        ...(form.media_consumo && { electricity_bill_value: parseFloat(form.media_consumo) }),
+        ...(form.desconto_cliente && { media_consumo: parseFloat(form.desconto_cliente) }),
       };
 
-      if (form.name) insertData.name = form.name;
-      if (form.cpf) insertData.cpf = form.cpf.replace(/\D/g, "");
-      if (form.data_nascimento) insertData.data_nascimento = form.data_nascimento;
-      if (form.email) insertData.email = form.email;
-      if (form.cep) insertData.cep = form.cep.replace(/\D/g, "");
-      if (form.address_street) insertData.address_street = form.address_street;
-      if (form.address_neighborhood) insertData.address_neighborhood = form.address_neighborhood;
-      if (form.address_complement) insertData.address_complement = form.address_complement;
-      if (form.address_city) insertData.address_city = form.address_city;
-      if (form.address_state) insertData.address_state = form.address_state;
-      if (form.address_number) insertData.address_number = form.address_number;
-      if (form.numero_instalacao) insertData.numero_instalacao = form.numero_instalacao;
-      if (form.media_consumo) insertData.electricity_bill_value = parseFloat(form.media_consumo);
-      if (form.desconto_cliente) insertData.media_consumo = parseFloat(form.desconto_cliente);
-
-      const { error } = await supabase.from("customers").insert(insertData as any);
+      const { error } = await supabase.from("customers").insert(insertData);
 
       if (error) {
         if (error.code === "23505") {

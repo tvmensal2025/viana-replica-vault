@@ -6,6 +6,9 @@ import {
   getBase64FromMediaMessage,
   type EvolutionMessage,
 } from "@/services/evolutionApi";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("useMessages");
 
 export interface ChatMessage {
   id: string;
@@ -209,7 +212,7 @@ export function useMessages(
   const sendMessage = useCallback(
     async (text: string) => {
       if (!instanceName || !remoteJid) {
-        console.error("[useMessages] sendMessage: missing instanceName or remoteJid", { instanceName, remoteJid });
+        logger.error("sendMessage: missing instanceName or remoteJid", { instanceName, remoteJid });
         return;
       }
 
@@ -223,8 +226,8 @@ export function useMessages(
         ? targetJid.split("@")[0]
         : targetJid;
 
-      console.log(
-        "[useMessages] sending to:",
+      logger.debug(
+        "sending to:",
         recipient,
         "targetJid:",
         targetJid,
@@ -236,7 +239,7 @@ export function useMessages(
 
       try {
         await sendTextMessage(instanceName, recipient, text);
-        console.log("[useMessages] message sent successfully");
+        logger.debug("message sent successfully");
         setMessages((prev) => [
           ...prev,
           {
@@ -249,7 +252,7 @@ export function useMessages(
           },
         ]);
       } catch (err) {
-        console.error("[useMessages] sendMessage error:", err);
+        logger.error("sendMessage error:", err);
         throw err;
       }
     },

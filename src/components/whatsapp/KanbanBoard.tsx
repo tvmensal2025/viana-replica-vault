@@ -27,32 +27,15 @@ import {
 } from "lucide-react";
 import { StageAutoMessageConfig } from "./StageAutoMessageConfig";
 import { sendTextMessage, sendMedia, sendAudio } from "@/services/evolutionApi";
+import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 
-interface Deal {
-  id: string;
-  consultant_id: string;
-  customer_id: string | null;
-  remote_jid: string | null;
-  stage: string;
-  notes: string | null;
-  created_at: string;
-  approved_at: string | null;
-}
+type KanbanStageRow = Tables<"kanban_stages">;
+type KanbanStageInsert = TablesInsert<"kanban_stages">;
+type KanbanStageUpdate = TablesUpdate<"kanban_stages">;
+type CrmDealRow = Tables<"crm_deals">;
+type CrmDealUpdate = TablesUpdate<"crm_deals">;
 
-interface KanbanStage {
-  id: string;
-  consultant_id: string;
-  stage_key: string;
-  label: string;
-  color: string;
-  position: number;
-  auto_message_text: string | null;
-  auto_message_type: string;
-  auto_message_media_url: string | null;
-  auto_message_enabled: boolean;
-}
-
-const DEFAULT_STAGES: Omit<KanbanStage, "id" | "consultant_id">[] = [
+const DEFAULT_STAGES: Omit<KanbanStageInsert, "consultant_id">[] = [
   { stage_key: "novo_lead", label: "Novo Lead", color: "bg-purple-500/20 text-purple-400", position: 0, auto_message_text: null, auto_message_type: "text", auto_message_media_url: null, auto_message_enabled: true },
   { stage_key: "aprovado", label: "Aprovado", color: "bg-green-500/20 text-green-400", position: 1, auto_message_text: "Olá *{{nome}}*! 🎉\n\nSeu cadastro foi *aprovado* com sucesso!\n\nEm breve entraremos em contato.", auto_message_type: "text", auto_message_media_url: null, auto_message_enabled: true },
   { stage_key: "reprovado", label: "Reprovado", color: "bg-red-500/20 text-red-400", position: 2, auto_message_text: null, auto_message_type: "text", auto_message_media_url: null, auto_message_enabled: true },
@@ -81,11 +64,11 @@ interface KanbanBoardProps {
 }
 
 export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
-  const [deals, setDeals] = useState<Deal[]>([]);
-  const [stages, setStages] = useState<KanbanStage[]>([]);
+  const [deals, setDeals] = useState<CrmDealRow[]>([]);
+  const [stages, setStages] = useState<KanbanStageRow[]>([]);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
-  const [editingStage, setEditingStage] = useState<KanbanStage | null>(null);
+  const [editingStage, setEditingStage] = useState<KanbanStageRow | null>(null);
   const [newLabel, setNewLabel] = useState("");
   const [newColor, setNewColor] = useState(COLOR_OPTIONS[0].value);
   const [addingNew, setAddingNew] = useState(false);
@@ -99,17 +82,17 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
       .order("position", { ascending: true });
 
     if (data && data.length > 0) {
-      setStages(data as unknown as KanbanStage[]);
+      setStages(data);
     } else {
-      const inserts = DEFAULT_STAGES.map((s) => ({
+      const inserts: KanbanStageInsert[] = DEFAULT_STAGES.map((s) => ({
         ...s,
         consultant_id: consultantId,
       }));
       const { data: inserted } = await supabase
         .from("kanban_stages")
-        .insert(inserts as any)
+        .insert(inserts)
         .select();
-      if (inserted) setStages(inserted as unknown as KanbanStage[]);
+      if (inserted) setStages(inserted);
     }
   }, [consultantId]);
 
@@ -119,7 +102,7 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
       .select("*")
       .eq("consultant_id", consultantId)
       .order("created_at", { ascending: false });
-    if (data) setDeals(data as unknown as Deal[]);
+    if (data) setDeals(data);
   }, [consultantId]);
 
   useEffect(() => {
@@ -130,7 +113,7 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
   const handleDragStart = (id: string) => setDraggedId(id);
 
   // Send auto-message when deal moves to a stage
-  const sendAutoMessage = async (stage: KanbanStage, deal: Deal) => {
+  const sendAutoMessage = async (stage: KanbanStageRow, deal: CrmDealRow) => {
     if (!stage.auto_message_enabled || !stage.auto_message_text || !instanceName || !deal.remote_jid) return;
 
     const phone = deal.remote_jid.split("@")[0];
@@ -163,7 +146,7 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
     }
 
     // Set approved_at when moving to "aprovado"
-    const updateData: any = { stage: stageKey };
+    const updateData: CrmDealUpdate = { stage: stageKey };
     if (stageKey === "aprovado" && !deal.approved_at) {
       updateData.approved_at = new Date().toISOString();
     }
@@ -208,14 +191,14 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
         label: newLabel.trim(),
         color: newColor,
         position,
-      } as any)
+      })
       .select()
       .single();
 
     if (error) {
       toast({ title: "Erro ao criar coluna", variant: "destructive" });
     } else if (data) {
-      setStages((prev) => [...prev, data as unknown as KanbanStage]);
+      setStages((prev) => [...prev, data]);
       setNewLabel("");
       setNewColor(COLOR_OPTIONS[0].value);
       setAddingNew(false);
@@ -223,10 +206,10 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
     }
   };
 
-  const handleUpdateStage = async (stage: KanbanStage) => {
+  const handleUpdateStage = async (stage: KanbanStageRow) => {
     const { error } = await supabase
       .from("kanban_stages")
-      .update({ label: stage.label, color: stage.color } as any)
+      .update({ label: stage.label, color: stage.color })
       .eq("id", stage.id);
 
     if (error) {
@@ -276,7 +259,7 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
         auto_message_text: text,
         auto_message_type: type,
         auto_message_media_url: mediaUrl,
-      } as any)
+      })
       .eq("id", stageId);
 
     if (error) {
@@ -296,7 +279,7 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
   const handleToggleAutoMessage = async (stageId: string, enabled: boolean) => {
     const { error } = await supabase
       .from("kanban_stages")
-      .update({ auto_message_enabled: enabled } as any)
+      .update({ auto_message_enabled: enabled })
       .eq("id", stageId);
 
     if (error) {

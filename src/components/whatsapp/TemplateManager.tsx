@@ -66,8 +66,8 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onDele
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 25 * 1024 * 1024) {
-      toast.error("Arquivo muito grande (máximo 25MB)");
+    if (file.size > 100 * 1024 * 1024) {
+      toast.error("Arquivo muito grande (máximo 100MB)");
       return;
     }
 
@@ -79,8 +79,8 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onDele
       const result = await uploadMedia(file, (pct) => setUploadProgress(pct));
       setMediaUrl(result.url);
       toast.success(`Arquivo enviado: ${formatFileSize(result.size)}`);
-    } catch (err: any) {
-      toast.error(err.message || "Erro no upload");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Erro no upload");
       setUploadedFileName("");
     } finally {
       setIsUploading(false);

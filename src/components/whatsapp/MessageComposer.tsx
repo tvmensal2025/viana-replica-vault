@@ -1,16 +1,21 @@
 import { useState, useRef, useCallback } from "react";
-import { Send, Paperclip, Mic, MicOff, MessageSquareText, Loader2, Image, File, X } from "lucide-react";
+import { Send, Paperclip, Mic, MicOff, MessageSquareText, Loader2, Image, File, Video, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { QuickReplyMenu } from "./QuickReplyMenu";
 import { Progress } from "@/components/ui/progress";
 import type { MessageTemplate } from "@/types/whatsapp";
 import { uploadMedia, formatFileSize } from "@/services/minioUpload";
 import { toast } from "sonner";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("MessageComposer");
+
+type MediaType = "image" | "video" | "document";
 
 interface MessageComposerProps {
   onSend: (text: string) => Promise<void>;
   onSendAudio?: (audioBase64: string) => Promise<void>;
-  onSendMedia?: (mediaUrl: string, caption: string, mediaType: "image" | "document") => Promise<void>;
+  onSendMedia?: (mediaUrl: string, caption: string, mediaType: MediaType) => Promise<void>;
   templates: MessageTemplate[];
   disabled?: boolean;
 }
@@ -24,7 +29,7 @@ export function MessageComposer({ onSend, onSendAudio, onSendMedia, templates, d
   const [recordingTime, setRecordingTime] = useState(0);
 
   // File attach state
-  const [attachedFile, setAttachedFile] = useState<{ url: string; name: string; type: "image" | "document" } | null>(null);
+  const [attachedFile, setAttachedFile] = useState<{ url: string; name: string; type: MediaType } | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
 
@@ -96,6 +101,11 @@ export function MessageComposer({ onSend, onSendAudio, onSendMedia, templates, d
   const handleTemplateSelect = useCallback((t: MessageTemplate) => {
     setText(t.content);
     setShowQuickReply(false);
+    // If template has media, set it as attached file
+    if (t.media_url && t.media_type && t.media_type !== "text") {
+      const type: MediaType = t.media_type === "image" ? "image" : t.media_type === "video" ? "video" : "document";
+      setAttachedFile({ url: t.media_url, name: `${t.name}.${t.media_type}`, type });
+    }
     textareaRef.current?.focus();
   }, []);
 
@@ -104,8 +114,8 @@ export function MessageComposer({ onSend, onSendAudio, onSendMedia, templates, d
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 25 * 1024 * 1024) {
-      toast.error("Arquivo muito grande (máximo 25MB)");
+    if (file.size > 100 * 1024 * 1024) {
+      toast.error("Arquivo muito grande (máximo 100MB)");
       return;
     }
 
@@ -114,11 +124,14 @@ export function MessageComposer({ onSend, onSendAudio, onSendMedia, templates, d
 
     try {
       const result = await uploadMedia(file, (pct) => setUploadProgress(pct));
-      const isImage = file.type.startsWith("image/");
-      setAttachedFile({ url: result.url, name: file.name, type: isImage ? "image" : "document" });
+      let fileType: MediaType = "document";
+      if (file.type.startsWith("image/")) fileType = "image";
+      else if (file.type.startsWith("video/")) fileType = "video";
+      setAttachedFile({ url: result.url, name: file.name, type: fileType });
       toast.success(`Arquivo anexado: ${formatFileSize(result.size)}`);
-    } catch (err: any) {
-      toast.error(err.message || "Erro no upload");
+    } catch (err: unknown) {
+      logger.error("Erro no upload:", err);
+      toast.error(`Erro no upload: ${err instanceof Error ? err.message : "Falha desconhecida"}`, { duration: 8000 });
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -241,6 +254,8 @@ export function MessageComposer({ onSend, onSendAudio, onSendMedia, templates, d
         <div className="flex items-center gap-2 mb-2 px-1 py-1.5 rounded-lg bg-secondary/30 border border-border/30">
           {attachedFile.type === "image" ? (
             <Image className="w-4 h-4 text-blue-400 shrink-0" />
+          ) : attachedFile.type === "video" ? (
+            <Video className="w-4 h-4 text-purple-400 shrink-0" />
           ) : (
             <File className="w-4 h-4 text-red-400 shrink-0" />
           )}
@@ -279,7 +294,7 @@ export function MessageComposer({ onSend, onSendAudio, onSendMedia, templates, d
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,audio/mpeg,audio/ogg,audio/mp4,audio/wav,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           onChange={handleFileSelect}
           className="hidden"
         />
