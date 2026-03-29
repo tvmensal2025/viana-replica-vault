@@ -150,7 +150,17 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
               variant: "destructive",
             });
             addLog("❌ Conexão perdida");
+            setConnectionStatus("disconnected");
+            setQrCode(null);
+            return;
           }
+
+          // Durante o pareamento, o serviço pode alternar para "close" temporariamente.
+          // Não limpar QR nem sair do estado de conexão enquanto aguarda leitura.
+          if (prevStatusRef.current === "connecting") {
+            return;
+          }
+
           setConnectionStatus("disconnected");
           setQrCode(null);
         }
