@@ -85,11 +85,11 @@ function ImageViewer({ message, onLoadMedia }: { message: ChatMessage; onLoadMed
   }, [imgSrc, onLoadMedia, message.id, loadAttempted]);
 
   // Trigger auto-load
-  useState(() => {
-    if (!imgSrc && onLoadMedia) {
+  useEffect(() => {
+    if (!imgSrc && onLoadMedia && !loadAttempted) {
       handleLoad();
     }
-  });
+  }, [imgSrc, onLoadMedia, loadAttempted, handleLoad]);
 
   if (loading) {
     return (
