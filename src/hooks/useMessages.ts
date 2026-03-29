@@ -10,6 +10,7 @@ import {
 export interface ChatMessage {
   id: string;
   remoteJid: string;
+  remoteJidAlt?: string;
   fromMe: boolean;
   text: string;
   timestamp: number;
@@ -74,6 +75,7 @@ function mapMessage(msg: EvolutionMessage): ChatMessage {
   return {
     id: msg.key.id,
     remoteJid: msg.key.remoteJid,
+    remoteJidAlt: msg.key.remoteJidAlt,
     fromMe: msg.key.fromMe,
     text,
     timestamp: msg.messageTimestamp || 0,
@@ -141,6 +143,39 @@ export function useMessages(
     };
   }, [fetchMessages, instanceName, remoteJid]);
 
+  const resolveSendTargetJid = useCallback(async () => {
+    const initialTarget = resolvedSendTargetJid || preferredSendTargetJid || remoteJid;
+    if (!initialTarget) return null;
+
+    // Already usable (real number jid or plain number)
+    if (!initialTarget.endsWith("@lid")) {
+      return initialTarget;
+    }
+
+    // Try from already loaded messages first
+    const altFromState = messages.find((m) => m.remoteJidAlt?.endsWith("@s.whatsapp.net"))?.remoteJidAlt;
+    if (altFromState) {
+      setResolvedSendTargetJid(altFromState);
+      return altFromState;
+    }
+
+    // Last fallback: query latest messages to find remoteJidAlt before sending
+    if (instanceName && remoteJid) {
+      try {
+        const latest = await findMessages(instanceName, remoteJid, 20);
+        const altFromLatest = latest.find((m) => m.key.remoteJidAlt?.endsWith("@s.whatsapp.net"))?.key.remoteJidAlt;
+        if (altFromLatest) {
+          setResolvedSendTargetJid(altFromLatest);
+          return altFromLatest;
+        }
+      } catch {
+        // ignore and return initial target
+      }
+    }
+
+    return initialTarget;
+  }, [instanceName, messages, preferredSendTargetJid, remoteJid, resolvedSendTargetJid]);
+
   // Function to load media for a specific message
   const loadMedia = useCallback(
     async (messageId: string) => {
@@ -178,12 +213,19 @@ export function useMessages(
         return;
       }
 
-      const targetJid = resolvedSendTargetJid || preferredSendTargetJid || remoteJid;
-      const phone = targetJid.split("@")[0];
+      const targetJid = await resolveSendTargetJid();
+      if (!targetJid) {
+        throw new Error("Destinatário inválido para envio");
+      }
+
+      // sendText expects number for normal chats; for @lid fallback we try raw jid
+      const recipient = targetJid.endsWith("@s.whatsapp.net")
+        ? targetJid.split("@")[0]
+        : targetJid;
 
       console.log(
         "[useMessages] sending to:",
-        phone,
+        recipient,
         "targetJid:",
         targetJid,
         "instance:",
@@ -193,7 +235,7 @@ export function useMessages(
       );
 
       try {
-        await sendTextMessage(instanceName, phone, text);
+        await sendTextMessage(instanceName, recipient, text);
         console.log("[useMessages] message sent successfully");
         setMessages((prev) => [
           ...prev,
@@ -211,7 +253,7 @@ export function useMessages(
         throw err;
       }
     },
-    [instanceName, preferredSendTargetJid, remoteJid, resolvedSendTargetJid]
+    [instanceName, remoteJid, resolveSendTargetJid]
   );
 
   return { messages, isLoading, sendMessage, loadMedia, refetch: fetchMessages };
