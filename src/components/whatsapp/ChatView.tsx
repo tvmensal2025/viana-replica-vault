@@ -29,6 +29,7 @@ export function ChatView({ instanceName, chat, templates, consultantId }: ChatVi
   const { toast } = useToast();
   const [isCustomer, setIsCustomer] = useState(false);
   const [addingCustomer, setAddingCustomer] = useState(false);
+  const [showAddDialog, setShowAddDialog] = useState(false);
 
   // Check if this contact is already a customer
   useEffect(() => {
