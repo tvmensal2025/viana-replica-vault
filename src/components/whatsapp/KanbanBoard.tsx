@@ -23,6 +23,8 @@ import {
   Check,
   X,
 } from "lucide-react";
+import { StageAutoMessageConfig } from "./StageAutoMessageConfig";
+import { sendTextMessage, sendMedia, sendAudio } from "@/services/evolutionApi";
 
 interface Deal {
   id: string;
@@ -41,25 +43,29 @@ interface KanbanStage {
   label: string;
   color: string;
   position: number;
+  auto_message_text: string | null;
+  auto_message_type: string;
+  auto_message_media_url: string | null;
 }
 
-const DEFAULT_STAGES: Omit<KanbanStage, "id" | "consultant_id" | "created_at">[] = [
-  { stage_key: "aprovado", label: "Aprovado", color: "bg-green-500/20 text-green-400", position: 0 },
-  { stage_key: "reprovado", label: "Reprovado", color: "bg-red-500/20 text-red-400", position: 1 },
-  { stage_key: "30_dias", label: "30 DIAS", color: "bg-blue-500/20 text-blue-400", position: 2 },
-  { stage_key: "60_dias", label: "60 DIAS", color: "bg-cyan-500/20 text-cyan-400", position: 3 },
-  { stage_key: "90_dias", label: "90 DIAS", color: "bg-yellow-500/20 text-yellow-400", position: 4 },
-  { stage_key: "120_dias", label: "120 DIAS", color: "bg-orange-500/20 text-orange-400", position: 5 },
+const DEFAULT_STAGES: Omit<KanbanStage, "id" | "consultant_id">[] = [
+  { stage_key: "novo_lead", label: "Novo Lead", color: "bg-purple-500/20 text-purple-400", position: 0, auto_message_text: null, auto_message_type: "text", auto_message_media_url: null },
+  { stage_key: "aprovado", label: "Aprovado", color: "bg-green-500/20 text-green-400", position: 1, auto_message_text: null, auto_message_type: "text", auto_message_media_url: null },
+  { stage_key: "reprovado", label: "Reprovado", color: "bg-red-500/20 text-red-400", position: 2, auto_message_text: null, auto_message_type: "text", auto_message_media_url: null },
+  { stage_key: "30_dias", label: "30 DIAS", color: "bg-blue-500/20 text-blue-400", position: 3, auto_message_text: null, auto_message_type: "text", auto_message_media_url: null },
+  { stage_key: "60_dias", label: "60 DIAS", color: "bg-cyan-500/20 text-cyan-400", position: 4, auto_message_text: null, auto_message_type: "text", auto_message_media_url: null },
+  { stage_key: "90_dias", label: "90 DIAS", color: "bg-yellow-500/20 text-yellow-400", position: 5, auto_message_text: null, auto_message_type: "text", auto_message_media_url: null },
+  { stage_key: "120_dias", label: "120 DIAS", color: "bg-orange-500/20 text-orange-400", position: 6, auto_message_text: null, auto_message_type: "text", auto_message_media_url: null },
 ];
 
 const COLOR_OPTIONS = [
+  { value: "bg-purple-500/20 text-purple-400", label: "Roxo" },
   { value: "bg-green-500/20 text-green-400", label: "Verde" },
   { value: "bg-red-500/20 text-red-400", label: "Vermelho" },
   { value: "bg-blue-500/20 text-blue-400", label: "Azul" },
   { value: "bg-cyan-500/20 text-cyan-400", label: "Ciano" },
   { value: "bg-yellow-500/20 text-yellow-400", label: "Amarelo" },
   { value: "bg-orange-500/20 text-orange-400", label: "Laranja" },
-  { value: "bg-purple-500/20 text-purple-400", label: "Roxo" },
   { value: "bg-pink-500/20 text-pink-400", label: "Rosa" },
   { value: "bg-teal-500/20 text-teal-400", label: "Teal" },
   { value: "bg-indigo-500/20 text-indigo-400", label: "Índigo" },
@@ -67,16 +73,17 @@ const COLOR_OPTIONS = [
 
 interface KanbanBoardProps {
   consultantId: string;
+  instanceName?: string | null;
 }
 
-export function KanbanBoard({ consultantId }: KanbanBoardProps) {
+export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
   const [deals, setDeals] = useState<Deal[]>([]);
   const [stages, setStages] = useState<KanbanStage[]>([]);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [editingStage, setEditingStage] = useState<KanbanStage | null>(null);
   const [newLabel, setNewLabel] = useState("");
-  const [newColor, setNewColor] = useState(COLOR_OPTIONS[2].value);
+  const [newColor, setNewColor] = useState(COLOR_OPTIONS[0].value);
   const [addingNew, setAddingNew] = useState(false);
   const { toast } = useToast();
 
@@ -88,18 +95,17 @@ export function KanbanBoard({ consultantId }: KanbanBoardProps) {
       .order("position", { ascending: true });
 
     if (data && data.length > 0) {
-      setStages(data as KanbanStage[]);
+      setStages(data as unknown as KanbanStage[]);
     } else {
-      // Initialize with defaults
       const inserts = DEFAULT_STAGES.map((s) => ({
         ...s,
         consultant_id: consultantId,
       }));
       const { data: inserted } = await supabase
         .from("kanban_stages")
-        .insert(inserts)
+        .insert(inserts as any)
         .select();
-      if (inserted) setStages(inserted as KanbanStage[]);
+      if (inserted) setStages(inserted as unknown as KanbanStage[]);
     }
   }, [consultantId]);
 
@@ -118,6 +124,31 @@ export function KanbanBoard({ consultantId }: KanbanBoardProps) {
   }, [fetchStages, fetchDeals]);
 
   const handleDragStart = (id: string) => setDraggedId(id);
+
+  // Send auto-message when deal moves to a stage
+  const sendAutoMessage = async (stage: KanbanStage, deal: Deal) => {
+    if (!stage.auto_message_text || !instanceName || !deal.remote_jid) return;
+
+    const phone = deal.remote_jid.split("@")[0];
+    const messageText = stage.auto_message_text
+      .replace(/\{\{nome\}\}/g, phone)
+      .replace(/\{\{telefone\}\}/g, phone);
+
+    try {
+      if (stage.auto_message_type === "text") {
+        await sendTextMessage(instanceName, phone, messageText);
+      } else if (stage.auto_message_type === "image" && stage.auto_message_media_url) {
+        await sendMedia(instanceName, phone, stage.auto_message_media_url, messageText, "image");
+      } else if (stage.auto_message_type === "video" && stage.auto_message_media_url) {
+        await sendMedia(instanceName, phone, stage.auto_message_media_url, messageText, "video");
+      } else if (stage.auto_message_type === "audio" && stage.auto_message_media_url) {
+        await sendAudio(instanceName, phone, stage.auto_message_media_url);
+      }
+      toast({ title: `Mensagem automática enviada (${stage.label})` });
+    } catch {
+      toast({ title: "Erro ao enviar mensagem automática", variant: "destructive" });
+    }
+  };
 
   const handleDrop = async (stageKey: string) => {
     if (!draggedId) return;
@@ -140,6 +171,12 @@ export function KanbanBoard({ consultantId }: KanbanBoardProps) {
     if (error) {
       toast({ title: "Erro ao mover deal", variant: "destructive" });
       fetchDeals();
+    } else {
+      // Send auto message for target stage
+      const targetStage = stages.find((s) => s.stage_key === stageKey);
+      if (targetStage) {
+        sendAutoMessage(targetStage, deal);
+      }
     }
   };
 
@@ -162,16 +199,16 @@ export function KanbanBoard({ consultantId }: KanbanBoardProps) {
         label: newLabel.trim(),
         color: newColor,
         position,
-      })
+      } as any)
       .select()
       .single();
 
     if (error) {
       toast({ title: "Erro ao criar coluna", variant: "destructive" });
     } else if (data) {
-      setStages((prev) => [...prev, data as KanbanStage]);
+      setStages((prev) => [...prev, data as unknown as KanbanStage]);
       setNewLabel("");
-      setNewColor(COLOR_OPTIONS[2].value);
+      setNewColor(COLOR_OPTIONS[0].value);
       setAddingNew(false);
       toast({ title: "Coluna criada!" });
     }
@@ -180,7 +217,7 @@ export function KanbanBoard({ consultantId }: KanbanBoardProps) {
   const handleUpdateStage = async (stage: KanbanStage) => {
     const { error } = await supabase
       .from("kanban_stages")
-      .update({ label: stage.label, color: stage.color })
+      .update({ label: stage.label, color: stage.color } as any)
       .eq("id", stage.id);
 
     if (error) {
@@ -215,6 +252,35 @@ export function KanbanBoard({ consultantId }: KanbanBoardProps) {
     } else {
       setStages((prev) => prev.filter((s) => s.id !== stageId));
       toast({ title: "Coluna excluída!" });
+    }
+  };
+
+  const handleSaveAutoMessage = async (
+    stageId: string,
+    text: string | null,
+    type: string,
+    mediaUrl: string | null
+  ) => {
+    const { error } = await supabase
+      .from("kanban_stages")
+      .update({
+        auto_message_text: text,
+        auto_message_type: type,
+        auto_message_media_url: mediaUrl,
+      } as any)
+      .eq("id", stageId);
+
+    if (error) {
+      toast({ title: "Erro ao salvar mensagem automática", variant: "destructive" });
+    } else {
+      setStages((prev) =>
+        prev.map((s) =>
+          s.id === stageId
+            ? { ...s, auto_message_text: text, auto_message_type: type, auto_message_media_url: mediaUrl }
+            : s
+        )
+      );
+      toast({ title: "Mensagem automática salva!" });
     }
   };
 
@@ -281,6 +347,15 @@ export function KanbanBoard({ consultantId }: KanbanBoardProps) {
                       <Badge variant="secondary" className={`text-[10px] ${stage.color}`}>
                         {stage.label}
                       </Badge>
+                      <StageAutoMessageConfig
+                        stageLabel={stage.label}
+                        autoMessageText={stage.auto_message_text}
+                        autoMessageType={stage.auto_message_type || "text"}
+                        autoMessageMediaUrl={stage.auto_message_media_url}
+                        onSave={(text, type, mediaUrl) =>
+                          handleSaveAutoMessage(stage.id, text, type, mediaUrl)
+                        }
+                      />
                       <span className="flex-1" />
                       <Button
                         size="icon"
@@ -373,9 +448,14 @@ export function KanbanBoard({ consultantId }: KanbanBoardProps) {
               onDrop={() => handleDrop(s.stage_key)}
             >
               <div className="flex items-center justify-between mb-2 px-1">
-                <Badge variant="secondary" className={`text-[10px] ${s.color}`}>
-                  {s.label}
-                </Badge>
+                <div className="flex items-center gap-1.5">
+                  <Badge variant="secondary" className={`text-[10px] ${s.color}`}>
+                    {s.label}
+                  </Badge>
+                  {s.auto_message_text && (
+                    <MessageSquareIcon className="h-2.5 w-2.5 text-primary/60" />
+                  )}
+                </div>
                 <span className="text-[10px] text-muted-foreground">{stageDeals.length}</span>
               </div>
               <ScrollArea className="max-h-[400px]">
@@ -417,5 +497,14 @@ export function KanbanBoard({ consultantId }: KanbanBoardProps) {
         })}
       </div>
     </div>
+  );
+}
+
+// Tiny icon for auto-message indicator on columns
+function MessageSquareIcon({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </svg>
   );
 }

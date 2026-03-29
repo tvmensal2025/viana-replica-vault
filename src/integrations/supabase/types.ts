@@ -287,6 +287,9 @@ export type Database = {
       }
       kanban_stages: {
         Row: {
+          auto_message_media_url: string | null
+          auto_message_text: string | null
+          auto_message_type: string | null
           color: string
           consultant_id: string
           created_at: string
@@ -296,6 +299,9 @@ export type Database = {
           stage_key: string
         }
         Insert: {
+          auto_message_media_url?: string | null
+          auto_message_text?: string | null
+          auto_message_type?: string | null
           color?: string
           consultant_id: string
           created_at?: string
@@ -305,6 +311,9 @@ export type Database = {
           stage_key: string
         }
         Update: {
+          auto_message_media_url?: string | null
+          auto_message_text?: string | null
+          auto_message_type?: string | null
           color?: string
           consultant_id?: string
           created_at?: string
