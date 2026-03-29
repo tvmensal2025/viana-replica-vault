@@ -28,11 +28,11 @@ function normalizeEvolutionBaseUrl(rawUrl: string | undefined): string {
 }
 
 function getTimeoutMs(path: string): number {
-  if (path.startsWith("instance/connectionState/")) return 12000;
-  if (path === "instance/fetchInstances") return 15000;
-  if (path.startsWith("instance/connect/")) return 20000;
-  if (path === "instance/create") return 120000;
-  return 55000;
+  if (path.startsWith("instance/connectionState/")) return 10000;
+  if (path === "instance/fetchInstances") return 12000;
+  if (path.startsWith("instance/connect/")) return 15000;
+  if (path === "instance/create") return 50000;
+  return 25000;
 }
 
 function isRetriableResponseStatus(status: number): boolean {
@@ -64,12 +64,12 @@ async function proxyToEvolution(
   fetchOptions: RequestInit,
 ): Promise<Response> {
   const timeoutMs = getTimeoutMs(safePath);
-  const attempts = safePath === "instance/create" ? 2 : 1;
+  const attempts = 1;
 
   let lastError: unknown;
 
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    const timeoutForAttempt = safePath === "instance/create" && attempt > 1 ? 45000 : timeoutMs;
+    const timeoutForAttempt = timeoutMs;
 
     console.log(
       "[evolution-proxy] ->",
