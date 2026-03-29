@@ -1,52 +1,117 @@
 
 
-## Plan: Integrar MinIO para Upload de Arquivos (Imagens, Áudio, Vídeos, Documentos)
+# Plano: Documentacao Completa de Todas as Funcoes
 
-### Problema
-Atualmente, os templates de mídia pedem uma URL manual. Queremos permitir **upload direto de arquivos** para o MinIO (S3-compatible) e usar a URL gerada automaticamente.
+Criar o arquivo `DOCUMENTATION.md` na raiz do projeto com documentacao exaustiva de todas as funcoes, hooks, servicos, edge functions, componentes, paginas, tipos e tabelas do banco de dados.
 
-### Arquitetura
+## Estrutura do Documento
 
-```text
-┌─────────────┐     POST /upload-media     ┌──────────────────┐     PUT (S3)     ┌─────────┐
-│  Frontend    │ ──────────────────────────▶│  Edge Function   │───────────────▶  │  MinIO  │
-│  (file pick) │ ◀──────────────────────────│  upload-media    │◀───────────────  │  bucket │
-│              │     { publicUrl }          └──────────────────┘                  └─────────┘
-└─────────────┘
-```
+### 1. Visao Geral
+- Arquitetura: React + Vite + TypeScript + Tailwind + Supabase + Evolution API + MinIO
+- Rotas da aplicacao (6 rotas)
 
-> As credenciais do MinIO ficam como **secrets** na Edge Function (nunca expostas no frontend).
+### 2. Utilitarios (`src/lib/`)
+- `cn(...inputs)` - Merge de classes Tailwind
 
-### Etapas
+### 3. Servico Evolution API (`src/services/evolutionApi.ts`) - 16 funcoes
+- `getBaseUrl()`, `getApiKey()`, `getHeaders()` - Configuracao
+- `handleResponse<T>()` - Tratamento de resposta HTTP
+- `request<T>()` - Wrapper generico de fetch
+- `createInstance()` - Criar instancia WhatsApp
+- `connectInstance()` - Conectar instancia (gerar QR)
+- `getConnectionState()` - Estado da conexao
+- `deleteInstance()` - Deletar instancia
+- `findChats()` - Listar conversas
+- `findMessages()` - Buscar mensagens de um chat
+- `findContacts()` - Listar contatos
+- `getBase64FromMediaMessage()` - Baixar midia em base64
+- `sendTextMessage()` - Enviar texto
+- `sendMedia()` - Enviar imagem/video/documento
+- `sendAudio()` - Enviar audio
+- `sendDocument()` - Enviar documento
+- `markAsRead()` - Marcar como lido
+- `getProfilePicture()` - Foto de perfil
 
-**1. Adicionar secrets do MinIO ao projeto**
-- `MINIO_SERVER_URL` = `https://yolo-service-minio.0sw627.easypanel.host`
-- `MINIO_ROOT_USER` = `testando200`
-- `MINIO_ROOT_PASSWORD` = `200400500600`
+### 4. Servico MinIO Upload (`src/services/minioUpload.ts`) - 3 funcoes
+- `uploadMedia()` - Upload via edge function
+- `getAcceptString()` - String accept por tipo
+- `formatFileSize()` - Formatar bytes
 
-**2. Criar Edge Function `upload-media`**
-- Recebe `multipart/form-data` com o arquivo
-- Usa a API S3 (PutObject via fetch com assinatura AWS Signature V4) para fazer upload ao MinIO
-- Cria o bucket `media-templates` automaticamente se não existir
-- Retorna a URL pública do arquivo: `https://yolo-service-minio.0sw627.easypanel.host/media-templates/{uuid}.{ext}`
-- Suporta tipos: `image/*`, `audio/*`, `video/*`, `application/pdf`, `application/msword`, etc.
+### 5. Hooks (`src/hooks/`) - 10 hooks
 
-**3. Criar serviço frontend `src/services/minioUpload.ts`**
-- Função `uploadMedia(file: File): Promise<string>` que chama a Edge Function e retorna a URL pública
+- **useWhatsApp** - 5 funcoes internas: `clearPolling`, `pollConnectionState`, `startPolling`, `createAndConnect`, `disconnect`, `reconnect`, `checkExistingInstance`
+- **useTemplates** - 4 funcoes: `fetchTemplates`, `createTemplate`, `deleteTemplate`, `applyTemplate` (pura, exportada separadamente)
+- **useChats** - 4 funcoes internas: `extractLastMessage`, `mapChat`, `fetchContacts`, `fetchChats`
+- **useMessages** - 5 funcoes: `mapMessage`, `fetchMessages`, `resolveSendTargetJid`, `loadMedia`, `sendMessage`
+- **useConsultant** - Query por license
+- **useAnalytics** - Query de analytics 30 dias
+- **useTrackView** - Registra page view
+- **useTrackEvent** - 2 funcoes: `trackClickEvent`, `getTrackingMeta` + helper `getDeviceType`, `getUtmParams`
+- **useIsMobile** - Detecta viewport < 768px
+- **useToast** - Sistema de toast (reducer + dispatch + `toast()`)
 
-**4. Atualizar `TemplateManager.tsx`**
-- Adicionar botão de **upload de arquivo** ao lado do campo de URL para cada tipo de mídia
-- Ao selecionar arquivo, faz upload via `uploadMedia()`, mostra progresso, e preenche o campo `mediaUrl` automaticamente
-- Manter opção de colar URL manualmente como alternativa
-- Preview inline do arquivo selecionado (thumbnail para imagem, player para áudio)
+### 6. Edge Functions (Supabase) - 2 funcoes
 
-**5. Atualizar `MessageComposer.tsx`** (opcional mas útil)
-- Permitir anexar arquivos diretamente no chat via upload MinIO
+- **upload-media** - 3 funcoes internas: `getAllowedTypes`, `getExtension`, handler principal. Upload para MinIO com validacao de tipo/tamanho.
+- **crm-auto-progress** - 2 funcoes: `sendEvolutionMessage`, handler principal. Progressao automatica de deals (30/60/90/120 dias).
 
-### Detalhes Técnicos
+### 7. Componentes WhatsApp (`src/components/whatsapp/`) - 12 componentes
+Cada um com suas funcoes internas documentadas:
+- **WhatsAppTab** - Orquestrador principal (fetchCustomers)
+- **ConnectionPanel** - UI de conexao/QR code
+- **ChatSidebar** - Lista de conversas (formatTime)
+- **ChatView** - Visualizacao de chat (handleCustomerAdded, handleSendAudio, handleSendMedia)
+- **MessageBubble** - Bolha de mensagem + sub-componentes: AudioPlayer, ImageViewer, VideoPlayer, DocumentViewer, StickerViewer, StatusIcon, formatTime
+- **MessageComposer** - Compositor (handleSend, handleFileSelect, startRecording, stopRecording, cancelRecording, formatRecordingTime)
+- **MessagePanel** - Envio individual (filterCustomers exportada, handleSend, handleTemplateChange)
+- **BulkSendPanel** - Envio em massa (toggleCustomer, toggleAll, handleBulkSend, handleTemplateChange)
+- **TemplateManager** - Gerenciador de templates (handleFileUpload, handleCreate, mediaIcon, mediaBadge)
+- **KanbanBoard** - CRM Kanban (fetchStages, fetchDeals, handleDragStart, handleDrop, sendAutoMessage, handleAddStage, handleUpdateStage, handleDeleteStage, handleSaveAutoMessage, handleToggleAutoMessage)
+- **CustomerManager** - Gerenciador de clientes (formatPhoneDisplay, formatCpfDisplay, getInitials, getStatusBadge, handleDelete, openEdit, handleSaveEdit, fetchCep)
+- **AddCustomerDialog** - Dialog de adicionar cliente (formatPhone, formatCpf, formatCep, fetchCep, handleSave)
+- **QuickReplyMenu** - Menu de respostas rapidas
+- **SchedulePanel** - Agendamento de mensagens (fetchMessages, handleCreate, handleDelete)
+- **StageAutoMessageConfig** - Config de auto-mensagem por estagio (handleSave, handleClear, insertBold, insertItalic)
 
-- **Edge Function**: Usará `aws4fetch` (biblioteca leve de assinatura S3) para autenticar com MinIO — compatível com Deno
-- **Bucket público**: O bucket `media-templates` será configurado com policy pública de leitura para que as URLs funcionem diretamente com a Evolution API
-- **Nomeação**: Arquivos salvos como `{uuid}-{timestamp}.{ext}` para evitar colisões
-- **Limite de tamanho**: 25MB por arquivo (suficiente para áudio, imagens e PDFs)
+### 8. Componentes Gerais - 4 componentes
+- **ScrollReveal** - Animacao de scroll com IntersectionObserver
+- **SEOHead** - Injeta titulo e meta tags
+- **WhatsAppFloat** - Botao flutuante WhatsApp
+- **LoadingScreen** - Tela de carregamento
+- **NavLink** - Wrapper de NavLink com classes ativas
+- **PixelInjector** - Injeta Facebook Pixel e Google Analytics
+
+### 9. Paginas (`src/pages/`) - 6 paginas
+- **Admin** - Painel do consultor (loadConsultant, handlePhotoChange, handleSave, handleLogout, copyLink) + sub-componentes StatCard, LinkCard
+- **Auth** - Login/Cadastro (handleSubmit)
+- **ConsultantPage** - Landing page cliente
+- **LicenciadaPage** - Landing page licenciado
+- **LicenciadaPreview** - Preview sem dados reais
+- **NotFound** - Pagina 404
+- **Index** - Pagina raiz (redireciona)
+
+### 10. Tipos TypeScript (`src/types/`)
+- `whatsapp.ts` - WhatsAppInstance, MessageTemplate, TemplateMediaType, ConnectionStatus, BulkSendProgress
+- `consultant.ts` - Consultant
+
+### 11. Interfaces da Evolution API (em evolutionApi.ts)
+- EvolutionChat, EvolutionMessage, EvolutionContact
+
+### 12. Banco de Dados - 11 tabelas
+Cada tabela com colunas, tipos, defaults e politicas RLS:
+consultants, conversations, crm_deals, customer_tags, customers, kanban_stages, message_templates, page_events, page_views, scheduled_messages, settings, whatsapp_instances
+
+### 13. Variaveis de Ambiente
+- Frontend: VITE_EVOLUTION_API_URL, VITE_EVOLUTION_API_KEY, VITE_SUPABASE_*
+- Edge Functions: MINIO_*, EVOLUTION_*, SUPABASE_*
+
+### 14. Integracao Supabase Client
+- `supabase` - Cliente configurado com persistSession e autoRefreshToken
+
+## Detalhes Tecnicos
+- Arquivo: `DOCUMENTATION.md` na raiz
+- Cada funcao com: descricao, parametros (tipo), retorno, observacoes
+- Tabelas em formato markdown com coluna | tipo | nullable | default
+- Estimativa: ~1200 linhas de markdown
+- Idioma: Portugues
 
