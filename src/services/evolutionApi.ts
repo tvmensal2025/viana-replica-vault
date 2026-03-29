@@ -86,6 +86,13 @@ export async function deleteInstance(instanceName: string) {
   );
 }
 
+export async function fetchInstances(): Promise<{ instance: { instanceName: string; status: string } }[]> {
+  return request<{ instance: { instanceName: string; status: string } }[]>(
+    "instance/fetchInstances",
+    "GET"
+  );
+}
+
 // ─── Chat / Conversations ───
 
 export interface EvolutionChat {

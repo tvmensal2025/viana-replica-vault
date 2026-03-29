@@ -5,6 +5,7 @@ import {
   connectInstance,
   getConnectionState,
   deleteInstance,
+  fetchInstances,
 } from "@/services/evolutionApi";
 import type { ConnectionStatus } from "@/types/whatsapp";
 import { useToast } from "@/hooks/use-toast";
