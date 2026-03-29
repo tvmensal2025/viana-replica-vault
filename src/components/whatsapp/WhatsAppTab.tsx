@@ -71,7 +71,7 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
     try {
       const { data } = await supabase
         .from("customers")
-        .select("id, name, phone_whatsapp, electricity_bill_value, email, cpf, address_city, address_state, status, created_at");
+        .select("id, name, phone_whatsapp, electricity_bill_value, email, cpf, address_city, address_state, address_street, address_neighborhood, address_complement, address_number, cep, numero_instalacao, data_nascimento, status, created_at");
       if (data) {
         setCustomers(
           data.map((c) => ({
@@ -83,6 +83,13 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
             cpf: c.cpf,
             address_city: c.address_city,
             address_state: c.address_state,
+            address_street: c.address_street,
+            address_neighborhood: c.address_neighborhood,
+            address_complement: c.address_complement,
+            address_number: c.address_number,
+            cep: c.cep,
+            numero_instalacao: c.numero_instalacao,
+            data_nascimento: c.data_nascimento,
             status: c.status,
             created_at: c.created_at,
           }))
@@ -220,6 +227,7 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
               customers={customers}
               consultantId={userId}
               onCustomersChange={fetchCustomers}
+              instanceName={instanceName}
             />
           </div>
         )}
