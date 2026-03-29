@@ -100,36 +100,72 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
   const createAndConnect = useCallback(async () => {
     setIsLoading(true);
     setError(null);
-    try {
-      const name = `igreen-${consultantId}`;
-      const response = await createInstance(name);
+    const name = `igreen-${consultantId}`;
 
-      await supabase.from("whatsapp_instances").insert({
-        consultant_id: consultantId,
-        instance_name: name,
-      });
-
+    // Helper: after instance exists, ensure local DB record and get QR
+    const ensureLocalAndConnect = async (skipCreate?: boolean) => {
+      // Upsert local record
+      const { data: existing } = await supabase
+        .from("whatsapp_instances")
+        .select("id")
+        .eq("consultant_id", consultantId)
+        .maybeSingle();
+      if (!existing) {
+        await supabase.from("whatsapp_instances").insert({
+          consultant_id: consultantId,
+          instance_name: name,
+        });
+      }
       setInstanceName(name);
 
-      // Evolution API pode retornar qrcode em diferentes formatos
+      // Check if already connected
+      try {
+        const state = await getConnectionState(name);
+        if (state.state === "open") {
+          setConnectionStatus("connected");
+          setQrCode(null);
+          return;
+        }
+      } catch {
+        // ignore, will try to connect below
+      }
+
+      // Get QR code
+      try {
+        const connectResponse = await connectInstance(name);
+        setQrCode(connectResponse?.base64 || null);
+        setConnectionStatus("connecting");
+      } catch {
+        setConnectionStatus("disconnected");
+        setError("Não foi possível gerar o QR Code. Tente reconectar.");
+      }
+    };
+
+    try {
+      // Try creating the instance first
+      const response = await createInstance(name);
+
+      await ensureLocalAndConnect(true);
+
+      // If create returned a QR, use it directly
       const qr = response?.qrcode?.base64 || response?.qrcode?.pairingCode || null;
       if (qr) {
         setQrCode(qr);
         setConnectionStatus("connecting");
-      } else {
-        // Se não veio QR, tenta conectar separadamente
-        try {
-          const connectResponse = await connectInstance(name);
-          setQrCode(connectResponse?.base64 || null);
-          setConnectionStatus("connecting");
-        } catch {
-          setConnectionStatus("disconnected");
-          setError("Instância criada, mas não foi possível gerar o QR Code. Tente reconectar.");
-        }
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Erro ao criar instância WhatsApp";
-      setError(message);
+      const message = err instanceof Error ? err.message : "";
+      // Instance already exists in Evolution API — recover gracefully
+      if (message.includes("already in use") || message.includes("403") || message.includes("Forbidden")) {
+        try {
+          await ensureLocalAndConnect();
+        } catch (recoverErr) {
+          const recoverMsg = recoverErr instanceof Error ? recoverErr.message : "Erro ao recuperar instância existente";
+          setError(recoverMsg);
+        }
+      } else {
+        setError(message || "Erro ao criar instância WhatsApp");
+      }
     } finally {
       setIsLoading(false);
     }
