@@ -94,6 +94,74 @@ export type Database = {
           },
         ]
       }
+      crm_deals: {
+        Row: {
+          consultant_id: string
+          created_at: string
+          customer_id: string | null
+          id: string
+          notes: string | null
+          remote_jid: string | null
+          stage: string
+          updated_at: string
+        }
+        Insert: {
+          consultant_id: string
+          created_at?: string
+          customer_id?: string | null
+          id?: string
+          notes?: string | null
+          remote_jid?: string | null
+          stage?: string
+          updated_at?: string
+        }
+        Update: {
+          consultant_id?: string
+          created_at?: string
+          customer_id?: string | null
+          id?: string
+          notes?: string | null
+          remote_jid?: string | null
+          stage?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_deals_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customer_tags: {
+        Row: {
+          consultant_id: string
+          created_at: string
+          id: string
+          remote_jid: string
+          tag_color: string
+          tag_name: string
+        }
+        Insert: {
+          consultant_id: string
+          created_at?: string
+          id?: string
+          remote_jid: string
+          tag_color?: string
+          tag_name: string
+        }
+        Update: {
+          consultant_id?: string
+          created_at?: string
+          id?: string
+          remote_jid?: string
+          tag_color?: string
+          tag_name?: string
+        }
+        Relationships: []
+      }
       customers: {
         Row: {
           address_city: string | null
@@ -328,6 +396,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      scheduled_messages: {
+        Row: {
+          consultant_id: string
+          created_at: string
+          id: string
+          instance_name: string
+          message_text: string
+          remote_jid: string
+          scheduled_at: string
+          sent_at: string | null
+          status: string
+        }
+        Insert: {
+          consultant_id: string
+          created_at?: string
+          id?: string
+          instance_name: string
+          message_text: string
+          remote_jid: string
+          scheduled_at: string
+          sent_at?: string | null
+          status?: string
+        }
+        Update: {
+          consultant_id?: string
+          created_at?: string
+          id?: string
+          instance_name?: string
+          message_text?: string
+          remote_jid?: string
+          scheduled_at?: string
+          sent_at?: string | null
+          status?: string
+        }
+        Relationships: []
       }
       settings: {
         Row: {
