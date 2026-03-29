@@ -305,16 +305,39 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       let name = buildInstanceName(identity.name, identity.phone, consultantId);
       addLog("Criando nova instância...");
 
-      let response = await createInstance(name).catch(async (createErr) => {
+      let response;
+      try {
+        response = await createInstance(name);
+      } catch (createErr) {
         const createMsg = createErr instanceof Error ? createErr.message : "";
-        if (!isAlreadyInUseError(createMsg)) throw createErr;
 
-        addLog("⚠️ Nome em uso, gerando nova instância...");
-        await delay(700);
-        name = buildInstanceName(identity.name, identity.phone, consultantId);
-        return createInstance(name);
-      });
+        if (isAlreadyInUseError(createMsg)) {
+          addLog("⚠️ Nome em uso, gerando nova instância...");
+          await delay(700);
+          name = buildInstanceName(identity.name, identity.phone, consultantId);
+          response = await createInstance(name);
+        } else if (createMsg.includes("[504]") || createMsg.includes("demorou para responder")) {
+          addLog("⚠️ Criação demorou, tentando recuperar instância...");
 
+          // A instância pode ter sido criada no servidor mesmo com timeout local.
+          const recovered = await tryGetQrFromExisting(name);
+          if (recovered) {
+            addLog("✅ Instância recuperada após timeout");
+            return;
+          }
+
+          await delay(2500);
+          const recoveredAfterRetry = await tryGetQrFromExisting(name);
+          if (recoveredAfterRetry) {
+            addLog("✅ Instância recuperada após nova tentativa");
+            return;
+          }
+
+          throw createErr;
+        } else {
+          throw createErr;
+        }
+      }
       addLog("✅ Instância criada com sucesso");
 
       await supabase
