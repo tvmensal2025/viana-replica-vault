@@ -1,122 +1,52 @@
 
 
-## WhatsApp CRM Completo - Estilo WAWF
+## Plan: Integrar MinIO para Upload de Arquivos (Imagens, Áudio, Vídeos, Documentos)
 
-Transformar a aba WhatsApp atual em um CRM completo de conversas, inspirado no WA WorkFlow (wawf.app), usando a Evolution API como backend.
+### Problema
+Atualmente, os templates de mídia pedem uma URL manual. Queremos permitir **upload direto de arquivos** para o MinIO (S3-compatible) e usar a URL gerada automaticamente.
 
-### O que existe hoje
-- Conexão via QR Code (funcional)
-- Envio individual de mensagem (apenas texto, sem histórico)
-- Envio em massa (bulk)
-- Templates com placeholders
-- Gerenciamento de clientes manual
-
-### O que será construído
-
-**Fase 1 - Chat em Tempo Real (core)**
-- Interface de chat estilo WhatsApp: lista de conversas à esquerda, mensagens à direita
-- Buscar conversas reais via `POST /chat/findChats/{instance}`
-- Buscar mensagens de cada conversa via `POST /chat/findMessages/{instance}` com `remoteJid`
-- Buscar contatos via `POST /chat/findContacts/{instance}`
-- Enviar texto, imagens, áudio, documentos via endpoints de mensagem
-- Polling periódico para novas mensagens (a cada 5s na conversa ativa)
-- Indicadores de lido/entregue, timestamps, bolhas de mensagem estilizadas
-
-**Fase 2 - Quick Replies (Respostas Rápidas)**
-- Atalho "/" no campo de mensagem para abrir menu de templates
-- Seleção rápida de template com preview
-- Aplicação automática de variáveis do contato selecionado
-
-**Fase 3 - CRM Kanban**
-- Board com colunas arrastáveis: Novo Lead, Em Contato, Negociação, Fechado, Perdido
-- Cada card = um contato com última mensagem, valor da conta, tags
-- Arrastar entre colunas para mudar status
-- Nova tabela Supabase `crm_deals` (consultant_id, customer_id, stage, notes, created_at)
-
-**Fase 4 - Etiquetas e Filtros**
-- Tags coloridas nos contatos (Ex: "Interessado", "Retornar", "VIP")
-- Filtrar conversas por tag, por não-lidos, por data
-- Nova tabela Supabase `customer_tags`
-
-**Fase 5 - Mensagens Agendadas**
-- Agendar envio de mensagem para data/hora específica
-- Lista de mensagens agendadas com opção de cancelar
-- Nova tabela Supabase `scheduled_messages`
-- Edge function com cron para processar envios
-
-**Fase 6 - Envio de Mídia**
-- Enviar imagens via `POST /message/sendMedia/{instance}`
-- Enviar áudio via `POST /message/sendWhatsAppAudio/{instance}`
-- Enviar documentos (PDF, etc.)
-- Upload de arquivos no campo de mensagem
-- Preview de mídia recebida no chat
-
-### Arquitetura Técnica
+### Arquitetura
 
 ```text
-┌─────────────────────────────────────────────┐
-│              WhatsAppTab (orquestrador)      │
-├─────────┬───────────────────────────────────┤
-│ Sidebar │  ChatView / KanbanBoard           │
-│ ─────── │  ─────────────────────            │
-│ Search  │  MessageBubble[]                  │
-│ Filters │  MediaPreview                     │
-│ ChatList│  QuickReplyMenu                   │
-│ Tags    │  MessageComposer (text+media)     │
-│         │  ScheduleModal                    │
-├─────────┴───────────────────────────────────┤
-│ ConnectionPanel (existente, compactado)     │
-└─────────────────────────────────────────────┘
+┌─────────────┐     POST /upload-media     ┌──────────────────┐     PUT (S3)     ┌─────────┐
+│  Frontend    │ ──────────────────────────▶│  Edge Function   │───────────────▶  │  MinIO  │
+│  (file pick) │ ◀──────────────────────────│  upload-media    │◀───────────────  │  bucket │
+│              │     { publicUrl }          └──────────────────┘                  └─────────┘
+└─────────────┘
 ```
 
-**Novos arquivos:**
-- `src/components/whatsapp/ChatSidebar.tsx` - Lista de conversas com busca e filtros
-- `src/components/whatsapp/ChatView.tsx` - Área de mensagens com bolhas
-- `src/components/whatsapp/MessageBubble.tsx` - Bolha individual (texto/mídia)
-- `src/components/whatsapp/MessageComposer.tsx` - Campo de envio com mídia e quick reply
-- `src/components/whatsapp/QuickReplyMenu.tsx` - Menu de atalhos "/" 
-- `src/components/whatsapp/KanbanBoard.tsx` - CRM visual drag-and-drop
-- `src/components/whatsapp/KanbanCard.tsx` - Card de contato no kanban
-- `src/components/whatsapp/TagManager.tsx` - Gerenciar etiquetas
-- `src/components/whatsapp/ScheduleModal.tsx` - Modal de agendamento
-- `src/hooks/useChats.ts` - Hook para buscar/atualizar conversas
-- `src/hooks/useMessages.ts` - Hook para mensagens de uma conversa
+> As credenciais do MinIO ficam como **secrets** na Edge Function (nunca expostas no frontend).
 
-**Novos endpoints no `evolutionApi.ts`:**
-- `findChats(instanceName)` 
-- `findMessages(instanceName, remoteJid)`
-- `findContacts(instanceName)`
-- `sendMedia(instanceName, phone, mediaUrl, caption, mediaType)`
-- `sendAudio(instanceName, phone, audioUrl)`
-- `sendDocument(instanceName, phone, docUrl, fileName)`
+### Etapas
 
-**Novas tabelas Supabase (migrations):**
-- `crm_deals` - Kanban stages por cliente
-- `customer_tags` - Etiquetas coloridas
-- `scheduled_messages` - Mensagens agendadas
+**1. Adicionar secrets do MinIO ao projeto**
+- `MINIO_SERVER_URL` = `https://yolo-service-minio.0sw627.easypanel.host`
+- `MINIO_ROOT_USER` = `testando200`
+- `MINIO_ROOT_PASSWORD` = `200400500600`
 
-**Novas edge functions:**
-- `process-scheduled-messages` - Cron para enviar mensagens agendadas
+**2. Criar Edge Function `upload-media`**
+- Recebe `multipart/form-data` com o arquivo
+- Usa a API S3 (PutObject via fetch com assinatura AWS Signature V4) para fazer upload ao MinIO
+- Cria o bucket `media-templates` automaticamente se não existir
+- Retorna a URL pública do arquivo: `https://yolo-service-minio.0sw627.easypanel.host/media-templates/{uuid}.{ext}`
+- Suporta tipos: `image/*`, `audio/*`, `video/*`, `application/pdf`, `application/msword`, etc.
 
-### Fluxo de Navegação
+**3. Criar serviço frontend `src/services/minioUpload.ts`**
+- Função `uploadMedia(file: File): Promise<string>` que chama a Edge Function e retorna a URL pública
 
-A aba WhatsApp terá sub-abas internas:
-1. **Conversas** - Chat em tempo real (tela principal)
-2. **CRM** - Kanban board
-3. **Envio em Massa** - Painel existente melhorado
-4. **Templates** - Gerenciador existente
-5. **Agendamentos** - Lista de mensagens programadas
+**4. Atualizar `TemplateManager.tsx`**
+- Adicionar botão de **upload de arquivo** ao lado do campo de URL para cada tipo de mídia
+- Ao selecionar arquivo, faz upload via `uploadMedia()`, mostra progresso, e preenche o campo `mediaUrl` automaticamente
+- Manter opção de colar URL manualmente como alternativa
+- Preview inline do arquivo selecionado (thumbnail para imagem, player para áudio)
 
-### Ordem de Implementação
+**5. Atualizar `MessageComposer.tsx`** (opcional mas útil)
+- Permitir anexar arquivos diretamente no chat via upload MinIO
 
-1. Expandir `evolutionApi.ts` com novos endpoints
-2. Criar hooks `useChats` e `useMessages`
-3. Construir `ChatSidebar` + `ChatView` + `MessageBubble` + `MessageComposer`
-4. Integrar Quick Reply no compositor
-5. Criar migrations Supabase para novas tabelas
-6. Construir `KanbanBoard` + `KanbanCard`
-7. Adicionar `TagManager` e filtros
-8. Implementar `ScheduleModal` + edge function
-9. Adicionar envio de mídia ao compositor
-10. Refatorar `WhatsAppTab` com sub-navegação
+### Detalhes Técnicos
+
+- **Edge Function**: Usará `aws4fetch` (biblioteca leve de assinatura S3) para autenticar com MinIO — compatível com Deno
+- **Bucket público**: O bucket `media-templates` será configurado com policy pública de leitura para que as URLs funcionem diretamente com a Evolution API
+- **Nomeação**: Arquivos salvos como `{uuid}-{timestamp}.{ext}` para evitar colisões
+- **Limite de tamanho**: 25MB por arquivo (suficiente para áudio, imagens e PDFs)
 
