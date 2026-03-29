@@ -69,7 +69,7 @@ async function proxyToEvolution(
   let lastError: unknown;
 
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    const timeoutForAttempt = safePath === "instance/create" && attempt > 1 ? 45000 : timeoutMs;
+    const timeoutForAttempt = timeoutMs;
 
     console.log(
       "[evolution-proxy] ->",
