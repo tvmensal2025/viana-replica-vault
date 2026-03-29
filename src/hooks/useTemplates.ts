@@ -13,7 +13,6 @@ export function applyTemplate(
   let result = template.content;
   result = result.split("{{nome}}").join(customer.name);
   result = result.split("{{valor_conta}}").join(
-    "{{valor_conta}}",
     customer.electricity_bill_value != null
       ? String(customer.electricity_bill_value)
       : ""
