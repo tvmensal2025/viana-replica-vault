@@ -8,7 +8,9 @@ import {
 } from "@/services/evolutionApi";
 import type { ConnectionStatus } from "@/types/whatsapp";
 import { useToast } from "@/hooks/use-toast";
-import { logger } from "@/lib/logger";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("useWhatsApp");
 
 interface UseWhatsAppReturn {
   connectionStatus: ConnectionStatus;

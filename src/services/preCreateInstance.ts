@@ -1,6 +1,8 @@
 import { supabase } from "@/integrations/supabase/client";
 import { createInstance } from "@/services/evolutionApi";
-import { logger } from "@/lib/logger";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("preCreate");
 
 /**
  * Deterministic instance name per consultant (same logic as useWhatsApp).
