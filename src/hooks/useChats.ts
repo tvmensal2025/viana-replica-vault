@@ -29,10 +29,23 @@ function extractLastMessage(chat: EvolutionChat): string {
 function mapChat(chat: EvolutionChat, contactsMap: Map<string, EvolutionContact>): ChatItem {
   const jid = chat.remoteJid || chat.id;
   const contact = contactsMap.get(jid);
-  // Priority: contact pushName > chat name > phone number
-  const displayName = contact?.pushName || chat.name || jid.split("@")[0];
+
+  // Extract the real phone number from remoteJidAlt (e.g. "5511973125846@s.whatsapp.net" → "5511973125846")
+  const altJid = chat.lastMessage?.key?.remoteJidAlt || chat.lastMessage?.key?.participantAlt;
+  const realPhone = altJid ? altJid.split("@")[0] : null;
+
+  // Priority: chat pushName > lastMessage pushName > contact pushName > chat name > real phone > lid number
+  const rawJidNumber = jid.split("@")[0];
+  const displayName =
+    chat.pushName ||
+    chat.lastMessage?.pushName ||
+    contact?.pushName ||
+    chat.name ||
+    realPhone ||
+    rawJidNumber;
+
   const sendTargetJid =
-    chat.lastMessage?.key?.remoteJidAlt ||
+    altJid ||
     (jid.endsWith("@lid") ? undefined : jid);
 
   return {
@@ -41,7 +54,7 @@ function mapChat(chat: EvolutionChat, contactsMap: Map<string, EvolutionContact>
     name: displayName,
     lastMessage: extractLastMessage(chat),
     lastMessageTimestamp: chat.lastMsgTimestamp || chat.lastMessage?.messageTimestamp || 0,
-    unreadCount: chat.unreadMessages || 0,
+    unreadCount: chat.unreadMessages || chat.unreadCount || 0,
     profilePicUrl: contact?.profilePicUrl || chat.profilePicUrl,
     isGroup: jid.endsWith("@g.us"),
   };
