@@ -137,7 +137,7 @@ export function ChatView({ instanceName, chat, templates, consultantId }: ChatVi
           </div>
         )}
         {messages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} />
+          <MessageBubble key={msg.id} message={msg} onLoadMedia={loadMedia} />
         ))}
       </div>
 
