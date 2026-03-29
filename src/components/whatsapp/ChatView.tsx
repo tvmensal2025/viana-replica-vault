@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { MessageBubble } from "./MessageBubble";
 import { MessageComposer } from "./MessageComposer";
 import { useMessages } from "@/hooks/useMessages";
+import { sendAudio as sendAudioApi } from "@/services/evolutionApi";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import type { MessageTemplate } from "@/types/whatsapp";
@@ -144,6 +145,12 @@ export function ChatView({ instanceName, chat, templates, consultantId }: ChatVi
       {/* Composer */}
       <MessageComposer
         onSend={sendMessage}
+        onSendAudio={async (base64) => {
+          if (!chat) return;
+          const phone = chat.remoteJid.split("@")[0];
+          const audioDataUrl = `data:audio/ogg;base64,${base64}`;
+          await sendAudioApi(instanceName, phone, audioDataUrl);
+        }}
         templates={templates}
       />
     </div>
