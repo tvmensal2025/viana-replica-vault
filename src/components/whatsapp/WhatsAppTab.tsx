@@ -227,6 +227,7 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
               customers={customers}
               consultantId={userId}
               onCustomersChange={fetchCustomers}
+              instanceName={instanceName}
             />
           </div>
         )}
