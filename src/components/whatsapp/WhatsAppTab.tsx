@@ -166,6 +166,7 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
               instanceName={instanceName}
               chat={selectedChat}
               templates={templates}
+              consultantId={userId}
             />
           </div>
         )}

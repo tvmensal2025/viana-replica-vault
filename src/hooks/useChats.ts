@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { findChats, type EvolutionChat } from "@/services/evolutionApi";
+import { findChats, findContacts, type EvolutionChat, type EvolutionContact } from "@/services/evolutionApi";
 
 export interface ChatItem {
   remoteJid: string;
@@ -25,15 +25,18 @@ function extractLastMessage(chat: EvolutionChat): string {
   );
 }
 
-function mapChat(chat: EvolutionChat): ChatItem {
+function mapChat(chat: EvolutionChat, contactsMap: Map<string, EvolutionContact>): ChatItem {
   const jid = chat.remoteJid || chat.id;
+  const contact = contactsMap.get(jid);
+  // Priority: contact pushName > chat name > phone number
+  const displayName = contact?.pushName || chat.name || jid.split("@")[0];
   return {
     remoteJid: jid,
-    name: chat.name || jid.split("@")[0],
+    name: displayName,
     lastMessage: extractLastMessage(chat),
     lastMessageTimestamp: chat.lastMsgTimestamp || chat.lastMessage?.messageTimestamp || 0,
     unreadCount: chat.unreadMessages || 0,
-    profilePicUrl: chat.profilePicUrl,
+    profilePicUrl: contact?.profilePicUrl || chat.profilePicUrl,
     isGroup: jid.endsWith("@g.us"),
   };
 }
@@ -43,14 +46,30 @@ export function useChats(instanceName: string | null) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const contactsMapRef = useRef<Map<string, EvolutionContact>>(new Map());
+
+  const fetchContacts = useCallback(async () => {
+    if (!instanceName) return;
+    try {
+      const contacts = await findContacts(instanceName);
+      const map = new Map<string, EvolutionContact>();
+      (contacts || []).forEach((c) => {
+        const jid = c.remoteJid || c.id;
+        if (jid) map.set(jid, c);
+      });
+      contactsMapRef.current = map;
+    } catch {
+      // silently handle — contacts are optional enrichment
+    }
+  }, [instanceName]);
 
   const fetchChats = useCallback(async () => {
     if (!instanceName) return;
     try {
-      setIsLoading((prev) => !prev ? true : prev);
+      setIsLoading((prev) => (!prev ? true : prev));
       const raw = await findChats(instanceName);
       const mapped = (raw || [])
-        .map(mapChat)
+        .map((c) => mapChat(c, contactsMapRef.current))
         .filter((c) => !c.isGroup)
         .sort((a, b) => b.lastMessageTimestamp - a.lastMessageTimestamp);
       setChats(mapped);
@@ -63,14 +82,18 @@ export function useChats(instanceName: string | null) {
   }, [instanceName]);
 
   useEffect(() => {
-    fetchChats();
+    const init = async () => {
+      await fetchContacts();
+      await fetchChats();
+    };
+    init();
     if (instanceName) {
       intervalRef.current = setInterval(fetchChats, 15000);
     }
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [fetchChats, instanceName]);
+  }, [fetchContacts, fetchChats, instanceName]);
 
   return { chats, isLoading, error, refetch: fetchChats };
 }
