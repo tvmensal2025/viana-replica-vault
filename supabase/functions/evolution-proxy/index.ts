@@ -35,6 +35,102 @@ function getTimeoutMs(path: string): number {
   return 55000;
 }
 
+function isRetriableResponseStatus(status: number): boolean {
+  return status === 546 || status === 502 || status === 503 || status === 504;
+}
+
+async function fetchWithTimeout(
+  targetUrl: string,
+  fetchOptions: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(targetUrl, {
+      ...fetchOptions,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function proxyToEvolution(
+  safePath: string,
+  method: string,
+  targetUrl: string,
+  fetchOptions: RequestInit,
+): Promise<Response> {
+  const timeoutMs = getTimeoutMs(safePath);
+  const attempts = safePath === "instance/create" ? 2 : 1;
+
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const timeoutForAttempt = safePath === "instance/create" && attempt > 1 ? 45000 : timeoutMs;
+
+    console.log(
+      "[evolution-proxy] ->",
+      method || "GET",
+      targetUrl,
+      `(timeout=${timeoutForAttempt}ms, attempt=${attempt}/${attempts})`,
+    );
+
+    try {
+      const response = await fetchWithTimeout(targetUrl, fetchOptions, timeoutForAttempt);
+      if (attempt < attempts && isRetriableResponseStatus(response.status)) {
+        const bodyPreview = await response.text();
+        console.warn(
+          `[evolution-proxy] Retriable status ${response.status} on attempt ${attempt}: ${bodyPreview.substring(0, 200)}`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        continue;
+      }
+      return response;
+    } catch (networkError) {
+      lastError = networkError;
+
+      if (networkError instanceof DOMException && networkError.name === "AbortError") {
+        console.error(
+          `[evolution-proxy] Timeout after ${timeoutForAttempt}ms for ${method || "GET"} ${targetUrl} (attempt ${attempt}/${attempts})`,
+        );
+
+        if (safePath.startsWith("instance/connectionState/")) {
+          // Treat as still connecting instead of hard failing UI flow
+          return new Response(JSON.stringify({ state: "connecting", timeout: true }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
+        if (safePath === "instance/fetchInstances") {
+          // Return empty list to avoid blocking connection flow
+          return new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
+        if (safePath === "instance/create" && attempt < attempts) {
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          continue;
+        }
+      }
+
+      if (attempt < attempts) {
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+        continue;
+      }
+
+      throw networkError;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Unknown proxy error");
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -54,7 +150,7 @@ Deno.serve(async (req) => {
     if (!evolutionUrl || !evolutionKey) {
       return new Response(
         JSON.stringify({ error: "Configuração do serviço de conexão incompleta." }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -62,7 +158,7 @@ Deno.serve(async (req) => {
     if (!authHeader) {
       return new Response(
         JSON.stringify({ error: "Token de autenticação inválido ou ausente" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -77,7 +173,7 @@ Deno.serve(async (req) => {
       console.log("[evolution-proxy] Auth failed:", authError?.message);
       return new Response(
         JSON.stringify({ error: "Token de autenticação inválido ou ausente" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -89,7 +185,7 @@ Deno.serve(async (req) => {
     } catch {
       return new Response(
         JSON.stringify({ error: "Body JSON inválido" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -98,15 +194,12 @@ Deno.serve(async (req) => {
     if (!path) {
       return new Response(
         JSON.stringify({ error: "Campo 'path' é obrigatório" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
     const safePath = path.replace(/^\/+/, "");
     const targetUrl = `${evolutionUrl}/${safePath}`;
-    const timeoutMs = getTimeoutMs(safePath);
-
-    console.log("[evolution-proxy] ->", method || "GET", targetUrl, `(timeout=${timeoutMs}ms)`);
 
     const fetchOptions: RequestInit = {
       method: method || "GET",
@@ -121,30 +214,14 @@ Deno.serve(async (req) => {
     }
 
     let evolutionResponse: Response;
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
     try {
-      evolutionResponse = await fetch(targetUrl, {
-        ...fetchOptions,
-        signal: controller.signal,
-      });
+      evolutionResponse = await proxyToEvolution(safePath, method || "GET", targetUrl, fetchOptions);
     } catch (networkError) {
-      if (networkError instanceof DOMException && networkError.name === "AbortError") {
-        console.error(`[evolution-proxy] Timeout after ${timeoutMs}ms for ${method || "GET"} ${targetUrl}`);
-        return new Response(
-          JSON.stringify({ error: "O serviço de conexão demorou para responder. Tente novamente." }),
-          { status: 504, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
       console.error("[evolution-proxy] Network error connecting to service", networkError);
       return new Response(
         JSON.stringify({ error: "Erro ao conectar com o serviço de conexão" }),
-        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
-    } finally {
-      clearTimeout(timeoutId);
     }
 
     const responseBody = await evolutionResponse.text();
@@ -158,7 +235,7 @@ Deno.serve(async (req) => {
     console.error("evolution-proxy error:", error);
     return new Response(
       JSON.stringify({ error: (error as Error).message || "Internal error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 });
