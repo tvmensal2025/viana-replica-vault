@@ -78,7 +78,7 @@ Deno.serve(async (req) => {
 
     let evolutionResponse: Response;
     const controller = new AbortController();
-    const timeoutMs = 15000;
+    const timeoutMs = 55000;
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
@@ -90,7 +90,7 @@ Deno.serve(async (req) => {
       if (networkError instanceof DOMException && networkError.name === "AbortError") {
         console.error(`[evolution-proxy] Timeout after ${timeoutMs}ms for ${method || "GET"} ${targetUrl}`);
         return new Response(
-          JSON.stringify({ error: `Tempo limite ao chamar a API do WhatsApp (${timeoutMs}ms)` }),
+          JSON.stringify({ error: "O serviço de conexão demorou para responder. Tente novamente." }),
           { status: 504, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
