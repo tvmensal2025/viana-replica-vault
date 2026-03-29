@@ -81,15 +81,19 @@ export interface EvolutionChat {
   id: string;
   remoteJid: string;
   name?: string;
+  pushName?: string;
   profilePicUrl?: string;
   lastMsgTimestamp?: number;
   unreadMessages?: number;
+  unreadCount?: number;
   lastMessage?: {
     key: {
       fromMe: boolean;
       remoteJid?: string;
       remoteJidAlt?: string;
+      participantAlt?: string;
     };
+    pushName?: string;
     message?: {
       conversation?: string;
       extendedTextMessage?: { text: string };
