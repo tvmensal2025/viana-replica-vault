@@ -132,6 +132,17 @@ export function ChatView({ instanceName, chat, templates, consultantId }: ChatVi
         }}
         templates={templates}
       />
+
+      {/* Add Customer Dialog */}
+      {chat && (
+        <AddCustomerDialog
+          open={showAddDialog}
+          onOpenChange={setShowAddDialog}
+          phone={phoneNumber}
+          name={chat.name !== phoneNumber ? chat.name : null}
+          onAdded={handleCustomerAdded}
+        />
+      )}
     </div>
   );
 }
