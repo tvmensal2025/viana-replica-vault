@@ -28,11 +28,18 @@ function normalizeEvolutionBaseUrl(rawUrl: string | undefined): string {
 }
 
 function getTimeoutMs(path: string): number {
-  if (path.startsWith("instance/connectionState/")) return 10000;
+  if (path.startsWith("instance/connectionState/")) return 20000;
   if (path === "instance/fetchInstances") return 12000;
-  if (path.startsWith("instance/connect/")) return 15000;
+  if (path.startsWith("instance/connect/")) return 20000;
   if (path === "instance/create") return 50000;
   return 25000;
+}
+
+function getMaxAttempts(path: string): number {
+  if (path.startsWith("instance/connectionState/")) return 2;
+  if (path.startsWith("instance/connect/")) return 2;
+  if (path === "instance/create") return 1;
+  return 1;
 }
 
 function isRetriableResponseStatus(status: number): boolean {
@@ -64,22 +71,20 @@ async function proxyToEvolution(
   fetchOptions: RequestInit,
 ): Promise<Response> {
   const timeoutMs = getTimeoutMs(safePath);
-  const attempts = 1;
+  const attempts = getMaxAttempts(safePath);
 
   let lastError: unknown;
 
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    const timeoutForAttempt = timeoutMs;
-
     console.log(
       "[evolution-proxy] ->",
       method || "GET",
       targetUrl,
-      `(timeout=${timeoutForAttempt}ms, attempt=${attempt}/${attempts})`,
+      `(timeout=${timeoutMs}ms, attempt=${attempt}/${attempts})`,
     );
 
     try {
-      const response = await fetchWithTimeout(targetUrl, fetchOptions, timeoutForAttempt);
+      const response = await fetchWithTimeout(targetUrl, fetchOptions, timeoutMs);
       if (attempt < attempts && isRetriableResponseStatus(response.status)) {
         const bodyPreview = await response.text();
         console.warn(
@@ -94,11 +99,10 @@ async function proxyToEvolution(
 
       if (networkError instanceof DOMException && networkError.name === "AbortError") {
         console.error(
-          `[evolution-proxy] Timeout after ${timeoutForAttempt}ms for ${method || "GET"} ${targetUrl} (attempt ${attempt}/${attempts})`,
+          `[evolution-proxy] Timeout after ${timeoutMs}ms for ${method || "GET"} ${targetUrl} (attempt ${attempt}/${attempts})`,
         );
 
         if (safePath.startsWith("instance/connectionState/")) {
-          // Treat as still connecting instead of hard failing UI flow
           return new Response(JSON.stringify({ state: "connecting", timeout: true }), {
             status: 200,
             headers: { "Content-Type": "application/json" },
@@ -106,14 +110,13 @@ async function proxyToEvolution(
         }
 
         if (safePath === "instance/fetchInstances") {
-          // Return empty list to avoid blocking connection flow
           return new Response(JSON.stringify([]), {
             status: 200,
             headers: { "Content-Type": "application/json" },
           });
         }
 
-        if (safePath === "instance/create" && attempt < attempts) {
+        if (attempt < attempts) {
           await new Promise((resolve) => setTimeout(resolve, 2000));
           continue;
         }
