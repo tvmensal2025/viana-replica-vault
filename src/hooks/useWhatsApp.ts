@@ -373,6 +373,9 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
   const reconnect = useCallback(() => createAndConnect(), [createAndConnect]);
 
   /* ── on mount: auto-connect if instance exists ── */
+  const createAndConnectRef = useRef(createAndConnect);
+  createAndConnectRef.current = createAndConnect;
+
   useEffect(() => {
     mountedRef.current = true;
 
@@ -412,6 +415,13 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       }
 
       setIsLoading(false);
+
+      // Auto-start connection if not connected — show QR code immediately
+      if (!mountedRef.current) return;
+      await delay(300);
+      if (mountedRef.current) {
+        createAndConnectRef.current();
+      }
     }
 
     init();
