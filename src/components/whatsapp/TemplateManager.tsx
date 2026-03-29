@@ -1,11 +1,14 @@
-import { useState } from "react";
-import { FileText, Plus, Trash2, Wand2, Image, Mic, File, Type, Play, Eye } from "lucide-react";
+import { useState, useRef } from "react";
+import { FileText, Plus, Trash2, Wand2, Image, Mic, File, Type, Play, Eye, Upload, Loader2, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Progress } from "@/components/ui/progress";
 import type { MessageTemplate, TemplateMediaType } from "@/types/whatsapp";
+import { uploadMedia, getAcceptString, formatFileSize } from "@/services/minioUpload";
+import { toast } from "sonner";
 
 const MEDIA_TYPES: { value: TemplateMediaType; label: string; icon: React.ElementType; desc: string }[] = [
   { value: "text", label: "Texto", icon: Type, desc: "Mensagem de texto com simulação de digitação" },
@@ -53,6 +56,38 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onDele
   const [isSaving, setIsSaving] = useState(false);
   const [previewTemplate, setPreviewTemplate] = useState<MessageTemplate | null>(null);
 
+  // Upload state
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadedFileName, setUploadedFileName] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 25 * 1024 * 1024) {
+      toast.error("Arquivo muito grande (máximo 25MB)");
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadProgress(0);
+    setUploadedFileName(file.name);
+
+    try {
+      const result = await uploadMedia(file, (pct) => setUploadProgress(pct));
+      setMediaUrl(result.url);
+      toast.success(`Arquivo enviado: ${formatFileSize(result.size)}`);
+    } catch (err: any) {
+      toast.error(err.message || "Erro no upload");
+      setUploadedFileName("");
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
   async function handleCreate() {
     if (!name.trim()) return;
     if (mediaType === "text" && !content.trim()) return;
@@ -69,6 +104,7 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onDele
       setContent("");
       setMediaType("text");
       setMediaUrl("");
+      setUploadedFileName("");
     } finally {
       setIsSaving(false);
     }
@@ -162,7 +198,11 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onDele
               return (
                 <button
                   key={mt.value}
-                  onClick={() => setMediaType(mt.value)}
+                  onClick={() => {
+                    setMediaType(mt.value);
+                    setMediaUrl("");
+                    setUploadedFileName("");
+                  }}
                   disabled={isSaving}
                   className={`flex flex-col items-center gap-1.5 rounded-xl border p-3 transition-all text-center ${
                     isActive
@@ -185,7 +225,7 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onDele
             className="rounded-xl bg-secondary/50 border-border/50"
           />
 
-          {/* Content field - always shown for text, optional caption for others */}
+          {/* Content field */}
           <Textarea
             placeholder={mediaType === "text" ? "Conteúdo da mensagem..." : "Legenda / texto da mensagem (opcional)..."}
             value={content}
@@ -195,25 +235,83 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onDele
             className="rounded-xl bg-secondary/30 border-border/40 resize-none"
           />
 
-          {/* Media URL field */}
+          {/* Media Upload + URL field */}
           {mediaType !== "text" && (
-            <div className="space-y-1.5">
+            <div className="space-y-3">
               <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                {mediaType === "image" && <><Image className="w-3.5 h-3.5 text-blue-400" /> URL da Imagem</>}
-                {mediaType === "audio" && <><Mic className="w-3.5 h-3.5 text-orange-400" /> URL do Áudio (MP3, OGG)</>}
-                {mediaType === "document" && <><File className="w-3.5 h-3.5 text-red-400" /> URL do Documento (PDF)</>}
+                {mediaType === "image" && <><Image className="w-3.5 h-3.5 text-blue-400" /> Imagem</>}
+                {mediaType === "audio" && <><Mic className="w-3.5 h-3.5 text-orange-400" /> Áudio (MP3, OGG)</>}
+                {mediaType === "document" && <><File className="w-3.5 h-3.5 text-red-400" /> Documento (PDF)</>}
               </label>
-              <Input
-                placeholder={
-                  mediaType === "image" ? "https://exemplo.com/imagem.jpg" :
-                  mediaType === "audio" ? "https://exemplo.com/audio.mp3" :
-                  "https://exemplo.com/documento.pdf"
-                }
-                value={mediaUrl}
-                onChange={(e) => setMediaUrl(e.target.value)}
-                disabled={isSaving}
-                className="rounded-xl bg-secondary/50 border-border/50 font-mono text-xs"
-              />
+
+              {/* Upload button */}
+              <div className="flex items-center gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept={getAcceptString(mediaType)}
+                  onChange={handleFileUpload}
+                  disabled={isSaving || isUploading}
+                  className="hidden"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isSaving || isUploading}
+                  className="gap-2 rounded-xl border-dashed border-2 border-border/60 hover:border-purple-500/40 hover:bg-purple-500/5 flex-1 h-12"
+                >
+                  {isUploading ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
+                  ) : uploadedFileName ? (
+                    <CheckCircle2 className="w-4 h-4 text-green-400" />
+                  ) : (
+                    <Upload className="w-4 h-4 text-muted-foreground" />
+                  )}
+                  <span className="text-xs truncate">
+                    {isUploading
+                      ? "Enviando..."
+                      : uploadedFileName
+                      ? uploadedFileName
+                      : "Clique para enviar arquivo"}
+                  </span>
+                </Button>
+              </div>
+
+              {/* Upload progress */}
+              {isUploading && (
+                <Progress value={uploadProgress} className="h-1.5" />
+              )}
+
+              {/* Preview of uploaded file */}
+              {mediaUrl && !isUploading && (
+                <div className="rounded-lg border border-border/30 bg-secondary/10 p-2">
+                  {mediaType === "image" && (
+                    <img src={mediaUrl} alt="Preview" className="rounded-lg max-h-32 object-contain" />
+                  )}
+                  {mediaType === "audio" && (
+                    <audio controls src={mediaUrl} className="w-full h-8" />
+                  )}
+                  {mediaType === "document" && (
+                    <a href={mediaUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400 hover:underline flex items-center gap-1">
+                      <File className="w-3.5 h-3.5" /> Abrir documento
+                    </a>
+                  )}
+                </div>
+              )}
+
+              {/* Manual URL fallback */}
+              <div className="space-y-1">
+                <p className="text-[10px] text-muted-foreground/60">Ou cole uma URL manualmente:</p>
+                <Input
+                  placeholder="https://exemplo.com/arquivo..."
+                  value={mediaUrl}
+                  onChange={(e) => setMediaUrl(e.target.value)}
+                  disabled={isSaving || isUploading}
+                  className="rounded-xl bg-secondary/50 border-border/50 font-mono text-xs"
+                />
+              </div>
+
               <p className="text-[10px] text-muted-foreground/60">
                 {mediaType === "audio" && "Formatos aceitos: MP3, OGG. Será enviado como mensagem de voz."}
                 {mediaType === "image" && "Formatos aceitos: JPG, PNG, WEBP."}
@@ -229,7 +327,7 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onDele
             <code className="rounded-md bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 text-xs text-purple-400 font-mono">{"{{valor_conta}}"}</code>
           </div>
 
-          {/* Info about typing simulation */}
+          {/* Typing simulation info */}
           {mediaType === "text" && (
             <div className="flex items-center gap-2 rounded-lg bg-green-500/5 border border-green-500/15 px-3 py-2">
               <Play className="w-3.5 h-3.5 text-green-400 shrink-0" />
@@ -239,7 +337,7 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onDele
 
           <Button
             onClick={handleCreate}
-            disabled={!canSave || isSaving}
+            disabled={!canSave || isSaving || isUploading}
             className="gap-2 rounded-xl h-11 font-bold shadow-lg shadow-green-500/10 transition-all w-full sm:w-auto"
             style={{ background: "var(--gradient-green)" }}
           >
