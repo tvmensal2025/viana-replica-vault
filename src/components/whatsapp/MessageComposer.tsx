@@ -103,7 +103,8 @@ export function MessageComposer({ onSend, onSendAudio, onSendMedia, templates, d
     setShowQuickReply(false);
     // If template has media, set it as attached file
     if (t.media_url && t.media_type && t.media_type !== "text") {
-      const type: MediaType = t.media_type === "image" ? "image" : t.media_type === "video" ? "video" : "document";
+      const mediaStr = t.media_type as string;
+      const type: MediaType = mediaStr === "image" ? "image" : mediaStr === "video" ? "video" : "document";
       setAttachedFile({ url: t.media_url, name: `${t.name}.${t.media_type}`, type });
     }
     textareaRef.current?.focus();
