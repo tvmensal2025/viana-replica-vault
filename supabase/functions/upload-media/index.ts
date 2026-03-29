@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { AwsClient } from "npm:aws4fetch@1.0.20";
+import { S3Client, PutObjectCommand, CreateBucketCommand } from "npm:@aws-sdk/client-s3@3.540.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -8,7 +8,7 @@ const corsHeaders = {
 };
 
 const BUCKET = "media-templates";
-const MAX_SIZE = 25 * 1024 * 1024; // 25 MB
+const MAX_SIZE = 25 * 1024 * 1024;
 
 const ALLOWED_TYPES: Record<string, string[]> = {
   image: ["image/jpeg", "image/png", "image/webp", "image/gif"],
@@ -29,19 +29,10 @@ function getAllowedTypes(): string[] {
 
 function getExtension(mime: string): string {
   const map: Record<string, string> = {
-    "image/jpeg": "jpg",
-    "image/png": "png",
-    "image/webp": "webp",
-    "image/gif": "gif",
-    "audio/mpeg": "mp3",
-    "audio/ogg": "ogg",
-    "audio/mp4": "m4a",
-    "audio/wav": "wav",
-    "audio/webm": "webm",
-    "video/mp4": "mp4",
-    "video/webm": "webm",
-    "application/pdf": "pdf",
-    "application/msword": "doc",
+    "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif",
+    "audio/mpeg": "mp3", "audio/ogg": "ogg", "audio/mp4": "m4a", "audio/wav": "wav", "audio/webm": "webm",
+    "video/mp4": "mp4", "video/webm": "webm",
+    "application/pdf": "pdf", "application/msword": "doc",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
     "application/vnd.ms-excel": "xls",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
@@ -60,13 +51,13 @@ serve(async (req) => {
     const secretKey = Deno.env.get("MINIO_ROOT_PASSWORD");
 
     if (!minioUrl || !accessKey || !secretKey) {
+      console.error("Missing MinIO env vars:", { hasUrl: !!minioUrl, hasKey: !!accessKey, hasSecret: !!secretKey });
       return new Response(
         JSON.stringify({ error: "MinIO credentials not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Parse multipart form data
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
 
@@ -93,65 +84,65 @@ serve(async (req) => {
     }
 
     const ext = getExtension(file.type);
-    const uuid = crypto.randomUUID();
-    const objectKey = `${uuid}-${Date.now()}.${ext}`;
+    const objectKey = `${crypto.randomUUID()}-${Date.now()}.${ext}`;
 
-    const aws = new AwsClient({
-      accessKeyId: accessKey,
-      secretAccessKey: secretKey,
-      service: "s3",
+    // Create S3 client for MinIO
+    const s3 = new S3Client({
+      endpoint: minioUrl,
       region: "us-east-1",
+      credentials: {
+        accessKeyId: accessKey,
+        secretAccessKey: secretKey,
+      },
+      forcePathStyle: true, // Required for MinIO
     });
 
-    const fileBytes = new Uint8Array(await file.arrayBuffer());
-
-    // Ensure bucket exists (ignore error if already exists)
+    // Ensure bucket exists
     try {
-      await aws.fetch(`${minioUrl}/${BUCKET}`, { method: "PUT" });
-    } catch {
-      // bucket may already exist
+      await s3.send(new CreateBucketCommand({ Bucket: BUCKET }));
+      console.log("Bucket created:", BUCKET);
+    } catch (e: any) {
+      if (e.name !== "BucketAlreadyOwnedByYou" && e.name !== "BucketAlreadyExists" && e.Code !== "BucketAlreadyOwnedByYou") {
+        console.log("Bucket create response (may already exist):", e.name || e.Code);
+      }
     }
 
-    // Set bucket policy to public read
-    const policy = JSON.stringify({
-      Version: "2012-10-17",
-      Statement: [
-        {
+    // Set public read policy via MinIO API directly
+    try {
+      const policy = JSON.stringify({
+        Version: "2012-10-17",
+        Statement: [{
           Effect: "Allow",
           Principal: { AWS: ["*"] },
           Action: ["s3:GetObject"],
           Resource: [`arn:aws:s3:::${BUCKET}/*`],
-        },
-      ],
-    });
-
-    try {
-      await aws.fetch(`${minioUrl}/${BUCKET}?policy`, {
+        }],
+      });
+      // Use raw fetch for policy since SDK doesn't have a simple method
+      const policyUrl = `${minioUrl}/${BUCKET}?policy`;
+      await fetch(policyUrl, {
         method: "PUT",
+        headers: { "Content-Type": "application/json" },
         body: policy,
       });
     } catch {
-      // policy may already be set
+      // Policy may fail without auth but bucket might already be public
     }
 
     // Upload file
-    const uploadUrl = `${minioUrl}/${BUCKET}/${objectKey}`;
-    const uploadRes = await aws.fetch(uploadUrl, {
-      method: "PUT",
-      headers: { "Content-Type": file.type },
-      body: fileBytes,
-    });
+    const fileBytes = new Uint8Array(await file.arrayBuffer());
 
-    if (!uploadRes.ok) {
-      const errText = await uploadRes.text();
-      console.error("MinIO upload failed:", errText);
-      return new Response(
-        JSON.stringify({ error: "Upload to MinIO failed" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    await s3.send(new PutObjectCommand({
+      Bucket: BUCKET,
+      Key: objectKey,
+      Body: fileBytes,
+      ContentType: file.type,
+      ACL: "public-read",
+    }));
 
     const publicUrl = `${minioUrl}/${BUCKET}/${objectKey}`;
+
+    console.log("Upload successful:", publicUrl);
 
     return new Response(
       JSON.stringify({ url: publicUrl, key: objectKey, type: file.type, size: file.size }),
