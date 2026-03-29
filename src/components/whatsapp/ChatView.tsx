@@ -91,11 +91,10 @@ export function ChatView({ instanceName, chat, templates, consultantId }: ChatVi
             size="sm"
             variant="outline"
             className="h-7 text-[10px] gap-1 border-primary/30 text-primary hover:bg-primary/10"
-            onClick={handleAddCustomer}
-            disabled={addingCustomer}
+            onClick={() => setShowAddDialog(true)}
           >
             <UserPlus className="h-3.5 w-3.5" />
-            {addingCustomer ? "Adicionando..." : "Adicionar Cliente"}
+            Adicionar Cliente
           </Button>
         )}
       </div>
