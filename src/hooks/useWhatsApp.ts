@@ -22,6 +22,8 @@ interface UseWhatsAppReturn {
   reconnect: () => Promise<void>;
 }
 
+/* ── helpers ── */
+
 function logEntry(msg: string): string {
   const now = new Date();
   const ts = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
@@ -51,16 +53,9 @@ function delay(ms: number): Promise<void> {
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
     const timeoutId = setTimeout(() => reject(new Error("timeout")), ms);
-
     promise
-      .then((value) => {
-        clearTimeout(timeoutId);
-        resolve(value);
-      })
-      .catch((err) => {
-        clearTimeout(timeoutId);
-        reject(err);
-      });
+      .then((v) => { clearTimeout(timeoutId); resolve(v); })
+      .catch((e) => { clearTimeout(timeoutId); reject(e); });
   });
 }
 
@@ -86,6 +81,11 @@ function buildInstanceName(name: string | null | undefined, phone: string | null
   return raw.slice(0, 80).replace(/-+$/g, "");
 }
 
+const MAX_AUTO_RETRIES = 3;
+const AUTO_RETRY_DELAY_MS = 5000;
+
+/* ── hook ── */
+
 export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("disconnected");
   const [instanceName, setInstanceName] = useState<string | null>(null);
@@ -95,13 +95,17 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
   const [error, setError] = useState<string | null>(null);
   const [connectionLog, setConnectionLog] = useState<string[]>([]);
   const { toast } = useToast();
+
   const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevStatusRef = useRef<ConnectionStatus>("disconnected");
   const pollActiveRef = useRef(false);
   const pollInFlightRef = useRef(false);
+  const autoRetryCountRef = useRef(0);
+  const autoReconnectingRef = useRef(false);
+  const mountedRef = useRef(true);
 
   const addLog = useCallback((msg: string) => {
-    setConnectionLog((prev) => [...prev.slice(-9), logEntry(sanitizeVisibleMessage(msg))]);
+    setConnectionLog((prev) => [...prev.slice(-14), logEntry(sanitizeVisibleMessage(msg))]);
   }, []);
 
   const fetchConsultantIdentity = useCallback(async () => {
@@ -110,22 +114,82 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       .select("name, phone")
       .eq("id", consultantId)
       .maybeSingle();
-
-    return {
-      name: data?.name || null,
-      phone: data?.phone || null,
-    };
+    return { name: data?.name || null, phone: data?.phone || null };
   }, [consultantId]);
 
   const clearPolling = useCallback(() => {
     pollActiveRef.current = false;
-
     if (intervalRef.current) {
       clearTimeout(intervalRef.current);
       intervalRef.current = null;
     }
   }, []);
 
+  /* ── try to get QR or confirm connected from existing instance ── */
+  const tryGetQrFromExisting = useCallback(
+    async (name: string): Promise<boolean> => {
+      try {
+        const state = await withTimeout(getConnectionState(name), 10000);
+        if (state.state === "open") {
+          setConnectionStatus("connected");
+          setQrCode(null);
+          setError(null);
+          setInstanceName(name);
+          addLog("✅ WhatsApp já estava conectado!");
+          return true;
+        }
+
+        addLog("📱 Gerando QR Code...");
+        const connectResponse = await withTimeout(connectInstance(name), 15000);
+        const qr = connectResponse?.base64 || null;
+        if (qr) {
+          setQrCode(qr);
+          setConnectionStatus("connecting");
+          setInstanceName(name);
+          await supabase
+            .from("whatsapp_instances")
+            .upsert({ consultant_id: consultantId, instance_name: name }, { onConflict: "consultant_id" });
+          addLog("📱 QR Code gerado — escaneie com seu celular");
+          return true;
+        }
+      } catch {
+        // Could not reuse
+      }
+      return false;
+    },
+    [consultantId, addLog],
+  );
+
+  /* ── auto-reconnect helper (called internally, no user action) ── */
+  const autoReconnect = useCallback(
+    async (name: string) => {
+      if (autoReconnectingRef.current || !mountedRef.current) return;
+      autoReconnectingRef.current = true;
+
+      for (let attempt = 1; attempt <= MAX_AUTO_RETRIES; attempt++) {
+        if (!mountedRef.current) break;
+
+        addLog(`🔄 Reconexão automática (${attempt}/${MAX_AUTO_RETRIES})...`);
+
+        const ok = await tryGetQrFromExisting(name);
+        if (ok) {
+          autoRetryCountRef.current = 0;
+          autoReconnectingRef.current = false;
+          return;
+        }
+
+        if (attempt < MAX_AUTO_RETRIES) {
+          await delay(AUTO_RETRY_DELAY_MS);
+        }
+      }
+
+      autoReconnectingRef.current = false;
+      addLog("⚠️ Reconexão automática esgotada — use o botão para reconectar manualmente");
+    },
+    [addLog, tryGetQrFromExisting],
+  );
+
+  /* ── polling ── */
   const pollConnectionState = useCallback(
     async (name: string) => {
       if (pollInFlightRef.current) return;
@@ -134,28 +198,27 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       try {
         const result = await getConnectionState(name);
         const state = result?.state;
+
         if (state === "open") {
           if (prevStatusRef.current !== "connected") {
             setConnectionStatus("connected");
             setQrCode(null);
             setError(null);
+            autoRetryCountRef.current = 0;
             addLog("✅ WhatsApp conectado com sucesso!");
           }
         } else if (state === "close") {
           if (prevStatusRef.current === "connected") {
-            toast({
-              title: "Conexão perdida",
-              description: "A conexão com o WhatsApp foi encerrada.",
-              variant: "destructive",
-            });
-            addLog("❌ Conexão perdida");
-            setConnectionStatus("disconnected");
+            addLog("⚠️ Conexão perdida — tentando reconectar automaticamente...");
+            setConnectionStatus("connecting");
             setQrCode(null);
+
+            // fire auto-reconnect in background
+            autoReconnect(name);
             return;
           }
 
-          // Durante o pareamento, o serviço pode alternar para "close" temporariamente.
-          // Não limpar QR nem sair do estado de conexão enquanto aguarda leitura.
+          // During pairing the service may briefly report "close"
           if (prevStatusRef.current === "connecting") {
             return;
           }
@@ -164,12 +227,12 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
           setQrCode(null);
         }
       } catch {
-        // Instance may not exist anymore on connection service — don't crash
+        // Instance may not exist anymore — don't crash
       } finally {
         pollInFlightRef.current = false;
       }
     },
-    [toast, addLog]
+    [addLog, autoReconnect],
   );
 
   const startPolling = useCallback(
@@ -179,9 +242,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
 
       const runPoll = async () => {
         if (!pollActiveRef.current) return;
-
         await pollConnectionState(name);
-
         if (!pollActiveRef.current) return;
 
         const nextDelay = prevStatusRef.current === "connecting" ? 5000 : 30000;
@@ -190,10 +251,10 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
 
       runPoll();
     },
-    [clearPolling, pollConnectionState]
+    [clearPolling, pollConnectionState],
   );
 
-  // Update prevStatusRef and restart polling when status changes
+  // Restart polling when status changes
   useEffect(() => {
     const prev = prevStatusRef.current;
     prevStatusRef.current = connectionStatus;
@@ -207,55 +268,19 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
     }
   }, [connectionStatus, instanceName, startPolling, clearPolling]);
 
-  // Try to get QR code from an existing instance via connectInstance
-  const tryGetQrFromExisting = useCallback(
-    async (name: string): Promise<boolean> => {
-      try {
-        const state = await withTimeout(getConnectionState(name), 10000);
-        if (state.state === "open") {
-          setConnectionStatus("connected");
-          setQrCode(null);
-          setInstanceName(name);
-          addLog("✅ WhatsApp já estava conectado!");
-          return true;
-        }
-
-        // Instance exists but not connected — request QR code
-        addLog("📱 Gerando QR Code...");
-        const connectResponse = await withTimeout(connectInstance(name), 15000);
-        const qr = connectResponse?.base64 || null;
-        if (qr) {
-          setQrCode(qr);
-          setConnectionStatus("connecting");
-          setInstanceName(name);
-
-          // Save to local DB
-          await supabase
-            .from("whatsapp_instances")
-            .upsert({ consultant_id: consultantId, instance_name: name }, { onConflict: "consultant_id" });
-
-          addLog("📱 QR Code gerado — escaneie com seu celular");
-          return true;
-        }
-      } catch {
-        // Could not reuse this instance
-      }
-      return false;
-    },
-    [consultantId, addLog]
-  );
-
+  /* ── createAndConnect (user-triggered) ── */
   const createAndConnect = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     setConnectionLog([]);
     setQrCode(null);
     setConnectionStatus("disconnected");
+    autoRetryCountRef.current = 0;
 
     addLog("Iniciando conexão...");
 
     try {
-      // Step 1: Check if we already have an instance saved locally
+      // Step 1: Reuse existing saved instance
       if (instanceName) {
         addLog("Tentando reutilizar instância existente...");
         const reused = await tryGetQrFromExisting(instanceName);
@@ -263,10 +288,9 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
         addLog("⚠️ Instância anterior não disponível, criando nova...");
       }
 
-      // Step 2: Create a new instance
+      // Step 2: Create new instance
       const identity = await fetchConsultantIdentity();
 
-      // Clean local DB records
       await supabase
         .from("whatsapp_instances")
         .delete()
@@ -275,7 +299,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       const name = buildInstanceName(identity.name, identity.phone, consultantId);
       addLog("Criando nova instância...");
 
-      let response;
+      let response: any;
       try {
         response = await withTimeout(createInstance(name), 55000);
       } catch (createErr) {
@@ -291,28 +315,20 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
           createMsg.includes("[504]") ||
           createMsg.includes("demorou para responder")
         ) {
-          addLog("⚠️ Criação demorou, tentando recuperar instância...");
-
-          // Instance may have been created despite timeout
-          await delay(3000);
-          const recovered = await tryGetQrFromExisting(name);
-          if (recovered) {
-            addLog("✅ Instância recuperada após timeout");
-            return;
-          }
+          addLog("⚠️ Criação demorou, tentando recuperar...");
 
           await delay(3000);
-          const recoveredRetry = await tryGetQrFromExisting(name);
-          if (recoveredRetry) {
-            addLog("✅ Instância recuperada após nova tentativa");
-            return;
-          }
+          if (await tryGetQrFromExisting(name)) { addLog("✅ Instância recuperada"); return; }
+
+          await delay(3000);
+          if (await tryGetQrFromExisting(name)) { addLog("✅ Instância recuperada"); return; }
 
           throw new Error("Servidor demorou para responder. Tente novamente.");
         } else {
           throw createErr;
         }
       }
+
       addLog("✅ Instância criada com sucesso");
 
       const finalName = response?.instance?.instanceName || name;
@@ -337,8 +353,8 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
             setQrCode(null);
             addLog("✅ WhatsApp já estava conectado!");
           } else {
-            const connectResponse = await connectInstance(finalName);
-            setQrCode(connectResponse?.base64 || null);
+            const connectResp = await connectInstance(finalName);
+            setQrCode(connectResp?.base64 || null);
             setConnectionStatus("connecting");
             addLog("📱 QR Code gerado — escaneie com seu celular");
           }
@@ -348,7 +364,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
           setError(
             isWorkerLimitError(connectMsg)
               ? "Serviço temporariamente ocupado. Tente novamente em alguns segundos."
-              : "Não foi possível gerar o QR Code. Tente novamente."
+              : "Não foi possível gerar o QR Code. Tente novamente.",
           );
           addLog("❌ Falha ao obter QR Code");
         }
@@ -357,15 +373,13 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       const message = err instanceof Error ? err.message : "";
 
       if (isAlreadyInUseError(message)) {
-        addLog("⚠️ Não foi possível criar uma instância exclusiva agora");
         setError("Não foi possível criar uma nova conexão agora. Tente novamente.");
       } else if (isWorkerLimitError(message)) {
-        addLog("⚠️ Serviço de conexão sobrecarregado. Tente novamente em alguns segundos");
         setError("Serviço de conexão sobrecarregado. Tente novamente em alguns segundos.");
       } else {
-        const safeMessage = sanitizeVisibleMessage(message || "Erro ao criar conexão WhatsApp");
-        addLog("❌ Erro: " + safeMessage);
-        setError(safeMessage || "Erro ao criar conexão WhatsApp");
+        const safe = sanitizeVisibleMessage(message || "Erro ao criar conexão WhatsApp");
+        addLog("❌ Erro: " + safe);
+        setError(safe || "Erro ao criar conexão WhatsApp");
       }
     } finally {
       setIsLoading(false);
@@ -376,6 +390,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
     if (!instanceName) return;
     setIsLoading(true);
     setError(null);
+    autoReconnectingRef.current = false;
     addLog("Desconectando...");
     try {
       await deleteInstance(instanceName);
@@ -392,7 +407,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       addLog("✅ Desconectado com sucesso");
     } catch (err) {
       const message = sanitizeVisibleMessage(
-        err instanceof Error ? err.message : "Erro ao desconectar WhatsApp"
+        err instanceof Error ? err.message : "Erro ao desconectar WhatsApp",
       );
       addLog("❌ Erro ao desconectar: " + message);
       setError(message);
@@ -405,8 +420,10 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
     await createAndConnect();
   }, [createAndConnect]);
 
-  // On mount: check for existing instance in Supabase
+  /* ── on mount: check existing instance & auto-connect ── */
   useEffect(() => {
+    mountedRef.current = true;
+
     async function checkExistingInstance() {
       setIsLoading(true);
       addLog("Verificando instância existente...");
@@ -424,36 +441,34 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
         }
 
         setInstanceName(data.instance_name);
-        addLog("Instância encontrada: " + data.instance_name);
+        addLog("Instância encontrada — conectando automaticamente...");
 
-        try {
-          addLog("Verificando estado da conexão...");
-          const state = await getConnectionState(data.instance_name);
-          if (state.state === "open") {
-            setConnectionStatus("connected");
-            addLog("✅ WhatsApp conectado");
-          } else {
-            setConnectionStatus("disconnected");
-            addLog("WhatsApp desconectado (estado: " + state.state + ")");
+        // Auto-connect: try to reuse immediately
+        const ok = await tryGetQrFromExisting(data.instance_name);
+        if (!ok) {
+          addLog("⚠️ Instância anterior não respondeu — tentando reconexão automática...");
+          // Try auto-reconnect with retries
+          for (let i = 1; i <= MAX_AUTO_RETRIES; i++) {
+            if (!mountedRef.current) break;
+            await delay(AUTO_RETRY_DELAY_MS);
+            addLog(`🔄 Tentativa automática ${i}/${MAX_AUTO_RETRIES}...`);
+            const retryOk = await tryGetQrFromExisting(data.instance_name);
+            if (retryOk) break;
           }
-        } catch {
-          // Instance doesn't exist on remote service — clean up local record
-          addLog("⚠️ Instância não encontrada no serviço — limpando registro local");
-          await supabase
-            .from("whatsapp_instances")
-            .delete()
-            .eq("consultant_id", consultantId);
-          setInstanceName(null);
         }
       } catch {
         addLog("Erro ao verificar instância");
       } finally {
-        setIsLoading(false);
+        if (mountedRef.current) setIsLoading(false);
       }
     }
 
     checkExistingInstance();
-  }, [consultantId, addLog]);
+
+    return () => {
+      mountedRef.current = false;
+    };
+  }, [consultantId, addLog, tryGetQrFromExisting]);
 
   // Cleanup polling on unmount
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { Smartphone, Wifi, WifiOff, Loader2, QrCode, RefreshCw, Zap, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { Wifi, WifiOff, Loader2, QrCode, RefreshCw, Zap, CheckCircle2, XCircle, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ConnectionStatus } from "@/types/whatsapp";
 
@@ -30,6 +30,7 @@ function DiagnosticPanel({ logs }: { logs: string[] }) {
           const isError = log.includes("❌");
           const isWarning = log.includes("⚠️");
           const isQr = log.includes("📱");
+          const isRetry = log.includes("🔄");
 
           return (
             <div key={i} className="flex items-start gap-2">
@@ -41,6 +42,8 @@ function DiagnosticPanel({ logs }: { logs: string[] }) {
                 <Clock className="w-3.5 h-3.5 text-yellow-400 mt-0.5 shrink-0" />
               ) : isQr ? (
                 <QrCode className="w-3.5 h-3.5 text-blue-400 mt-0.5 shrink-0" />
+              ) : isRetry ? (
+                <RefreshCw className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0 animate-spin" />
               ) : (
                 <div className="w-3.5 h-3.5 flex items-center justify-center mt-0.5 shrink-0">
                   <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50" />
@@ -68,6 +71,7 @@ export function ConnectionPanel({
   onReconnect,
 }: ConnectionPanelProps) {
   const showDiagnostic = connectionLog.length > 0 && (isLoading || error || connectionStatus === "connecting");
+  const isAutoReconnecting = isLoading && connectionLog.some((l) => l.includes("🔄"));
 
   return (
     <div className="relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-card via-card to-green-950/20">
@@ -86,13 +90,24 @@ export function ConnectionPanel({
           </div>
         </div>
 
-        {/* Loading */}
-        {isLoading && (
+        {/* Loading / Auto-reconnecting */}
+        {isLoading && !qrCode && (
           <div className="flex flex-col items-center justify-center py-10 gap-4">
             <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-green-500/15 to-green-600/5 flex items-center justify-center border border-green-500/10">
-              <Loader2 className="w-8 h-8 text-green-400 animate-spin" />
+              {isAutoReconnecting ? (
+                <RefreshCw className="w-8 h-8 text-green-400 animate-spin" />
+              ) : (
+                <Loader2 className="w-8 h-8 text-green-400 animate-spin" />
+              )}
             </div>
-            <p className="text-sm text-muted-foreground font-medium">Verificando conexão...</p>
+            <p className="text-sm text-muted-foreground font-medium">
+              {isAutoReconnecting ? "Reconectando automaticamente..." : "Verificando conexão..."}
+            </p>
+            {isAutoReconnecting && (
+              <p className="text-xs text-muted-foreground/60 text-center max-w-xs">
+                O sistema está tentando restabelecer a conexão. Aguarde alguns instantes.
+              </p>
+            )}
           </div>
         )}
 
@@ -129,7 +144,7 @@ export function ConnectionPanel({
           </div>
         )}
 
-        {/* Disconnected — instance exists */}
+        {/* Disconnected — instance exists (auto-reconnect exhausted) */}
         {!isLoading && !error && connectionStatus === "disconnected" && instanceName && (
           <div className="flex flex-col items-center justify-center py-10 gap-5">
             <div className="relative">
@@ -142,7 +157,7 @@ export function ConnectionPanel({
             </div>
             <div className="text-center space-y-1.5">
               <p className="text-base font-heading font-bold text-foreground">Conexão perdida</p>
-              <p className="text-sm text-muted-foreground max-w-xs">Sua sessão expirou. Reconecte para continuar enviando mensagens.</p>
+              <p className="text-sm text-muted-foreground max-w-xs">A reconexão automática não foi possível. Clique abaixo para reconectar.</p>
             </div>
             <Button onClick={onReconnect} variant="outline" className="gap-2 rounded-xl px-6 h-11 border-primary/30 hover:bg-primary/5 hover:border-primary/50 transition-all">
               <RefreshCw className="w-4 h-4" /> Reconectar
@@ -150,8 +165,8 @@ export function ConnectionPanel({
           </div>
         )}
 
-        {/* Connecting — QR code */}
-        {!isLoading && !error && connectionStatus === "connecting" && qrCode && (
+        {/* Connecting — QR code (shown even while isLoading to keep QR visible during auto-retry) */}
+        {!error && connectionStatus === "connecting" && qrCode && (
           <div className="flex flex-col items-center justify-center py-8 gap-5">
             <div className="relative rounded-2xl border-2 border-green-500/20 bg-white p-4 shadow-xl shadow-green-500/5">
               <img
