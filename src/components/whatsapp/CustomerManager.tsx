@@ -120,8 +120,10 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
         if (phone.length < 10 || pics[c.id]) continue;
         try {
           const result = await getProfilePicture(instanceName, `${phone}@s.whatsapp.net`);
-          if (result?.profilePictureUrl) {
-            pics[c.id] = result.profilePictureUrl;
+          if (result && typeof result === "object" && (result as any).profilePictureUrl) {
+            pics[c.id] = (result as any).profilePictureUrl;
+          } else if (result && typeof result === "string") {
+            pics[c.id] = result;
           }
         } catch {
           // skip
