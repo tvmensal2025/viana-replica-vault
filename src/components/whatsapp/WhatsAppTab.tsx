@@ -71,7 +71,7 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
     try {
       const { data } = await supabase
         .from("customers")
-        .select("id, name, phone_whatsapp, electricity_bill_value, email, cpf, address_city, address_state, status, created_at");
+        .select("id, name, phone_whatsapp, electricity_bill_value, email, cpf, address_city, address_state, address_street, address_neighborhood, address_complement, address_number, cep, numero_instalacao, data_nascimento, status, created_at");
       if (data) {
         setCustomers(
           data.map((c) => ({
