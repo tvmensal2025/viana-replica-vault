@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { MessageBubble } from "./MessageBubble";
 import { MessageComposer } from "./MessageComposer";
 import { useMessages } from "@/hooks/useMessages";
+import { sendAudio as sendAudioApi } from "@/services/evolutionApi";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import type { MessageTemplate } from "@/types/whatsapp";
