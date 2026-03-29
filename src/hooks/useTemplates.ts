@@ -42,11 +42,13 @@ export function useTemplates(consultantId: string) {
   }, [consultantId]);
 
   const createTemplate = useCallback(
-    async (name: string, content: string) => {
+    async (name: string, content: string, mediaType: string = "text", mediaUrl: string | null = null) => {
       const { error } = await supabase.from("message_templates").insert({
         consultant_id: consultantId,
         name,
         content,
+        media_type: mediaType,
+        media_url: mediaUrl,
       });
       if (error) throw error;
       await fetchTemplates();
