@@ -114,14 +114,38 @@ export interface EvolutionMessage {
   message?: {
     conversation?: string;
     extendedTextMessage?: { text: string };
-    imageMessage?: { url?: string; caption?: string; mimetype?: string };
-    documentMessage?: { url?: string; fileName?: string; mimetype?: string };
-    audioMessage?: { url?: string; mimetype?: string; ptt?: boolean };
-    videoMessage?: { url?: string; caption?: string; mimetype?: string };
-    stickerMessage?: { url?: string };
+    imageMessage?: { url?: string; caption?: string; mimetype?: string; base64?: string };
+    documentMessage?: { url?: string; fileName?: string; mimetype?: string; base64?: string };
+    audioMessage?: { url?: string; mimetype?: string; ptt?: boolean; base64?: string };
+    videoMessage?: { url?: string; caption?: string; mimetype?: string; base64?: string };
+    stickerMessage?: { url?: string; mimetype?: string; base64?: string };
   };
   messageTimestamp?: number;
   status?: number; // 0=ERROR, 1=PENDING, 2=SERVER_ACK, 3=DELIVERY_ACK, 4=READ, 5=PLAYED
+}
+
+// Download media as base64 from Evolution API
+export async function getBase64FromMediaMessage(
+  instanceName: string,
+  messageId: string,
+  remoteJid: string,
+  fromMe: boolean
+) {
+  try {
+    const result = await request<{ base64?: string; mimetype?: string }>(
+      `${getBaseUrl()}/chat/getBase64FromMediaMessage/${instanceName}`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          message: { key: { remoteJid, fromMe, id: messageId } },
+          convertToMp4: false,
+        }),
+      }
+    );
+    return result;
+  } catch {
+    return null;
+  }
 }
 
 export async function findMessages(
