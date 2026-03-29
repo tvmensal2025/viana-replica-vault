@@ -41,6 +41,7 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
     connectionStatus,
     instanceName,
     qrCode,
+    qrGeneratedAt,
     phoneNumber,
     isLoading,
     error,
@@ -48,6 +49,7 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
     createAndConnect,
     disconnect,
     reconnect,
+    refreshQr,
   } = useWhatsApp(userId);
 
   const {
