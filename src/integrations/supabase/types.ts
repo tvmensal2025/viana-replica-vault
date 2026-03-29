@@ -285,6 +285,36 @@ export type Database = {
         }
         Relationships: []
       }
+      kanban_stages: {
+        Row: {
+          color: string
+          consultant_id: string
+          created_at: string
+          id: string
+          label: string
+          position: number
+          stage_key: string
+        }
+        Insert: {
+          color?: string
+          consultant_id: string
+          created_at?: string
+          id?: string
+          label: string
+          position?: number
+          stage_key: string
+        }
+        Update: {
+          color?: string
+          consultant_id?: string
+          created_at?: string
+          id?: string
+          label?: string
+          position?: number
+          stage_key?: string
+        }
+        Relationships: []
+      }
       message_templates: {
         Row: {
           consultant_id: string
