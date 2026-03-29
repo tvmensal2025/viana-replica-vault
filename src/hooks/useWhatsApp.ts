@@ -208,6 +208,44 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
     }
   }, [connectionStatus, instanceName, startPolling, clearPolling]);
 
+  // Try to get QR code from an existing instance via connectInstance
+  const tryGetQrFromExisting = useCallback(
+    async (name: string): Promise<boolean> => {
+      try {
+        const state = await withTimeout(getConnectionState(name), 10000);
+        if (state.state === "open") {
+          setConnectionStatus("connected");
+          setQrCode(null);
+          setInstanceName(name);
+          addLog("✅ WhatsApp já estava conectado!");
+          return true;
+        }
+
+        // Instance exists but not connected — request QR code
+        addLog("📱 Gerando QR Code...");
+        const connectResponse = await withTimeout(connectInstance(name), 15000);
+        const qr = connectResponse?.base64 || null;
+        if (qr) {
+          setQrCode(qr);
+          setConnectionStatus("connecting");
+          setInstanceName(name);
+
+          // Save to local DB
+          await supabase
+            .from("whatsapp_instances")
+            .upsert({ consultant_id: consultantId, instance_name: name }, { onConflict: "consultant_id" });
+
+          addLog("📱 QR Code gerado — escaneie com seu celular");
+          return true;
+        }
+      } catch {
+        // Could not reuse this instance
+      }
+      return false;
+    },
+    [consultantId, addLog]
+  );
+
   const createAndConnect = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -215,40 +253,50 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
     setQrCode(null);
     setConnectionStatus("disconnected");
 
-    addLog("Iniciando nova conexão...");
+    addLog("Iniciando conexão...");
 
     try {
-      const identity = await fetchConsultantIdentity();
+      // Step 1: Check for existing instances we can reuse
+      addLog("Verificando instâncias existentes...");
+      let reused = false;
 
-      // Clean ALL ghost instances from the server (not just DB records)
-      addLog("Verificando instâncias existentes no servidor...");
       try {
         const allInstances = await withTimeout(fetchInstances(), 12000);
         const igreenInstances = (allInstances || []).filter(
           (i) => i.instance?.instanceName?.startsWith("igreen-")
         );
+
         if (igreenInstances.length > 0) {
-          addLog(`Removendo ${igreenInstances.length} instância(s) anterior(es)...`);
+          addLog(`Encontrada(s) ${igreenInstances.length} instância(s) existente(s)`);
 
-          const deleteResults = await Promise.allSettled(
-            igreenInstances.map((inst) =>
-              withTimeout(deleteInstance(inst.instance.instanceName), 8000)
-            )
-          );
+          // Try to reuse the first one
+          for (const inst of igreenInstances) {
+            const name = inst.instance.instanceName;
+            addLog(`Tentando reutilizar: ${name.slice(0, 30)}...`);
+            reused = await tryGetQrFromExisting(name);
+            if (reused) break;
+          }
 
-          const removedCount = deleteResults.filter((result) => result.status === "fulfilled").length;
-
-          if (removedCount > 0) {
-            addLog(`✅ ${removedCount} instância(s) anterior(es) removida(s)`);
-          } else {
-            addLog("⚠️ Não foi possível remover instâncias anteriores");
+          // If reuse failed, clean up all instances
+          if (!reused) {
+            addLog("Removendo instâncias antigas...");
+            await Promise.allSettled(
+              igreenInstances.map((inst) =>
+                withTimeout(deleteInstance(inst.instance.instanceName), 8000)
+              )
+            );
           }
         }
       } catch {
-        addLog("⚠️ Não foi possível listar instâncias do servidor");
+        addLog("⚠️ Não foi possível verificar instâncias existentes");
       }
 
-      // Also clean local DB records
+      if (reused) return;
+
+      // Step 2: Create a new instance
+      const identity = await fetchConsultantIdentity();
+
+      // Clean local DB records
       await supabase
         .from("whatsapp_instances")
         .delete()
@@ -311,20 +359,18 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       if (isAlreadyInUseError(message)) {
         addLog("⚠️ Não foi possível criar uma instância exclusiva agora");
         setError("Não foi possível criar uma nova conexão agora. Tente novamente.");
+      } else if (isWorkerLimitError(message)) {
+        addLog("⚠️ Serviço de conexão sobrecarregado. Tente novamente em alguns segundos");
+        setError("Serviço de conexão sobrecarregado. Tente novamente em alguns segundos.");
       } else {
-        if (isWorkerLimitError(message)) {
-          addLog("⚠️ Serviço de conexão sobrecarregado. Tente novamente em alguns segundos");
-          setError("Serviço de conexão sobrecarregado. Tente novamente em alguns segundos.");
-        } else {
-          const safeMessage = sanitizeVisibleMessage(message || "Erro ao criar conexão WhatsApp");
-          addLog("❌ Erro: " + safeMessage);
-          setError(safeMessage || "Erro ao criar conexão WhatsApp");
-        }
+        const safeMessage = sanitizeVisibleMessage(message || "Erro ao criar conexão WhatsApp");
+        addLog("❌ Erro: " + safeMessage);
+        setError(safeMessage || "Erro ao criar conexão WhatsApp");
       }
     } finally {
       setIsLoading(false);
     }
-  }, [consultantId, addLog, fetchConsultantIdentity]);
+  }, [consultantId, addLog, fetchConsultantIdentity, tryGetQrFromExisting]);
 
   const disconnect = useCallback(async () => {
     if (!instanceName) return;
