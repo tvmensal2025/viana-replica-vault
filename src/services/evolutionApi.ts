@@ -111,6 +111,7 @@ export async function findChats(instanceName: string): Promise<EvolutionChat[]> 
 export interface EvolutionMessage {
   key: {
     remoteJid: string;
+    remoteJidAlt?: string;
     fromMe: boolean;
     id: string;
   };

@@ -21,7 +21,8 @@ interface ChatViewProps {
 export function ChatView({ instanceName, chat, templates, consultantId }: ChatViewProps) {
   const { messages, isLoading, sendMessage, loadMedia } = useMessages(
     instanceName,
-    chat?.remoteJid || null
+    chat?.remoteJid || null,
+    chat?.sendTargetJid || null
   );
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
