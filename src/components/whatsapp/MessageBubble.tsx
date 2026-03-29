@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Check, CheckCheck, Clock, FileText, Image, Mic, Video, Play, Download, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ChatMessage } from "@/hooks/useMessages";
@@ -68,18 +68,37 @@ function AudioPlayer({ message, onLoadMedia }: { message: ChatMessage; onLoadMed
 
 function ImageViewer({ message, onLoadMedia }: { message: ChatMessage; onLoadMedia?: (id: string) => Promise<string | null> }) {
   const [imgSrc, setImgSrc] = useState<string | null>(
-    message.mediaUrl?.startsWith("data:") || message.mediaUrl?.startsWith("http") ? message.mediaUrl : null
+    message.mediaUrl?.startsWith("data:") ? message.mediaUrl : null
   );
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [loadAttempted, setLoadAttempted] = useState(false);
 
+  // Auto-load image on mount
   const handleLoad = useCallback(async () => {
-    if (imgSrc || !onLoadMedia) return;
+    if (imgSrc || !onLoadMedia || loadAttempted) return;
+    setLoadAttempted(true);
     setLoading(true);
     const src = await onLoadMedia(message.id);
     if (src) setImgSrc(src);
     setLoading(false);
-  }, [imgSrc, onLoadMedia, message.id]);
+  }, [imgSrc, onLoadMedia, message.id, loadAttempted]);
+
+  // Trigger auto-load
+  useEffect(() => {
+    if (!imgSrc && onLoadMedia && !loadAttempted) {
+      handleLoad();
+    }
+  }, [imgSrc, onLoadMedia, loadAttempted, handleLoad]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Carregando imagem...
+      </div>
+    );
+  }
 
   if (imgSrc) {
     return (
@@ -111,7 +130,7 @@ function ImageViewer({ message, onLoadMedia }: { message: ChatMessage; onLoadMed
       onClick={handleLoad}
       disabled={loading}
     >
-      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Image className="h-4 w-4" />}
+      <Image className="h-4 w-4" />
       📷 Carregar imagem
     </Button>
   );
@@ -197,7 +216,7 @@ function DocumentViewer({ message, onLoadMedia }: { message: ChatMessage; onLoad
 
 function StickerViewer({ message, onLoadMedia }: { message: ChatMessage; onLoadMedia?: (id: string) => Promise<string | null> }) {
   const [src, setSrc] = useState<string | null>(
-    message.mediaUrl?.startsWith("data:") || message.mediaUrl?.startsWith("http") ? message.mediaUrl : null
+    message.mediaUrl?.startsWith("data:") ? message.mediaUrl : null
   );
   const [loading, setLoading] = useState(false);
 
