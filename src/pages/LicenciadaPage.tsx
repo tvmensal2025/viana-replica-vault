@@ -1,0 +1,98 @@
+import { useParams } from "react-router-dom";
+import { useConsultant } from "@/hooks/useConsultant";
+import { useTrackView } from "@/hooks/useTrackView";
+import LicHeroSection from "@/components/licenciada/LicHeroSection";
+import LicAboutSection from "@/components/licenciada/LicAboutSection";
+import LicWhySection from "@/components/licenciada/LicWhySection";
+import LicBenefitsSection from "@/components/licenciada/LicBenefitsSection";
+import LicProductsIntro from "@/components/licenciada/LicProductsIntro";
+import LicConexaoGreen from "@/components/licenciada/LicConexaoGreen";
+import LicConexaoLivre from "@/components/licenciada/LicConexaoLivre";
+import LicConexaoSolar from "@/components/licenciada/LicConexaoSolar";
+import LicConexaoPlacas from "@/components/licenciada/LicConexaoPlacas";
+import LicConexaoClub from "@/components/licenciada/LicConexaoClub";
+import LicConexaoClubPJ from "@/components/licenciada/LicConexaoClubPJ";
+import LicConexaoExpansao from "@/components/licenciada/LicConexaoExpansao";
+import LicConexaoTelecom from "@/components/licenciada/LicConexaoTelecom";
+import LicCareerPlan from "@/components/licenciada/LicCareerPlan";
+import LicLicenseSection from "@/components/licenciada/LicLicenseSection";
+import LicConsultantSection from "@/components/licenciada/LicConsultantSection";
+import LicUrgencyBanner from "@/components/licenciada/LicUrgencyBanner";
+import LicIntermediateCTA from "@/components/licenciada/LicIntermediateCTA";
+import WhatsAppFloat from "@/components/WhatsAppFloat";
+import LoadingScreen from "@/components/LoadingScreen";
+import SEOHead from "@/components/SEOHead";
+import PixelInjector from "@/components/PixelInjector";
+
+const LicenciadaPage = () => {
+  const { licenca } = useParams<{ licenca: string }>();
+  const { data: consultant, isLoading } = useConsultant(licenca || "");
+  useTrackView(consultant?.id, "licenciada");
+
+  if (isLoading) return <LoadingScreen />;
+
+  if (!consultant) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-center px-4">
+        <div>
+          <img src="/images/logo-colorida-igreen.png" alt="iGreen" className="w-32 mx-auto mb-6 opacity-50" />
+          <h1 className="text-3xl font-bold font-heading text-foreground mb-4">Licenciado não encontrado</h1>
+          <p className="text-muted-foreground">Verifique o link e tente novamente.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const whatsappUrl = `https://api.whatsapp.com/send?phone=${consultant.phone}&text=${encodeURIComponent("Olá, gostaria de mais informações sobre a oportunidade de Licenciado iGreen Energy")}`;
+
+  return (
+    <>
+      <PixelInjector facebookPixelId={consultant.facebook_pixel_id} googleAnalyticsId={consultant.google_analytics_id} />
+      <SEOHead
+        title={`Licenciada ${consultant.name} – iGreen Energy`}
+        description={`Descubra como se tornar um Licenciado iGreen Energy com ${consultant.name} e receba comissões recorrentes`}
+      />
+      <div className="min-h-screen">
+        <LicHeroSection cadastroUrl={consultant.licenciada_cadastro_url || consultant.cadastro_url} whatsappUrl={whatsappUrl} consultantId={consultant.id} />
+        <LicUrgencyBanner />
+        <LicAboutSection />
+        <LicWhySection />
+        <LicBenefitsSection />
+        <LicIntermediateCTA
+          whatsappUrl={whatsappUrl}
+          consultantId={consultant.id}
+          headline="Não deixe essa oportunidade passar!"
+          subtext="Quem começou há 1 ano já construiu uma renda recorrente sólida. O próximo pode ser você."
+          emoji="⏰"
+        />
+        <LicProductsIntro />
+        <LicConexaoGreen />
+        <LicConexaoLivre />
+        <LicConexaoSolar />
+        <LicConexaoPlacas />
+        <LicIntermediateCTA
+          whatsappUrl={whatsappUrl}
+          consultantId={consultant.id}
+          headline="Você já viu o potencial. Agora é a hora de agir."
+          subtext="Cada dia que passa é dinheiro que você deixa na mesa. Entre agora e comece a faturar com 8 produtos diferentes."
+          emoji="💰"
+        />
+        <LicConexaoClub />
+        <LicConexaoClubPJ />
+        <LicConexaoExpansao />
+        <LicConexaoTelecom />
+        <LicCareerPlan />
+        <LicLicenseSection />
+        <LicConsultantSection
+          name={consultant.name}
+          whatsappUrl={whatsappUrl}
+          photoUrl={consultant.photo_url}
+          igreenId={consultant.igreen_id}
+        />
+      </div>
+      <WhatsAppFloat url={whatsappUrl} />
+    </>
+  );
+};
+
+export default LicenciadaPage;
