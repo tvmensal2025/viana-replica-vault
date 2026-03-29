@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Wifi, WifiOff, Loader2, QrCode, RefreshCw, Zap, CheckCircle2, XCircle, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ConnectionStatus } from "@/types/whatsapp";
@@ -5,6 +6,7 @@ import type { ConnectionStatus } from "@/types/whatsapp";
 interface ConnectionPanelProps {
   connectionStatus: ConnectionStatus;
   qrCode: string | null;
+  qrGeneratedAt?: number | null;
   instanceName: string | null;
   phoneNumber: string | null;
   isLoading: boolean;
@@ -13,6 +15,46 @@ interface ConnectionPanelProps {
   onConnect: () => Promise<void>;
   onDisconnect: () => Promise<void>;
   onReconnect: () => Promise<void>;
+  onRefreshQr?: () => Promise<void>;
+}
+
+const QR_LIFETIME_S = 45;
+
+function QrTimer({ generatedAt, onExpired }: { generatedAt: number; onExpired: () => void }) {
+  const [secondsLeft, setSecondsLeft] = useState(() => {
+    const elapsed = Math.floor((Date.now() - generatedAt) / 1000);
+    return Math.max(0, QR_LIFETIME_S - elapsed);
+  });
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - generatedAt) / 1000);
+      const left = Math.max(0, QR_LIFETIME_S - elapsed);
+      setSecondsLeft(left);
+      if (left <= 0) {
+        clearInterval(interval);
+        onExpired();
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [generatedAt, onExpired]);
+
+  const pct = (secondsLeft / QR_LIFETIME_S) * 100;
+  const isLow = secondsLeft <= 10;
+
+  return (
+    <div className="flex items-center gap-2 mt-1">
+      <div className="w-24 h-1.5 rounded-full bg-secondary overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-1000 ${isLow ? "bg-red-400" : "bg-green-400"}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <span className={`text-[11px] font-mono ${isLow ? "text-red-400" : "text-muted-foreground"}`}>
+        {secondsLeft}s
+      </span>
+    </div>
+  );
 }
 
 function DiagnosticPanel({ logs }: { logs: string[] }) {
@@ -31,6 +73,7 @@ function DiagnosticPanel({ logs }: { logs: string[] }) {
           const isWarning = log.includes("⚠️");
           const isQr = log.includes("📱");
           const isRetry = log.includes("🔄");
+          const isTimer = log.includes("⏳");
 
           return (
             <div key={i} className="flex items-start gap-2">
@@ -38,7 +81,7 @@ function DiagnosticPanel({ logs }: { logs: string[] }) {
                 <CheckCircle2 className="w-3.5 h-3.5 text-green-400 mt-0.5 shrink-0" />
               ) : isError ? (
                 <XCircle className="w-3.5 h-3.5 text-red-400 mt-0.5 shrink-0" />
-              ) : isWarning ? (
+              ) : isWarning || isTimer ? (
                 <Clock className="w-3.5 h-3.5 text-yellow-400 mt-0.5 shrink-0" />
               ) : isQr ? (
                 <QrCode className="w-3.5 h-3.5 text-blue-400 mt-0.5 shrink-0" />
@@ -61,6 +104,7 @@ function DiagnosticPanel({ logs }: { logs: string[] }) {
 export function ConnectionPanel({
   connectionStatus,
   qrCode,
+  qrGeneratedAt,
   instanceName,
   phoneNumber,
   isLoading,
@@ -69,9 +113,24 @@ export function ConnectionPanel({
   onConnect,
   onDisconnect,
   onReconnect,
+  onRefreshQr,
 }: ConnectionPanelProps) {
+  const [qrExpired, setQrExpired] = useState(false);
   const showDiagnostic = connectionLog.length > 0 && (isLoading || error || connectionStatus === "connecting");
   const isAutoReconnecting = isLoading && connectionLog.some((l) => l.includes("🔄"));
+
+  // Reset expired state when new QR arrives
+  useEffect(() => {
+    if (qrCode) setQrExpired(false);
+  }, [qrCode]);
+
+  const handleQrExpired = () => {
+    setQrExpired(true);
+    // Auto-refresh if handler available
+    if (onRefreshQr) {
+      onRefreshQr();
+    }
+  };
 
   return (
     <div className="relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-card via-card to-green-950/20">
@@ -165,23 +224,46 @@ export function ConnectionPanel({
           </div>
         )}
 
-        {/* Connecting — QR code (shown even while isLoading to keep QR visible during auto-retry) */}
+        {/* Connecting — QR code */}
         {!error && connectionStatus === "connecting" && qrCode && (
           <div className="flex flex-col items-center justify-center py-8 gap-5">
-            <div className="relative rounded-2xl border-2 border-green-500/20 bg-white p-4 shadow-xl shadow-green-500/5">
+            <div className={`relative rounded-2xl border-2 ${qrExpired ? "border-red-500/30 opacity-40" : "border-green-500/20"} bg-white p-4 shadow-xl shadow-green-500/5 transition-all`}>
               <img
                 src={qrCode.startsWith("data:") ? qrCode : `data:image/png;base64,${qrCode}`}
                 alt="QR Code WhatsApp"
                 className="w-56 h-56 sm:w-64 sm:h-64"
               />
               <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-green-500/15 border border-green-500/25 backdrop-blur-sm">
-                <span className="text-[10px] font-bold text-green-400 uppercase tracking-wider">Escaneie</span>
+                <span className="text-[10px] font-bold text-green-400 uppercase tracking-wider">
+                  {qrExpired ? "Expirado" : "Escaneie"}
+                </span>
               </div>
             </div>
+
+            {/* QR timer */}
+            {qrGeneratedAt && !qrExpired && (
+              <QrTimer generatedAt={qrGeneratedAt} onExpired={handleQrExpired} />
+            )}
+
             <div className="flex items-center gap-2.5">
-              <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-              <p className="text-sm text-muted-foreground font-medium">Aguardando leitura do QR Code...</p>
+              <div className={`w-2 h-2 rounded-full ${qrExpired ? "bg-yellow-400" : "bg-green-400"} animate-pulse`} />
+              <p className="text-sm text-muted-foreground font-medium">
+                {qrExpired ? "Renovando QR Code..." : "Aguardando leitura do QR Code..."}
+              </p>
             </div>
+
+            {/* Manual refresh button */}
+            {onRefreshQr && (
+              <Button
+                onClick={onRefreshQr}
+                variant="ghost"
+                size="sm"
+                className="gap-2 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <RefreshCw className="w-3.5 h-3.5" /> Gerar novo QR
+              </Button>
+            )}
+
             <p className="text-xs text-muted-foreground/70 text-center max-w-[280px] leading-relaxed">
               Abra o WhatsApp → Configurações → Dispositivos Conectados → Conectar Dispositivo
             </p>

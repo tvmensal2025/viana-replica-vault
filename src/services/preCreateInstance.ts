@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { createInstance } from "@/services/evolutionApi";
+import { logger } from "@/lib/logger";
 
 /**
  * Deterministic instance name per consultant (same logic as useWhatsApp).
@@ -11,25 +12,30 @@ function getFixedInstanceName(consultantId: string): string {
 
 /**
  * Pre-creates the WhatsApp instance in the background right after login/signup.
- * This is fire-and-forget — errors are silently ignored.
- * When the consultant opens the WhatsApp tab, the instance will already exist
- * and the QR code will appear immediately.
+ * Fire-and-forget — errors are logged but don't block the user.
  */
 export async function preCreateWhatsAppInstance(userId: string): Promise<void> {
   const fixedName = getFixedInstanceName(userId);
 
   try {
     // Save to DB first (upsert so it's idempotent)
-    await supabase
+    const { error: dbError } = await supabase
       .from("whatsapp_instances")
       .upsert(
         { consultant_id: userId, instance_name: fixedName },
         { onConflict: "consultant_id" }
       );
 
-    // Fire instance creation on Evolution API (fire-and-forget)
+    if (dbError) {
+      logger.error("[preCreate] DB upsert failed:", dbError.message);
+      return; // Don't try Evolution API if DB failed
+    }
+
+    // Fire instance creation on Evolution API
     await createInstance(fixedName);
-  } catch {
-    // Silently ignore — the useWhatsApp hook will handle recovery
+    logger.info("[preCreate] Instance created successfully:", fixedName);
+  } catch (err) {
+    logger.error("[preCreate] Failed:", err instanceof Error ? err.message : err);
+    // Don't throw — the useWhatsApp hook will handle recovery
   }
 }
