@@ -1,66 +1,122 @@
 
 
-## Plano: Pixel de Rastreamento por Consultor + Melhorias Extras
+## WhatsApp CRM Completo - Estilo WAWF
 
-### O que muda para o consultor
-Cada consultor poderá, no painel Admin (aba Dados), colar seu **Facebook/Meta Pixel ID** e **Google Analytics ID (GA4)**. Esses pixels serão carregados automaticamente nas páginas públicas dele (cliente e licenciada).
+Transformar a aba WhatsApp atual em um CRM completo de conversas, inspirado no WA WorkFlow (wawf.app), usando a Evolution API como backend.
 
-### 1. Banco de Dados — Migration
+### O que existe hoje
+- Conexão via QR Code (funcional)
+- Envio individual de mensagem (apenas texto, sem histórico)
+- Envio em massa (bulk)
+- Templates com placeholders
+- Gerenciamento de clientes manual
 
-Adicionar duas colunas à tabela `consultants`:
+### O que será construído
 
-```sql
-ALTER TABLE public.consultants
-  ADD COLUMN facebook_pixel_id text,
-  ADD COLUMN google_analytics_id text;
+**Fase 1 - Chat em Tempo Real (core)**
+- Interface de chat estilo WhatsApp: lista de conversas à esquerda, mensagens à direita
+- Buscar conversas reais via `POST /chat/findChats/{instance}`
+- Buscar mensagens de cada conversa via `POST /chat/findMessages/{instance}` com `remoteJid`
+- Buscar contatos via `POST /chat/findContacts/{instance}`
+- Enviar texto, imagens, áudio, documentos via endpoints de mensagem
+- Polling periódico para novas mensagens (a cada 5s na conversa ativa)
+- Indicadores de lido/entregue, timestamps, bolhas de mensagem estilizadas
+
+**Fase 2 - Quick Replies (Respostas Rápidas)**
+- Atalho "/" no campo de mensagem para abrir menu de templates
+- Seleção rápida de template com preview
+- Aplicação automática de variáveis do contato selecionado
+
+**Fase 3 - CRM Kanban**
+- Board com colunas arrastáveis: Novo Lead, Em Contato, Negociação, Fechado, Perdido
+- Cada card = um contato com última mensagem, valor da conta, tags
+- Arrastar entre colunas para mudar status
+- Nova tabela Supabase `crm_deals` (consultant_id, customer_id, stage, notes, created_at)
+
+**Fase 4 - Etiquetas e Filtros**
+- Tags coloridas nos contatos (Ex: "Interessado", "Retornar", "VIP")
+- Filtrar conversas por tag, por não-lidos, por data
+- Nova tabela Supabase `customer_tags`
+
+**Fase 5 - Mensagens Agendadas**
+- Agendar envio de mensagem para data/hora específica
+- Lista de mensagens agendadas com opção de cancelar
+- Nova tabela Supabase `scheduled_messages`
+- Edge function com cron para processar envios
+
+**Fase 6 - Envio de Mídia**
+- Enviar imagens via `POST /message/sendMedia/{instance}`
+- Enviar áudio via `POST /message/sendWhatsAppAudio/{instance}`
+- Enviar documentos (PDF, etc.)
+- Upload de arquivos no campo de mensagem
+- Preview de mídia recebida no chat
+
+### Arquitetura Técnica
+
+```text
+┌─────────────────────────────────────────────┐
+│              WhatsAppTab (orquestrador)      │
+├─────────┬───────────────────────────────────┤
+│ Sidebar │  ChatView / KanbanBoard           │
+│ ─────── │  ─────────────────────            │
+│ Search  │  MessageBubble[]                  │
+│ Filters │  MediaPreview                     │
+│ ChatList│  QuickReplyMenu                   │
+│ Tags    │  MessageComposer (text+media)     │
+│         │  ScheduleModal                    │
+├─────────┴───────────────────────────────────┤
+│ ConnectionPanel (existente, compactado)     │
+└─────────────────────────────────────────────┘
 ```
 
-### 2. Tipo TypeScript
+**Novos arquivos:**
+- `src/components/whatsapp/ChatSidebar.tsx` - Lista de conversas com busca e filtros
+- `src/components/whatsapp/ChatView.tsx` - Área de mensagens com bolhas
+- `src/components/whatsapp/MessageBubble.tsx` - Bolha individual (texto/mídia)
+- `src/components/whatsapp/MessageComposer.tsx` - Campo de envio com mídia e quick reply
+- `src/components/whatsapp/QuickReplyMenu.tsx` - Menu de atalhos "/" 
+- `src/components/whatsapp/KanbanBoard.tsx` - CRM visual drag-and-drop
+- `src/components/whatsapp/KanbanCard.tsx` - Card de contato no kanban
+- `src/components/whatsapp/TagManager.tsx` - Gerenciar etiquetas
+- `src/components/whatsapp/ScheduleModal.tsx` - Modal de agendamento
+- `src/hooks/useChats.ts` - Hook para buscar/atualizar conversas
+- `src/hooks/useMessages.ts` - Hook para mensagens de uma conversa
 
-Atualizar `src/types/consultant.ts` para incluir os novos campos:
-- `facebook_pixel_id: string | null`
-- `google_analytics_id: string | null`
+**Novos endpoints no `evolutionApi.ts`:**
+- `findChats(instanceName)` 
+- `findMessages(instanceName, remoteJid)`
+- `findContacts(instanceName)`
+- `sendMedia(instanceName, phone, mediaUrl, caption, mediaType)`
+- `sendAudio(instanceName, phone, audioUrl)`
+- `sendDocument(instanceName, phone, docUrl, fileName)`
 
-### 3. Painel Admin — Aba Dados
+**Novas tabelas Supabase (migrations):**
+- `crm_deals` - Kanban stages por cliente
+- `customer_tags` - Etiquetas coloridas
+- `scheduled_messages` - Mensagens agendadas
 
-Adicionar dois campos de input no formulário:
-- **Facebook Pixel ID** — placeholder: "Ex: 123456789012345"
-- **Google Analytics ID (GA4)** — placeholder: "Ex: G-XXXXXXXXXX"
+**Novas edge functions:**
+- `process-scheduled-messages` - Cron para enviar mensagens agendadas
 
-Salvar junto com os demais dados no upsert.
+### Fluxo de Navegação
 
-### 4. Componente `PixelInjector`
+A aba WhatsApp terá sub-abas internas:
+1. **Conversas** - Chat em tempo real (tela principal)
+2. **CRM** - Kanban board
+3. **Envio em Massa** - Painel existente melhorado
+4. **Templates** - Gerenciador existente
+5. **Agendamentos** - Lista de mensagens programadas
 
-Criar `src/components/PixelInjector.tsx` que recebe `facebookPixelId` e `googleAnalyticsId` como props e:
-- Injeta o script do **Meta Pixel** (`fbq('init', id)` + `fbq('track', 'PageView')`) no `<head>`
-- Injeta o script do **Google Analytics** (`gtag.js`) no `<head>`
-- Remove os scripts ao desmontar (cleanup)
+### Ordem de Implementação
 
-### 5. Páginas Públicas
-
-Adicionar `<PixelInjector>` em:
-- `src/pages/ConsultantPage.tsx`
-- `src/pages/LicenciadaPage.tsx`
-
-Passando os IDs do consultor carregado.
-
-### 6. Outras melhorias possíveis (sugestões)
-
-| Ideia | Descrição |
-|-------|-----------|
-| **TikTok Pixel** | Mesmo padrão — campo extra + injeção de script |
-| **Cor personalizada** | Consultor escolhe cor primária da página |
-| **Mensagem WhatsApp customizada** | Consultor edita o texto padrão do WhatsApp |
-| **Domínio personalizado** | Consultor usa seu próprio domínio apontando para a página |
-
-### Arquivos a criar/editar
-
-| Ação | Arquivo |
-|------|---------|
-| Migration | Adicionar colunas `facebook_pixel_id`, `google_analytics_id` |
-| Editar | `src/types/consultant.ts` |
-| Criar | `src/components/PixelInjector.tsx` |
-| Editar | `src/pages/Admin.tsx` (formulário) |
-| Editar | `src/pages/ConsultantPage.tsx` |
-| Editar | `src/pages/LicenciadaPage.tsx` |
+1. Expandir `evolutionApi.ts` com novos endpoints
+2. Criar hooks `useChats` e `useMessages`
+3. Construir `ChatSidebar` + `ChatView` + `MessageBubble` + `MessageComposer`
+4. Integrar Quick Reply no compositor
+5. Criar migrations Supabase para novas tabelas
+6. Construir `KanbanBoard` + `KanbanCard`
+7. Adicionar `TagManager` e filtros
+8. Implementar `ScheduleModal` + edge function
+9. Adicionar envio de mídia ao compositor
+10. Refatorar `WhatsAppTab` com sub-navegação
 
