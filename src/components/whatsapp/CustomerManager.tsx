@@ -397,6 +397,49 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
               if (file) handleImportExcel(file);
             }}
           />
+        </div>
+
+        {/* Import Progress */}
+        {importing && (
+          <div className="px-5 py-3 border-b border-border/50">
+            <div className="flex items-center gap-3 mb-2">
+              <FileSpreadsheet className="w-4 h-4 text-primary animate-pulse" />
+              <span className="text-xs font-medium text-foreground">
+                Importando... {importProgress.current}/{importProgress.total}
+              </span>
+            </div>
+            <div className="w-full h-2 bg-secondary/50 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary rounded-full transition-all duration-300"
+                style={{ width: `${importProgress.total > 0 ? (importProgress.current / importProgress.total) * 100 : 0}%` }}
+              />
+            </div>
+            <div className="flex gap-4 mt-1.5 text-[10px] text-muted-foreground">
+              <span className="text-green-400">{importProgress.newCount} novos</span>
+              <span className="text-blue-400">{importProgress.updatedCount} atualizados</span>
+              {importProgress.errorCount > 0 && <span className="text-red-400">{importProgress.errorCount} erros</span>}
+            </div>
+          </div>
+        )}
+
+        {showImportResult && !importing && (
+          <div className="px-5 py-3 border-b border-border/50 bg-green-500/5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-green-400" />
+                <span className="text-xs font-medium text-foreground">
+                  Importação concluída: {importProgress.newCount} novos, {importProgress.updatedCount} atualizados
+                  {importProgress.errorCount > 0 && `, ${importProgress.errorCount} erros`}
+                </span>
+              </div>
+              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setShowImportResult(false)}>
+                <X className="w-3 h-3" />
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Search */}
         <div className="px-5 pt-4 pb-3">
           <div className="relative">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
