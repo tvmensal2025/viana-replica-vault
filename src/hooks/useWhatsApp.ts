@@ -108,7 +108,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
   /* ── Get QR code from instance ── */
   const fetchQr = useCallback(async (name: string): Promise<string | null> => {
     try {
-      const resp = await withTimeout(connectInstance(name), 35000);
+      const resp = await withTimeout(connectInstance(name), 25000);
       return resp?.base64 || null;
     } catch {
       return null;
