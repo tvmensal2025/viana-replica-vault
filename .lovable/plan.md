@@ -1,58 +1,46 @@
 
 
-# Plano: Importação de Excel (.xlsx) do Mapa de Clientes iGreen
+## Analysis: 401 "Token de autenticação inválido ou ausente"
 
-## O que será feito
+### Root Cause
 
-Adicionar um botão **"Importar Excel"** na tela de Clientes que aceita o arquivo `.xlsx` exportado do portal iGreen (`escritorio.igreenenergy.com.br/mapa-clientes`) e importa/atualiza os clientes no banco de dados.
+The `request()` function in `evolutionApi.ts` (line 38) has:
+```typescript
+Authorization: `Bearer ${token || SUPABASE_ANON_KEY}`
+```
 
-## Colunas do Excel iGreen (confirmadas pelo arquivo enviado)
+When `supabase.auth.getSession()` returns no session (race condition during login/redirect), `token` is `undefined`, so the **anon key** is sent as a Bearer token. The edge function then calls `getUser(anonKey)` which fails → 401.
 
-| Coluna Excel | Campo no banco (`customers`) |
-|---|---|
-| Nome do Cliente | `name` |
-| Consumo Médio | `media_consumo` |
-| Celular | `phone_whatsapp` |
-| Documento | `cpf` |
-| Instalação | `numero_instalacao` |
-| Cidade | `address_city` |
-| UF | `address_state` |
-| Distribuidora | `distribuidora` |
-| E-mail | `email` |
-| Desconto Cliente | `desconto_cliente` |
-| Data Nascimento | `data_nascimento` |
-| Andamento | `status` (mapeado) |
-| Código | usado como referência |
+This happens in two scenarios:
+1. **`preCreateWhatsAppInstance`** fires on Auth page before session is fully propagated
+2. **Admin page loads** and WhatsApp hook makes API calls before the auth state change fires
 
-## Fluxo do usuário
+The logs confirm the proxy works fine once authenticated (many 200s). The 401 is a timing issue.
 
-1. Clica em **"Importar Excel"** (botão ao lado de "Adicionar Cliente")
-2. Seleciona o arquivo `.xlsx`
-3. Sistema lê no browser com a lib `xlsx` (SheetJS)
-4. Para cada linha: upsert em `customers` por `phone_whatsapp` (evita duplicatas)
-5. Clientes novos ganham um `crm_deals` vinculado ao consultor com stage `novo_lead`
-6. Exibe resumo: X novos, Y atualizados, Z erros
+### Plan
 
-## Detalhes técnicos
+#### 1. Guard `request()` against missing session (evolutionApi.ts)
+- Instead of falling back to `SUPABASE_ANON_KEY`, throw an early error if no session exists
+- This prevents sending invalid tokens and surfaces a clear message
 
-### Dependência
-- Instalar `xlsx` (SheetJS) para parse de Excel no browser
+#### 2. Add session-ready check in `preCreateWhatsAppInstance` (preCreateInstance.ts)
+- Verify session exists before calling `createInstance`
+- If no session, skip silently (the hook will handle it later)
 
-### Arquivos modificados
-1. **`src/components/whatsapp/CustomerManager.tsx`**
-   - Adicionar botão "Importar Excel" com ícone Upload
-   - Criar dialog com input de arquivo `.xlsx`
-   - Lógica de parse: ler sheet, mapear colunas, normalizar telefone
-   - Upsert em `customers` por `phone_whatsapp`
-   - Criar `crm_deals` para clientes novos
-   - Progress bar + toast com resumo
+#### 3. Guard WhatsAppTab rendering (WhatsAppTab.tsx)
+- Only render WhatsApp components when `consultantId` is truthy (already partially done)
+- Ensure no API calls fire before authentication is confirmed
 
-### Mapeamento de status (Andamento → status)
-- "Validado" → `approved`
-- "Devolutiva" → `rejected`
-- Qualquer outro → `pending`
+### Technical Details
 
-### Normalização do telefone
-- Remover formatação: `(19) 98609-3713` → `5519986093713`
-- Prefixar `55` se não tiver código do país
+**File: `src/services/evolutionApi.ts`** (lines 30-42)
+- Change fallback: if no token from `getSession()`, throw a descriptive error instead of sending anon key
+- This prevents the 401 entirely and lets callers handle it gracefully
+
+**File: `src/services/preCreateInstance.ts`** (lines 19-42)  
+- Add `supabase.auth.getSession()` check at the top
+- Return early if no valid session
+
+**File: `src/pages/Auth.tsx`** (lines 22, 28)
+- Wrap `preCreateWhatsAppInstance` calls with a small delay or session verification to avoid race condition
 
