@@ -20,6 +20,7 @@ interface ChatViewProps {
   chat: ChatItem | null;
   templates: MessageTemplate[];
   consultantId: string;
+  initialMessage?: string | null;
 }
 
 export function ChatView({ instanceName, chat, templates, consultantId }: ChatViewProps) {
