@@ -281,7 +281,7 @@ export async function sendDocument(
 export async function markAsRead(instanceName: string, remoteJid: string) {
   return request<void>(
     `chat/markMessageAsRead/${instanceName}`,
-    "PUT",
+    "POST",
     { readMessages: [{ remoteJid }] }
   );
 }

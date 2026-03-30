@@ -173,7 +173,7 @@ Deno.serve(async (req) => {
     if (!portalEmail || !portalPassword) {
       return new Response(
         JSON.stringify({ success: false, error: "Credenciais do portal iGreen não configuradas. Preencha na aba Dados." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -191,8 +191,8 @@ Deno.serve(async (req) => {
       const errText = await loginRes.text();
       console.error(`Login failed: ${loginRes.status} - ${errText}`);
       return new Response(
-        JSON.stringify({ success: false, error: `Login falhou (${loginRes.status}). Verifique email e senha.` }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ success: false, error: "Login no portal iGreen falhou. Verifique email e senha informados na aba Dados." }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -201,8 +201,8 @@ Deno.serve(async (req) => {
     if (!token) {
       console.error("No token in login response:", Object.keys(loginData));
       return new Response(
-        JSON.stringify({ success: false, error: "Login retornou sem token de acesso." }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ success: false, error: "Login no portal iGreen retornou sem token de acesso." }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
     console.log("Login successful, token obtained.");
