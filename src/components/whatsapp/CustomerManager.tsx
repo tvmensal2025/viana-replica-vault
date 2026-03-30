@@ -595,10 +595,17 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
                 Clientes
                 <span className="ml-2 text-sm font-normal text-muted-foreground">({customers.length})</span>
               </h3>
-              <p className="text-[11px] text-muted-foreground">Gerencie sua carteira de clientes</p>
+              <p className="text-[11px] text-muted-foreground">
+                Gerencie sua carteira de clientes
+                {lastSync && <span className="ml-2 text-muted-foreground/60">• Última sync: {new Date(lastSync).toLocaleString("pt-BR")}</span>}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Button onClick={handleSyncIgreen} size="sm" variant="outline" className="gap-2 rounded-xl font-semibold h-9 px-4 border-green-500/20 text-green-600 hover:bg-green-500/10" disabled={syncing}>
+              {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Cloud className="w-4 h-4" />}
+              Sincronizar iGreen
+            </Button>
             <Button onClick={() => fileInputRef.current?.click()} size="sm" variant="outline" className="gap-2 rounded-xl font-semibold h-9 px-4 border-primary/20 text-primary hover:bg-primary/10" disabled={importing || parsing}>
               {(importing || parsing) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
               Importar Excel
