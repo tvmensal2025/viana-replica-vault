@@ -98,7 +98,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
   /* ── Check if currently connected ── */
   const checkState = useCallback(async (name: string): Promise<"open" | "close" | "connecting"> => {
     try {
-      const result = await withTimeout(getConnectionState(name), 12000);
+      const result = await withTimeout(getConnectionState(name), 30000);
       return result?.state || "close";
     } catch {
       return "close";
