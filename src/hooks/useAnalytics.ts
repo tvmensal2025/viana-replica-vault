@@ -119,9 +119,13 @@ export function useAnalytics(consultantId: string | null) {
       // Clicks
       const totalClicks = events.filter((e) => e.event_type === "click").length;
       const clicksByTarget: Record<string, number> = {};
+      const clicksByPage: Record<string, Record<string, number>> = { client: {}, licenciada: {} };
       for (const e of events) {
         if (e.event_type === "click" && e.event_target) {
           clicksByTarget[e.event_target] = (clicksByTarget[e.event_target] || 0) + 1;
+          const page = e.page_type === "licenciada" ? "licenciada" : "client";
+          if (!clicksByPage[page][e.event_target]) clicksByPage[page][e.event_target] = 0;
+          clicksByPage[page][e.event_target]++;
         }
       }
 
@@ -200,11 +204,10 @@ export function useAnalytics(consultantId: string | null) {
         }))
         .sort((a, b) => b.count - a.count);
 
-      // Total kW and bill value
+      // Total kW (media_consumo) — used as the unified consumption metric
       const totalKw = customers.reduce((sum, c) => sum + (Number(c.media_consumo) || 0), 0);
-      const totalBillValue = customers.reduce((sum, c) => sum + (Number(c.electricity_bill_value) || 0), 0);
-      const customersWithBill = customers.filter((c) => Number(c.electricity_bill_value) > 0);
-      const avgBillValue = customersWithBill.length > 0 ? totalBillValue / customersWithBill.length : 0;
+      const customersWithConsumption = customers.filter((c) => Number(c.media_consumo) > 0);
+      const avgKw = customersWithConsumption.length > 0 ? totalKw / customersWithConsumption.length : 0;
 
       // Customer consumption chart (top 15)
       const customerConsumption: CustomerConsumption[] = customers
@@ -250,16 +253,15 @@ export function useAnalytics(consultantId: string | null) {
         total,
         totalClicks,
         clicksByTarget,
+        clicksByPage,
         daily,
         hourly,
         devices,
         utmSources,
-        // New customer metrics
         totalCustomers,
         customersByStatus,
         totalKw,
-        totalBillValue,
-        avgBillValue,
+        avgKw,
         customerConsumption,
         weeklyNewCustomers,
         conversionRate,
