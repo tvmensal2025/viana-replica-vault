@@ -263,6 +263,23 @@ export function ConnectionPanel({
                 </span>
               </div>
             </div>
+
+            {qrGeneratedAt && !qrExpired && (
+              <QrTimer generatedAt={qrGeneratedAt} onExpired={handleQrExpired} />
+            )}
+
+            <div className="flex items-center gap-2.5">
+              <div className={`w-2 h-2 rounded-full ${qrExpired ? "bg-yellow-400" : "bg-green-400"} animate-pulse`} />
+              <p className="text-sm text-muted-foreground font-medium">
+                {qrExpired ? "Renovando QR Code..." : "Aguardando leitura do QR Code..."}
+              </p>
+            </div>
+
+            {onRefreshQr && (
+              <Button
+                onClick={onRefreshQr}
+                variant="ghost"
+                size="sm"
                 className="gap-2 text-xs text-muted-foreground hover:text-foreground"
               >
                 <RefreshCw className="w-3.5 h-3.5" /> Gerar novo QR
