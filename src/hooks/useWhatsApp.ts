@@ -300,6 +300,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       addLog("❌ " + sanitize(err instanceof Error ? err.message : "Erro"));
     } finally {
       setIsLoading(false);
+      lockRef.current = false;
     }
   }, [instanceName, consultantId, clearPolling, addLog, deleteInstanceDb]);
 
