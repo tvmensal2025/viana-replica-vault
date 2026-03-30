@@ -71,6 +71,18 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
 
   const selectedChat = chats.find((c) => c.remoteJid === selectedChatJid) || null;
 
+  const handleOpenChatFromCustomer = useCallback((phone: string, suggestedMessage?: string) => {
+    setActiveSubTab("conversas");
+    const cleanPhone = phone.replace(/\D/g, "");
+    const match = chats.find((c) => c.remoteJid.includes(cleanPhone));
+    if (match) {
+      setSelectedChatJid(match.remoteJid);
+    } else {
+      setSelectedChatJid(null);
+    }
+    setPendingMessage(suggestedMessage || null);
+  }, [chats]);
+
   const fetchCustomers = useCallback(async () => {
     try {
       const { data } = await supabase
