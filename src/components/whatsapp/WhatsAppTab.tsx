@@ -216,7 +216,7 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
                 chats={chats}
                 isLoading={chatsLoading}
                 selectedJid={selectedChatJid}
-                onSelectChat={setSelectedChatJid}
+                onSelectChat={handleSelectChat}
               />
             </div>
               <ChatView
