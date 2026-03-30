@@ -96,6 +96,7 @@ export function useAnalytics(consultantId: string | null) {
       const views = viewsRes.data;
       const events = eventsRes.data;
       const deals = dealsRes.data;
+      const licenciados = licenciadosRes.data;
 
       // Get unique customer IDs from deals
       const customerIds = [...new Set(deals.map((d) => d.customer_id).filter(Boolean))] as string[];
