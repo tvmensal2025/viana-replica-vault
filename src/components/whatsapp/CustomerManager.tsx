@@ -5,6 +5,7 @@ import {
   ChevronDown, ChevronUp, Pencil, CreditCard, User, Save, X,
   Loader2, Upload, FileSpreadsheet, CheckCircle2, CheckSquare, Square,
   MessageCircle, Copy, Building2, AlertTriangle, FileText, ClipboardCopy,
+  RefreshCw, Cloud,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { Button } from "@/components/ui/button";
@@ -189,11 +190,40 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
   const [selectedPhones, setSelectedPhones] = useState<Set<string>>(new Set());
   const [parsing, setParsing] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [syncing, setSyncing] = useState(false);
+  const [lastSync, setLastSync] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  // Fetch last sync timestamp
+  useEffect(() => {
+    supabase.from("settings").select("value").eq("key", "last_igreen_sync").maybeSingle().then(({ data }) => {
+      if (data?.value) setLastSync(data.value);
+    });
+  }, []);
+
+  async function handleSyncIgreen() {
+    setSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("sync-igreen-customers", {
+        body: { consultant_id: consultantId },
+      });
+      if (error) throw error;
+      if (data?.success) {
+        toast({ title: "✅ Sincronização concluída!", description: `${data.processed} clientes processados, ${data.updated} atualizados.` });
+        setLastSync(data.synced_at);
+        onCustomersChange();
+      } else {
+        toast({ title: "⚠️ Problema na sincronização", description: data?.error || "Erro desconhecido", variant: "destructive" });
+      }
+    } catch (err) {
+      toast({ title: "Erro na sincronização", description: err instanceof Error ? err.message : "Erro", variant: "destructive" });
+    } finally {
+      setSyncing(false);
+    }
+  }
   useEffect(() => {
     if (!instanceName) return;
     const fetchPics = async () => {
@@ -565,10 +595,17 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
                 Clientes
                 <span className="ml-2 text-sm font-normal text-muted-foreground">({customers.length})</span>
               </h3>
-              <p className="text-[11px] text-muted-foreground">Gerencie sua carteira de clientes</p>
+              <p className="text-[11px] text-muted-foreground">
+                Gerencie sua carteira de clientes
+                {lastSync && <span className="ml-2 text-muted-foreground/60">• Última sync: {new Date(lastSync).toLocaleString("pt-BR")}</span>}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Button onClick={handleSyncIgreen} size="sm" variant="outline" className="gap-2 rounded-xl font-semibold h-9 px-4 border-green-500/20 text-green-600 hover:bg-green-500/10" disabled={syncing}>
+              {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Cloud className="w-4 h-4" />}
+              Sincronizar iGreen
+            </Button>
             <Button onClick={() => fileInputRef.current?.click()} size="sm" variant="outline" className="gap-2 rounded-xl font-semibold h-9 px-4 border-primary/20 text-primary hover:bg-primary/10" disabled={importing || parsing}>
               {(importing || parsing) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
               Importar Excel
