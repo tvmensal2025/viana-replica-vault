@@ -190,6 +190,8 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
   const [selectedPhones, setSelectedPhones] = useState<Set<string>>(new Set());
   const [parsing, setParsing] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [syncing, setSyncing] = useState(false);
+  const [lastSync, setLastSync] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
