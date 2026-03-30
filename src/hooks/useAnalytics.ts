@@ -28,9 +28,9 @@ export interface CustomerStatusData {
   label: string;
 }
 
-export interface CustomerConsumption {
+export interface TopLicenciado {
   name: string;
-  consumo: number;
+  deals: number;
 }
 
 export interface WeeklyNewCustomers {

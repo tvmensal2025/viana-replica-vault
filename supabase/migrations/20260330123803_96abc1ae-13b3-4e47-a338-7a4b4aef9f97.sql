@@ -1,0 +1,1 @@
+ALTER TABLE public.consultants ADD COLUMN referred_by uuid REFERENCES public.consultants(id);

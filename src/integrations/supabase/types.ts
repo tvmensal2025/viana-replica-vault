@@ -27,6 +27,7 @@ export type Database = {
           name: string
           phone: string
           photo_url: string | null
+          referred_by: string | null
         }
         Insert: {
           cadastro_url: string
@@ -40,6 +41,7 @@ export type Database = {
           name: string
           phone: string
           photo_url?: string | null
+          referred_by?: string | null
         }
         Update: {
           cadastro_url?: string
@@ -53,8 +55,17 @@ export type Database = {
           name?: string
           phone?: string
           photo_url?: string | null
+          referred_by?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "consultants_referred_by_fkey"
+            columns: ["referred_by"]
+            isOneToOne: false
+            referencedRelation: "consultants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       conversations: {
         Row: {
