@@ -710,17 +710,18 @@ const Admin = () => {
 
 /* ── Sub-components ── */
 
-function StatCard({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: number; color: "primary" | "accent" }) {
+function StatCard({ icon, label, value, color, subtitle }: { icon: React.ReactNode; label: string; value: number | string; color: "primary" | "accent"; subtitle?: string }) {
   return (
-    <div className="bg-card rounded-2xl border border-border p-5 flex items-center gap-4">
+    <div className="bg-card rounded-2xl border border-border p-5 flex items-center gap-4 hover:border-primary/30 transition-colors">
       <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
         color === "primary" ? "bg-primary/15 text-primary" : "bg-accent/15 text-accent"
       }`}>
         {icon}
       </div>
       <div>
-        <p className="text-2xl font-bold font-heading text-foreground">{value.toLocaleString("pt-BR")}</p>
+        <p className="text-2xl font-bold font-heading text-foreground">{typeof value === "number" ? value.toLocaleString("pt-BR") : value}</p>
         <p className="text-xs text-muted-foreground">{label}</p>
+        {subtitle && <p className="text-[10px] text-muted-foreground/70 mt-0.5">{subtitle}</p>}
       </div>
     </div>
   );
