@@ -1,60 +1,45 @@
 
 
-# Plano: Sincronização Automática Diária com o Portal iGreen
+## Analysis: WhatsApp Connection Failing After Publish
 
-## Resumo
+### Root Cause
 
-Criar uma Edge Function que faz login no portal `escritorio.igreenenergy.com.br`, extrai os dados de clientes da página "Mapa Clientes", e faz upsert na tabela `customers` do Supabase. Um cron job (pg_cron) dispara essa função todos os dias às 7h da manhã.
+The Edge Function logs reveal the Evolution API server (`igreen-evolution-api.b099mi.easypanel.host`) consistently times out on `instance/connect/` (30s x 3 attempts = 90s) and `instance/connectionState/` (25s). Combined with Supabase Edge Function's ~150s wall-clock limit, the function hits "shutdown" before completing.
 
-## Problema
+There are **4 distinct bugs** causing the failure:
 
-Hoje o consultor precisa entrar no portal iGreen manualmente, exportar dados e importar via Excel. Queremos automatizar isso.
+1. **Race condition**: `preCreateInstance` (Auth.tsx login) and `useWhatsApp.init()` both fire simultaneously, doubling API load on the already-slow server
+2. **Lock never released**: `lockRef.current = true` is set at line 171, but success paths (`return` at lines 201, 239) exit without resetting it. After first connection attempt, `createAndConnect` / `reconnect` are permanently blocked
+3. **Excessive proxy timeouts**: `instance/connect/` uses 30s x 3 attempts = 90s in the Edge Function, risking the 150s platform limit and causing "shutdown" events
+4. **No graceful connect fallback**: `connectionState/` has a timeout fallback (returns `{state: "connecting"}`), but `instance/connect/` returns 504 on timeout, crashing the flow
 
-## Abordagem Técnica
+### Plan
 
-### 1. Armazenar credenciais do portal iGreen
+#### 1. Fix lock release bug in `useWhatsApp.ts`
+- Add `finally` block to `createAndConnect` to always release `lockRef.current = false` and `setIsLoading(false)`
+- Ensure `disconnect` also resets `lockRef`
 
-Salvar as credenciais como secrets no Supabase:
-- `IGREEN_PORTAL_EMAIL` — email de login do portal
-- `IGREEN_PORTAL_PASSWORD` — senha de login do portal
+#### 2. Eliminate race condition
+- Remove `preCreateWhatsAppInstance` call from `Auth.tsx` entirely — `useWhatsApp` already handles creation on mount
+- Delete unused `preCreateInstance.ts` service
 
-Você fornecerá esses valores quando solicitado.
+#### 3. Reduce proxy timeouts in `evolution-proxy/index.ts`
+- `instance/connect/`: reduce to 20s timeout, 2 attempts max (40s total vs 90s)
+- `instance/connectionState/`: reduce to 15s, 2 attempts (vs 25s x 3)
+- `instance/create`: keep at 60s x 1 attempt (no retry — idempotent via 403 handling)
+- Add graceful fallback for `instance/connect/` timeout: return `{base64: null, timeout: true}` with status 200 instead of 504
 
-### 2. Criar Edge Function `sync-igreen-customers`
+#### 4. Make frontend resilient to slow server
+- In `useWhatsApp.createAndConnect`: if `fetchQr` returns null due to timeout, show a user-friendly message with retry button instead of error state
+- Reduce `withTimeout` on connect calls to 25s (matching new proxy limits)
+- Auto-retry QR fetch after 5s delay on timeout (up to 2 retries before showing manual button)
 
-A função fará:
+#### 5. Redeploy Edge Function
+- Deploy updated `evolution-proxy` with reduced timeouts and graceful fallbacks
 
-1. **Login**: POST para o endpoint de autenticação do portal iGreen, capturando o cookie/token de sessão
-2. **Scraping**: GET na página `/mapa-clientes` (ou API interna se existir) usando a sessão autenticada
-3. **Parse**: Extrair dados de cada cliente (nome, telefone, CPF, cidade, distribuidora, andamento, devolutiva, etc.)
-4. **Upsert**: Para cada cliente, fazer upsert na tabela `customers` usando `igreen_code` ou `cpf` como chave de deduplicação, vinculando ao `consultant_id`
-
-A função reutilizará o mesmo mapeamento de campos que já existe na importação Excel.
-
-### 3. Configurar pg_cron para execução diária às 7h
-
-Usar `pg_cron` + `pg_net` para chamar a Edge Function automaticamente:
-- Schedule: `0 10 * * *` (7h Brasília = 10h UTC)
-- Chamará a função via HTTP POST
-
-### 4. UI: Botão de sincronização manual + log
-
-Adicionar na aba Clientes:
-- Botão "Sincronizar com iGreen" para disparo manual
-- Indicador da última sincronização (timestamp salvo em `consultants` ou tabela auxiliar)
-
-## Risco e Alternativa
-
-O portal iGreen pode não ter uma API pública — nesse caso usaremos scraping HTML. Se o portal bloquear requisições de servidores, uma alternativa seria usar Firecrawl (já disponível como conector) para extrair os dados via scraping gerenciado.
-
-**Próximo passo**: Precisarei acessar o portal para entender a estrutura de login e da página de dados. Você pode me fornecer a URL exata de login e eu faço a análise?
-
-## Arquivos a criar/modificar
-
-| Arquivo | Ação |
-|---------|------|
-| `supabase/functions/sync-igreen-customers/index.ts` | Criar — lógica de login, scraping e upsert |
-| `src/components/whatsapp/CustomerManager.tsx` | Modificar — botão de sync manual |
-| Supabase secrets | Adicionar `IGREEN_PORTAL_EMAIL`, `IGREEN_PORTAL_PASSWORD` |
-| SQL (pg_cron) | Agendar execução diária às 7h |
+### Files Changed
+- `src/hooks/useWhatsApp.ts` — fix lock, remove preCreate dependency, add resilience
+- `src/pages/Auth.tsx` — remove `preCreateWhatsAppInstance` import and calls
+- `src/services/preCreateInstance.ts` — delete file
+- `supabase/functions/evolution-proxy/index.ts` — reduce timeouts, add connect fallback
 
