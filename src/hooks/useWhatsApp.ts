@@ -219,7 +219,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
               const response = await withTimeout(createInstance(name), 35000);
               // If create timed out gracefully (proxy returns {timeout:true}), 
               // the instance may have been created anyway — try connect
-              if (response?.timeout) {
+              if ((response as any)?.timeout) {
                 addLog("⏳ Servidor lento, verificando se instância foi criada...");
                 await new Promise((r) => setTimeout(r, 3000));
                 qr = await fetchQr(name);
