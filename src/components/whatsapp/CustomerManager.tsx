@@ -47,7 +47,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { getProfilePicture } from "@/services/evolutionApi";
 import { AddCustomerDialog } from "./AddCustomerDialog";
-import type { TablesUpdate } from "@/integrations/supabase/types";
+import type { TablesUpdate, TablesInsert } from "@/integrations/supabase/types";
 
 interface Customer {
   id: string;
@@ -219,23 +219,58 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
   function normalizePhone(raw: string): string {
     const digits = String(raw || "").replace(/\D/g, "");
     if (digits.length === 0) return "";
+    // Already has country code 55
     if (digits.startsWith("55") && digits.length >= 12) return digits;
-    if (digits.length === 10 || digits.length === 11) return `55${digits}`;
-    return digits;
+    // 11 digits = DDD + 9 + number (mobile)
+    if (digits.length === 11) return `55${digits}`;
+    // 10 digits = DDD + number (landline or old mobile)
+    if (digits.length === 10) return `55${digits}`;
+    // 9 digits = missing DDD, can't normalize reliably
+    if (digits.length === 9) return "";
+    // 8 digits = old format without DDD
+    if (digits.length === 8) return "";
+    // International or already complete
+    if (digits.length >= 12) return digits;
+    return "";
   }
 
   function mapStatus(andamento: string | undefined): string {
     if (!andamento) return "pending";
     const lower = andamento.toLowerCase().trim();
-    if (lower === "validado" || lower === "aprovado") return "approved";
-    if (lower === "devolutiva" || lower === "reprovado") return "rejected";
+    if (lower === "validado" || lower === "aprovado" || lower === "ativo") return "approved";
+    if (lower === "devolutiva" || lower === "reprovado" || lower === "cancelado") return "rejected";
+    if (lower === "pendente" || lower === "em análise" || lower === "em analise") return "pending";
+    if (lower === "lead" || lower === "novo") return "lead";
     return "pending";
+  }
+
+  function safeString(val: unknown): string | null {
+    if (val == null || val === "" || val === undefined) return null;
+    const s = String(val).trim();
+    return s.length > 0 ? s : null;
+  }
+
+  function safeNumber(val: unknown): number | null {
+    if (val == null || val === "" || val === undefined) return null;
+    const n = parseFloat(String(val).replace(",", ".").replace("%", ""));
+    return isNaN(n) ? null : n;
+  }
+
+  function findColumnValue(row: Record<string, unknown>, ...keys: string[]): unknown {
+    for (const key of keys) {
+      if (row[key] != null && row[key] !== "") return row[key];
+      // Case-insensitive fallback
+      const found = Object.keys(row).find((k) => k.toLowerCase().trim() === key.toLowerCase().trim());
+      if (found && row[found] != null && row[found] !== "") return row[found];
+    }
+    return null;
   }
 
   async function handleImportExcel(file: File) {
     setImporting(true);
     setShowImportResult(false);
     const progress = { current: 0, total: 0, newCount: 0, updatedCount: 0, errorCount: 0 };
+    const seenPhones = new Set<string>(); // prevent duplicates within same batch
 
     try {
       const data = await file.arrayBuffer();
@@ -249,28 +284,55 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
       for (const row of rows) {
         progress.current++;
 
-        const phoneRaw = String(row["Celular"] || row["celular"] || row["Telefone"] || row["telefone"] || "");
-        const phone = normalizePhone(phoneRaw);
-        if (!phone || phone.length < 10) {
+        const phoneRaw = findColumnValue(row, "Celular", "celular", "Telefone", "telefone", "WhatsApp", "whatsapp", "Fone", "Phone");
+        const phone = normalizePhone(String(phoneRaw || ""));
+        
+        if (!phone || phone.length < 12) {
           progress.errorCount++;
           setImportProgress({ ...progress });
           continue;
         }
 
-        const customerData = {
+        // Skip duplicates within same import
+        if (seenPhones.has(phone)) {
+          setImportProgress({ ...progress });
+          continue;
+        }
+        seenPhones.add(phone);
+
+        const customerData: Record<string, unknown> = {
           phone_whatsapp: phone,
-          name: String(row["Nome do Cliente"] || row["Nome"] || row["nome"] || "").trim() || null,
-          media_consumo: row["Consumo Médio"] != null ? parseFloat(String(row["Consumo Médio"]).replace(",", ".")) || null : null,
-          cpf: row["Documento"] ? String(row["Documento"]).replace(/\D/g, "") : null,
-          numero_instalacao: row["Instalação"] ? String(row["Instalação"]).trim() : (row["Código"] ? String(row["Código"]).trim() : null),
-          address_city: row["Cidade"] ? String(row["Cidade"]).trim() : null,
-          address_state: row["UF"] ? String(row["UF"]).trim().toUpperCase() : null,
-          distribuidora: row["Distribuidora"] ? String(row["Distribuidora"]).trim() : null,
-          email: row["E-mail"] || row["Email"] ? String(row["E-mail"] || row["Email"]).trim() : null,
-          desconto_cliente: row["Desconto Cliente"] != null ? parseFloat(String(row["Desconto Cliente"]).replace(",", ".").replace("%", "")) || null : null,
-          data_nascimento: row["Data Nascimento"] ? String(row["Data Nascimento"]).trim() : null,
-          status: mapStatus(String(row["Andamento"] || "")),
+          name: safeString(findColumnValue(row, "Nome do Cliente", "Nome", "nome", "NOME", "Cliente", "Name")),
+          status: mapStatus(safeString(findColumnValue(row, "Andamento", "Status", "status")) || undefined),
         };
+
+        // Only add optional fields if they have values (avoid overwriting with null on updates)
+        const mediaConsumo = safeNumber(findColumnValue(row, "Consumo Médio", "Consumo Medio", "Consumo", "consumo"));
+        if (mediaConsumo != null) customerData.media_consumo = mediaConsumo;
+
+        const cpf = safeString(findColumnValue(row, "Documento", "CPF", "cpf", "CNPJ"));
+        if (cpf) customerData.cpf = cpf.replace(/\D/g, "");
+
+        const instalacao = safeString(findColumnValue(row, "Instalação", "Instalacao", "Código", "Codigo", "Nº Instalação"));
+        if (instalacao) customerData.numero_instalacao = instalacao;
+
+        const cidade = safeString(findColumnValue(row, "Cidade", "cidade", "Municipio", "Município"));
+        if (cidade) customerData.address_city = cidade;
+
+        const uf = safeString(findColumnValue(row, "UF", "uf", "Estado", "estado"));
+        if (uf) customerData.address_state = uf.toUpperCase();
+
+        const distribuidora = safeString(findColumnValue(row, "Distribuidora", "distribuidora"));
+        if (distribuidora) customerData.distribuidora = distribuidora;
+
+        const email = safeString(findColumnValue(row, "E-mail", "Email", "email", "EMAIL"));
+        if (email) customerData.email = email;
+
+        const desconto = safeNumber(findColumnValue(row, "Desconto Cliente", "Desconto", "desconto"));
+        if (desconto != null) customerData.desconto_cliente = desconto;
+
+        const nascimento = safeString(findColumnValue(row, "Data Nascimento", "Nascimento", "data_nascimento"));
+        if (nascimento) customerData.data_nascimento = nascimento;
 
         try {
           // Check if customer exists by phone
@@ -281,18 +343,19 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
             .maybeSingle();
 
           if (existing) {
-            // Update existing
+            // Update existing — only non-null fields
             const { error } = await supabase
               .from("customers")
-              .update(customerData)
+              .update(customerData as TablesUpdate<"customers">)
               .eq("id", existing.id);
             if (error) throw error;
             progress.updatedCount++;
           } else {
             // Insert new
+            const insertData = { ...customerData, phone_whatsapp: phone } as TablesInsert<"customers">;
             const { data: newCustomer, error } = await supabase
               .from("customers")
-              .insert(customerData)
+              .insert(insertData)
               .select("id")
               .single();
             if (error) throw error;
