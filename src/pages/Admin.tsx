@@ -870,7 +870,7 @@ const Admin = () => {
 
         {/* WhatsApp Tab */}
         {activeTab === "whatsapp" && userId && (
-          <WhatsAppTab userId={userId} />
+          <WhatsAppTab key="whatsapp-tab" userId={userId} />
         )}
 
         {/* Preview Tab */}
