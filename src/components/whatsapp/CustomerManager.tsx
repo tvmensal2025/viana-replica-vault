@@ -935,7 +935,9 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
           </ScrollArea>
 
           <div className="px-6 py-4 border-t border-border flex items-center justify-between">
-            <p className="text-xs text-muted-foreground">Apenas clientes <strong className="text-green-400">novos</strong> serão adicionados.</p>
+            <p className="text-xs text-muted-foreground">
+              <strong className="text-green-400">Novos</strong> serão criados, <strong className="text-yellow-400">existentes</strong> serão atualizados com dados do Excel.
+            </p>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" className="h-9 text-xs px-4" onClick={() => setShowPreview(false)}>Cancelar</Button>
               <Button size="sm" className="h-9 text-xs px-5 gap-1.5 font-semibold shadow-lg shadow-primary/20" onClick={handleConfirmImport} disabled={selectedCount === 0}>
