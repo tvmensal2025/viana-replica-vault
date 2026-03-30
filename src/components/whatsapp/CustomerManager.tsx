@@ -47,7 +47,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { getProfilePicture } from "@/services/evolutionApi";
 import { AddCustomerDialog } from "./AddCustomerDialog";
-import type { TablesUpdate } from "@/integrations/supabase/types";
+import type { TablesUpdate, TablesInsert } from "@/integrations/supabase/types";
 
 interface Customer {
   id: string;
