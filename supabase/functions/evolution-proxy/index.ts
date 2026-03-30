@@ -133,6 +133,14 @@ async function proxyToEvolution(
           });
         }
 
+        // Graceful fallback for create timeout — return 200 so frontend can retry connect
+        if (safePath === "instance/create") {
+          return new Response(JSON.stringify({ instance: { instanceName: "" }, timeout: true }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
         if (attempt < attempts) {
           const delay = getRetryDelay(attempt);
           console.log(`[evolution-proxy] Retrying in ${delay}ms...`);
