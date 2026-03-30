@@ -127,6 +127,7 @@ export function ChatView({ instanceName, chat, templates, consultantId, initialM
       {/* Composer */}
       <MessageComposer
         onSend={sendMessage}
+        initialMessage={initialMessage}
         onSendAudio={async (base64) => {
           if (!chat) return;
           const targetJid = chat.sendTargetJid || chat.remoteJid;

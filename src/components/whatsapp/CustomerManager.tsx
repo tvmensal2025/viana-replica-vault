@@ -482,8 +482,13 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
 
   function handleOpenWhatsApp(customer: Customer) {
     const phone = customer.phone_whatsapp.replace(/\D/g, "");
-    const msg = encodeURIComponent(buildWhatsAppMessage(customer));
-    window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
+    const msg = buildWhatsAppMessage(customer);
+    if (onOpenChat) {
+      onOpenChat(phone, msg);
+    } else {
+      const encoded = encodeURIComponent(msg);
+      window.open(`https://wa.me/${phone}?text=${encoded}`, "_blank");
+    }
   }
 
   const newCount = parsedCustomers.filter((p) => p.isNew).length;
