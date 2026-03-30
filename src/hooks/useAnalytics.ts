@@ -82,9 +82,6 @@ export function useAnalytics(consultantId: string | null) {
           .from("crm_deals")
           .select("customer_id")
           .eq("consultant_id", consultantId!),
-        supabase
-          .from("customers")
-          .select("id, name, status, media_consumo, electricity_bill_value, created_at, registered_by_name, registered_by_igreen_id"),
       ]);
 
       if (viewsRes.error) throw viewsRes.error;
@@ -94,7 +91,21 @@ export function useAnalytics(consultantId: string | null) {
       const views = viewsRes.data;
       const events = eventsRes.data;
       const deals = dealsRes.data;
-      const allCustomers = allCustomersRes.data || [];
+
+      // Fetch ALL customers with pagination to bypass 1000-row limit
+      const allCustomers: typeof viewsRes.data extends any ? any[] : never = [];
+      let page = 0;
+      const pageSize = 1000;
+      while (true) {
+        const { data, error } = await supabase
+          .from("customers")
+          .select("id, name, status, media_consumo, electricity_bill_value, created_at, registered_by_name, registered_by_igreen_id")
+          .range(page * pageSize, (page + 1) * pageSize - 1);
+        if (error) throw error;
+        if (data) allCustomers.push(...data);
+        if (!data || data.length < pageSize) break;
+        page++;
+      }
 
       // Get unique customer IDs from deals
       const customerIds = [...new Set(deals.map((d) => d.customer_id).filter(Boolean))] as string[];
