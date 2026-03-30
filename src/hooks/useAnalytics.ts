@@ -93,7 +93,7 @@ export function useAnalytics(consultantId: string | null) {
       const deals = dealsRes.data;
 
       // Fetch ALL customers with pagination to bypass 1000-row limit
-      const allCustomers: typeof viewsRes.data extends any ? any[] : never = [];
+      const allCustomers: any[] = [];
       let page = 0;
       const pageSize = 1000;
       while (true) {
