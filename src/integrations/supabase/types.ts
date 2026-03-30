@@ -184,6 +184,7 @@ export type Database = {
           address_number: string | null
           address_state: string | null
           address_street: string | null
+          andamento_igreen: string | null
           cep: string | null
           conta_pdf_protegida: boolean | null
           conversation_step: string | null
@@ -192,6 +193,7 @@ export type Database = {
           data_nascimento: string | null
           debitos_aberto: boolean | null
           desconto_cliente: number | null
+          devolutiva: string | null
           distribuidora: string | null
           document_back_url: string | null
           document_front_url: string | null
@@ -207,6 +209,7 @@ export type Database = {
           nome_mae: string | null
           nome_pai: string | null
           numero_instalacao: string | null
+          observacao: string | null
           ocr_confianca: number | null
           otp_code: string | null
           otp_received_at: string | null
@@ -228,6 +231,7 @@ export type Database = {
           address_number?: string | null
           address_state?: string | null
           address_street?: string | null
+          andamento_igreen?: string | null
           cep?: string | null
           conta_pdf_protegida?: boolean | null
           conversation_step?: string | null
@@ -236,6 +240,7 @@ export type Database = {
           data_nascimento?: string | null
           debitos_aberto?: boolean | null
           desconto_cliente?: number | null
+          devolutiva?: string | null
           distribuidora?: string | null
           document_back_url?: string | null
           document_front_url?: string | null
@@ -251,6 +256,7 @@ export type Database = {
           nome_mae?: string | null
           nome_pai?: string | null
           numero_instalacao?: string | null
+          observacao?: string | null
           ocr_confianca?: number | null
           otp_code?: string | null
           otp_received_at?: string | null
@@ -272,6 +278,7 @@ export type Database = {
           address_number?: string | null
           address_state?: string | null
           address_street?: string | null
+          andamento_igreen?: string | null
           cep?: string | null
           conta_pdf_protegida?: boolean | null
           conversation_step?: string | null
@@ -280,6 +287,7 @@ export type Database = {
           data_nascimento?: string | null
           debitos_aberto?: boolean | null
           desconto_cliente?: number | null
+          devolutiva?: string | null
           distribuidora?: string | null
           document_back_url?: string | null
           document_front_url?: string | null
@@ -295,6 +303,7 @@ export type Database = {
           nome_mae?: string | null
           nome_pai?: string | null
           numero_instalacao?: string | null
+          observacao?: string | null
           ocr_confianca?: number | null
           otp_code?: string | null
           otp_received_at?: string | null

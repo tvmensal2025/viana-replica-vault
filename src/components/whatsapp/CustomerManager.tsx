@@ -3,6 +3,7 @@ import {
   UserPlus, Trash2, Users, Search, Phone, Mail, MapPin, Zap,
   ChevronDown, ChevronUp, Pencil, CreditCard, User, Save, X,
   Loader2, Upload, FileSpreadsheet, CheckCircle2, CheckSquare, Square,
+  MessageCircle, Copy, Building2, AlertTriangle, FileText, ClipboardCopy,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,14 @@ interface Customer {
   data_nascimento?: string | null;
   status?: string | null;
   created_at?: string | null;
+  distribuidora?: string | null;
+  registered_by_name?: string | null;
+  registered_by_igreen_id?: string | null;
+  media_consumo?: number | null;
+  desconto_cliente?: number | null;
+  andamento_igreen?: string | null;
+  devolutiva?: string | null;
+  observacao?: string | null;
 }
 
 interface CustomerManagerProps {
@@ -57,8 +66,10 @@ interface ParsedCustomer {
   name: string | null;
   status: string;
   data: Record<string, unknown>;
-  isNew: boolean; // true = not in DB yet
+  isNew: boolean;
 }
+
+type StatusFilter = "all" | "approved" | "pending" | "devolutiva" | "lead" | "rejected";
 
 function formatPhoneDisplay(phone: string): string {
   const d = phone.replace(/\D/g, "");
@@ -99,7 +110,6 @@ function normalizePhone(raw: string): string {
   return "";
 }
 
-// Allowed DB values: pending, data_complete, registered_igreen, contract_sent, approved, rejected, lead
 function mapStatus(andamento: string | undefined): string {
   if (!andamento) return "pending";
   const lower = andamento.toLowerCase().trim();
@@ -134,6 +144,21 @@ function findColumnValue(row: Record<string, unknown>, ...keys: string[]): unkno
   return null;
 }
 
+function buildWhatsAppMessage(customer: Customer): string {
+  const nome = customer.name || "cliente";
+  if (customer.devolutiva || customer.andamento_igreen?.toLowerCase().includes("devolutiva")) {
+    return `Olá ${nome}! 👋\n\nIdentificamos uma pendência no seu cadastro de energia solar:\n\n⚠️ *Devolutiva:* ${customer.devolutiva || customer.andamento_igreen || "Verificar pendência"}\n${customer.distribuidora ? `📍 *Distribuidora:* ${customer.distribuidora}` : ""}\n\nPodemos resolver isso juntos? Me avise se precisar de ajuda! 🙏`;
+  }
+  if (customer.andamento_igreen?.toLowerCase().includes("falta assinatura")) {
+    return `Olá ${nome}! 👋\n\nSeu cadastro de energia solar está quase pronto! Falta apenas a *assinatura* para concluir o processo. ✍️\n${customer.distribuidora ? `📍 *Distribuidora:* ${customer.distribuidora}` : ""}\n\nPode assinar o quanto antes para garantir seu desconto? 💚`;
+  }
+  return `Olá ${nome}! 👋\n\nTudo bem? Estou entrando em contato sobre seu cadastro de energia solar.\n${customer.distribuidora ? `📍 *Distribuidora:* ${customer.distribuidora}` : ""}\n\nPosso te ajudar com alguma dúvida? 💚`;
+}
+
+function isDevolutiva(c: Customer): boolean {
+  return !!(c.devolutiva || c.andamento_igreen?.toLowerCase().includes("devolutiva"));
+}
+
 export function CustomerManager({ customers, consultantId, onCustomersChange, instanceName }: CustomerManagerProps) {
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -145,11 +170,11 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState({ current: 0, total: 0, newCount: 0, updatedCount: 0, errorCount: 0 });
   const [showImportResult, setShowImportResult] = useState(false);
-  // Preview / approval state
   const [showPreview, setShowPreview] = useState(false);
   const [parsedCustomers, setParsedCustomers] = useState<ParsedCustomer[]>([]);
   const [selectedPhones, setSelectedPhones] = useState<Set<string>>(new Set());
   const [parsing, setParsing] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -171,7 +196,8 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
     fetchPics();
   }, [instanceName, customers]);
 
-  const filtered = search.trim()
+  // Filter by search
+  const searchFiltered = search.trim()
     ? customers.filter(
         (c) =>
           (c.name || "").toLowerCase().includes(search.toLowerCase()) ||
@@ -180,6 +206,16 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
           (c.cpf || "").includes(search)
       )
     : customers;
+
+  // Filter by status
+  const filtered = statusFilter === "all"
+    ? searchFiltered
+    : statusFilter === "devolutiva"
+    ? searchFiltered.filter((c) => isDevolutiva(c))
+    : searchFiltered.filter((c) => c.status === statusFilter);
+
+  // Stats
+  const devolutivaCount = customers.filter((c) => isDevolutiva(c)).length;
 
   async function handleDelete(id: string) {
     try {
@@ -238,7 +274,6 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
     }
   }
 
-  // ---- IMPORT: Parse Excel and show preview ----
   function buildCustomerData(row: Record<string, unknown>): Record<string, unknown> {
     const data: Record<string, unknown> = {};
 
@@ -275,6 +310,16 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
     const codigoLic = safeString(findColumnValue(row, "Código Licenciado", "Codigo Licenciado", "código licenciado"));
     if (codigoLic) data.registered_by_igreen_id = codigoLic;
 
+    // New fields
+    const andamento = safeString(findColumnValue(row, "Andamento", "andamento"));
+    if (andamento) data.andamento_igreen = andamento;
+
+    const devolutiva = safeString(findColumnValue(row, "Devolutiva", "devolutiva"));
+    if (devolutiva) data.devolutiva = devolutiva;
+
+    const observacao = safeString(findColumnValue(row, "Observação", "Observacao", "observação", "observacao", "Obs"));
+    if (observacao) data.observacao = observacao;
+
     return data;
   }
 
@@ -286,9 +331,7 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
       const rows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet);
 
-      // Get existing phones from DB
       const existingPhones = new Set(customers.map((c) => c.phone_whatsapp.replace(/\D/g, "")));
-
       const seenPhones = new Set<string>();
       const parsed: ParsedCustomer[] = [];
 
@@ -303,17 +346,10 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
         const statusRaw = safeString(findColumnValue(row, "Andamento", "Status", "status")) || undefined;
         const isNew = !existingPhones.has(phone);
 
-        parsed.push({
-          phone,
-          name,
-          status: mapStatus(statusRaw),
-          data: buildCustomerData(row),
-          isNew,
-        });
+        parsed.push({ phone, name, status: mapStatus(statusRaw), data: buildCustomerData(row), isNew });
       }
 
       setParsedCustomers(parsed);
-      // Pre-select only new customers
       const newPhones = new Set(parsed.filter((p) => p.isNew).map((p) => p.phone));
       setSelectedPhones(newPhones);
       setShowPreview(true);
@@ -328,27 +364,20 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
   function toggleSelect(phone: string) {
     setSelectedPhones((prev) => {
       const next = new Set(prev);
-      if (next.has(phone)) next.delete(phone);
-      else next.add(phone);
+      if (next.has(phone)) next.delete(phone); else next.add(phone);
       return next;
     });
   }
 
   function toggleSelectAll() {
     const newCustomers = parsedCustomers.filter((p) => p.isNew);
-    if (selectedPhones.size === newCustomers.length) {
-      setSelectedPhones(new Set());
-    } else {
-      setSelectedPhones(new Set(newCustomers.map((p) => p.phone)));
-    }
+    if (selectedPhones.size === newCustomers.length) setSelectedPhones(new Set());
+    else setSelectedPhones(new Set(newCustomers.map((p) => p.phone)));
   }
 
   async function handleConfirmImport() {
     const toImport = parsedCustomers.filter((p) => p.isNew && selectedPhones.has(p.phone));
-    if (toImport.length === 0) {
-      toast({ title: "Nenhum cliente novo selecionado" });
-      return;
-    }
+    if (toImport.length === 0) { toast({ title: "Nenhum cliente novo selecionado" }); return; }
 
     setShowPreview(false);
     setImporting(true);
@@ -359,36 +388,15 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
     for (const item of toImport) {
       progress.current++;
       try {
-        const upsertData = {
-          phone_whatsapp: item.phone,
-          name: item.name,
-          status: item.status,
-          ...item.data,
-        } as TablesInsert<"customers">;
-
+        const upsertData = { phone_whatsapp: item.phone, name: item.name, status: item.status, ...item.data } as TablesInsert<"customers">;
         const { data: upserted, error } = await supabase
-          .from("customers")
-          .upsert(upsertData, { onConflict: "phone_whatsapp" })
-          .select("id")
-          .single();
-
+          .from("customers").upsert(upsertData, { onConflict: "phone_whatsapp" }).select("id").single();
         if (error) throw error;
-
         if (upserted) {
           const { data: existingDeal } = await supabase
-            .from("crm_deals")
-            .select("id")
-            .eq("remote_jid", `${item.phone}@s.whatsapp.net`)
-            .eq("consultant_id", consultantId)
-            .maybeSingle();
-
+            .from("crm_deals").select("id").eq("remote_jid", `${item.phone}@s.whatsapp.net`).eq("consultant_id", consultantId).maybeSingle();
           if (!existingDeal) {
-            await supabase.from("crm_deals").insert({
-              consultant_id: consultantId,
-              customer_id: upserted.id,
-              remote_jid: `${item.phone}@s.whatsapp.net`,
-              stage: "novo_lead",
-            });
+            await supabase.from("crm_deals").insert({ consultant_id: consultantId, customer_id: upserted.id, remote_jid: `${item.phone}@s.whatsapp.net`, stage: "novo_lead" });
           }
           progress.newCount++;
         }
@@ -401,10 +409,7 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
 
     setShowImportResult(true);
     setImporting(false);
-    toast({
-      title: "✅ Importação concluída!",
-      description: `${progress.newCount} novos adicionados${progress.errorCount > 0 ? `, ${progress.errorCount} erros` : ""}`,
-    });
+    toast({ title: "✅ Importação concluída!", description: `${progress.newCount} novos adicionados${progress.errorCount > 0 ? `, ${progress.errorCount} erros` : ""}` });
     onCustomersChange();
   }
 
@@ -428,9 +433,29 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
 
   const updateEdit = (field: string, value: string) => setEditForm((prev) => ({ ...prev, [field]: value }));
 
+  function handleCopyMessage(customer: Customer) {
+    const msg = buildWhatsAppMessage(customer);
+    navigator.clipboard.writeText(msg);
+    toast({ title: "📋 Mensagem copiada!", description: "Cole no WhatsApp para enviar" });
+  }
+
+  function handleOpenWhatsApp(customer: Customer) {
+    const phone = customer.phone_whatsapp.replace(/\D/g, "");
+    const msg = encodeURIComponent(buildWhatsAppMessage(customer));
+    window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
+  }
+
   const newCount = parsedCustomers.filter((p) => p.isNew).length;
   const existingCount = parsedCustomers.length - newCount;
   const selectedCount = selectedPhones.size;
+
+  const filterButtons: { key: StatusFilter; label: string; count: number; color: string }[] = [
+    { key: "all", label: "Todos", count: customers.length, color: "text-foreground" },
+    { key: "approved", label: "Aprovados", count: customers.filter((c) => c.status === "approved").length, color: "text-green-400" },
+    { key: "pending", label: "Pendentes", count: customers.filter((c) => c.status === "pending").length, color: "text-yellow-400" },
+    { key: "devolutiva", label: "Devolutiva", count: devolutivaCount, color: "text-red-400" },
+    { key: "lead", label: "Leads", count: customers.filter((c) => c.status === "lead").length, color: "text-blue-400" },
+  ];
 
   return (
     <div className="relative overflow-hidden rounded-2xl border border-border bg-card">
@@ -452,13 +477,7 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              onClick={() => fileInputRef.current?.click()}
-              size="sm"
-              variant="outline"
-              className="gap-2 rounded-xl font-semibold h-9 px-4 border-primary/20 text-primary hover:bg-primary/10"
-              disabled={importing || parsing}
-            >
+            <Button onClick={() => fileInputRef.current?.click()} size="sm" variant="outline" className="gap-2 rounded-xl font-semibold h-9 px-4 border-primary/20 text-primary hover:bg-primary/10" disabled={importing || parsing}>
               {(importing || parsing) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
               Importar Excel
             </Button>
@@ -466,16 +485,7 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
               <UserPlus className="w-4 h-4" /> Novo Cliente
             </Button>
           </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xlsx,.xls"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) handleFileSelected(file);
-            }}
-          />
+          <input ref={fileInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleFileSelected(file); }} />
         </div>
 
         {/* Import Progress */}
@@ -483,15 +493,10 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
           <div className="px-5 py-3 border-b border-border/50">
             <div className="flex items-center gap-3 mb-2">
               <FileSpreadsheet className="w-4 h-4 text-primary animate-pulse" />
-              <span className="text-xs font-medium text-foreground">
-                Importando... {importProgress.current}/{importProgress.total}
-              </span>
+              <span className="text-xs font-medium text-foreground">Importando... {importProgress.current}/{importProgress.total}</span>
             </div>
             <div className="w-full h-2 bg-secondary/50 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-primary rounded-full transition-all duration-300"
-                style={{ width: `${importProgress.total > 0 ? (importProgress.current / importProgress.total) * 100 : 0}%` }}
-              />
+              <div className="h-full bg-primary rounded-full transition-all duration-300" style={{ width: `${importProgress.total > 0 ? (importProgress.current / importProgress.total) * 100 : 0}%` }} />
             </div>
             <div className="flex gap-4 mt-1.5 text-[10px] text-muted-foreground">
               <span className="text-green-400">{importProgress.newCount} novos</span>
@@ -525,24 +530,27 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
           </div>
         </div>
 
-        {/* Stats */}
-        <div className="flex gap-4 px-5 pb-3">
-          {[
-            { label: "Total", value: customers.length, color: "text-foreground" },
-            { label: "Aprovados", value: customers.filter((c) => c.status === "approved").length, color: "text-green-400" },
-            { label: "Pendentes", value: customers.filter((c) => c.status === "pending").length, color: "text-yellow-400" },
-            { label: "Leads", value: customers.filter((c) => c.status === "lead").length, color: "text-blue-400" },
-          ].map((stat) => (
-            <div key={stat.label} className="flex items-center gap-1.5">
-              <span className={`text-sm font-bold ${stat.color}`}>{stat.value}</span>
-              <span className="text-[10px] text-muted-foreground">{stat.label}</span>
-            </div>
+        {/* Clickable Status Filters */}
+        <div className="flex gap-2 px-5 pb-3 flex-wrap">
+          {filterButtons.map((f) => (
+            <button
+              key={f.key}
+              onClick={() => setStatusFilter(f.key)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                statusFilter === f.key
+                  ? "border-primary/40 bg-primary/10 text-primary shadow-sm"
+                  : "border-border/30 bg-secondary/20 hover:bg-secondary/40 text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <span className={`text-sm font-bold ${statusFilter === f.key ? "text-primary" : f.color}`}>{f.count}</span>
+              <span>{f.label}</span>
+            </button>
           ))}
         </div>
 
         {/* List */}
         <div className="px-5 pb-5">
-          <div className="max-h-[calc(100vh-420px)] overflow-y-auto space-y-2 pr-1">
+          <div className="max-h-[calc(100vh-460px)] overflow-y-auto space-y-2 pr-1">
             {filtered.length === 0 ? (
               <div className="text-center py-12">
                 <div className="w-16 h-16 rounded-2xl bg-secondary/50 flex items-center justify-center mx-auto mb-3">
@@ -555,9 +563,10 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
                 const isExpanded = expandedId === c.id;
                 const status = getStatusBadge(c.status);
                 const pic = profilePics[c.id];
+                const hasDevolutiva = isDevolutiva(c);
 
                 return (
-                  <div key={c.id} className={`rounded-xl border transition-all duration-200 ${isExpanded ? "border-primary/20 bg-primary/[0.02] shadow-md shadow-primary/5" : "border-border/40 bg-secondary/10 hover:border-border/60 hover:bg-secondary/20"}`}>
+                  <div key={c.id} className={`rounded-xl border transition-all duration-200 ${isExpanded ? "border-primary/20 bg-primary/[0.02] shadow-md shadow-primary/5" : hasDevolutiva ? "border-red-500/20 bg-red-500/[0.02] hover:border-red-500/30" : "border-border/40 bg-secondary/10 hover:border-border/60 hover:bg-secondary/20"}`}>
                     <div className="flex items-center gap-3 px-4 py-3 cursor-pointer" onClick={() => setExpandedId(isExpanded ? null : c.id)}>
                       <Avatar className="h-10 w-10 shrink-0 border border-primary/10">
                         <AvatarImage src={pic} />
@@ -570,16 +579,33 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
                         <div className="flex items-center gap-2">
                           <p className="text-sm font-semibold text-foreground truncate">{c.name || "Sem nome"}</p>
                           <Badge variant="outline" className={`text-[9px] px-1.5 py-0 h-4 ${status.className}`}>{status.label}</Badge>
+                          {hasDevolutiva && (
+                            <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-red-500/15 text-red-400 border-red-500/20">
+                              ⚠️ Devolutiva
+                            </Badge>
+                          )}
                         </div>
                         <div className="flex items-center gap-3 mt-0.5">
                           <span className="text-[11px] text-muted-foreground flex items-center gap-1">
                             <Phone className="h-2.5 w-2.5" />
                             {formatPhoneDisplay(c.phone_whatsapp)}
                           </span>
+                          {c.distribuidora && (
+                            <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                              <Building2 className="h-2.5 w-2.5" />
+                              {c.distribuidora}
+                            </span>
+                          )}
                           {c.address_city && (
                             <span className="text-[11px] text-muted-foreground flex items-center gap-1">
                               <MapPin className="h-2.5 w-2.5" />
                               {c.address_city}{c.address_state ? `/${c.address_state}` : ""}
+                            </span>
+                          )}
+                          {c.registered_by_name && (
+                            <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                              <User className="h-2.5 w-2.5" />
+                              {c.registered_by_name}
                             </span>
                           )}
                         </div>
@@ -603,34 +629,74 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
                           {c.email && <DetailItem icon={Mail} label="Email" value={c.email} />}
                           <DetailItem icon={Phone} label="WhatsApp" value={formatPhoneDisplay(c.phone_whatsapp)} />
                           {c.data_nascimento && <DetailItem icon={User} label="Nascimento" value={c.data_nascimento} />}
+                          {c.distribuidora && <DetailItem icon={Building2} label="Distribuidora" value={c.distribuidora} />}
+                          {c.registered_by_name && <DetailItem icon={User} label="Licenciado" value={`${c.registered_by_name}${c.registered_by_igreen_id ? ` (${c.registered_by_igreen_id})` : ""}`} />}
+                          {c.andamento_igreen && <DetailItem icon={FileText} label="Andamento iGreen" value={c.andamento_igreen} />}
+                          {c.media_consumo != null && <DetailItem icon={Zap} label="Consumo Médio" value={`${c.media_consumo} kWh`} />}
+                          {c.desconto_cliente != null && <DetailItem icon={Zap} label="Desconto" value={`${c.desconto_cliente}%`} />}
                           {(c.address_city || c.address_state) && <DetailItem icon={MapPin} label="Localidade" value={`${c.address_city || ""}${c.address_state ? ` / ${c.address_state}` : ""}`} />}
                           {c.address_street && <DetailItem icon={MapPin} label="Endereço" value={`${c.address_street}${c.address_number ? `, ${c.address_number}` : ""}`} />}
                           {c.numero_instalacao && <DetailItem icon={Zap} label="Nº Instalação" value={c.numero_instalacao} />}
-                          {c.electricity_bill_value != null && <DetailItem icon={Zap} label="Consumo" value={`R$ ${c.electricity_bill_value.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`} />}
+                          {c.electricity_bill_value != null && <DetailItem icon={Zap} label="Valor Conta" value={`R$ ${c.electricity_bill_value.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`} />}
                           {c.created_at && <DetailItem icon={User} label="Cadastrado em" value={new Date(c.created_at).toLocaleDateString("pt-BR")} />}
                         </div>
 
-                        <div className="flex justify-end gap-2 mt-3 pt-3 border-t border-border/20">
-                          <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 text-primary border-primary/20 hover:bg-primary/10" onClick={() => openEdit(c)}>
-                            <Pencil className="w-3 h-3" /> Editar
-                          </Button>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 text-destructive border-destructive/20 hover:bg-destructive/10">
-                                <Trash2 className="w-3 h-3" /> Remover
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Remover cliente</AlertDialogTitle>
-                                <AlertDialogDescription>Tem certeza que deseja remover {c.name || "este cliente"}?</AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleDelete(c.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Remover</AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
+                        {/* Devolutiva highlight */}
+                        {(c.devolutiva || c.observacao) && (
+                          <div className="mt-3 space-y-2">
+                            {c.devolutiva && (
+                              <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2">
+                                <div className="flex items-center gap-1.5 mb-1">
+                                  <AlertTriangle className="h-3 w-3 text-red-400" />
+                                  <span className="text-[10px] font-semibold text-red-400 uppercase tracking-wider">Devolutiva</span>
+                                </div>
+                                <p className="text-xs text-foreground">{c.devolutiva}</p>
+                              </div>
+                            )}
+                            {c.observacao && (
+                              <div className="rounded-lg border border-border/30 bg-secondary/20 px-3 py-2">
+                                <div className="flex items-center gap-1.5 mb-1">
+                                  <FileText className="h-3 w-3 text-muted-foreground" />
+                                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Observação</span>
+                                </div>
+                                <p className="text-xs text-foreground">{c.observacao}</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Action buttons */}
+                        <div className="flex justify-between gap-2 mt-3 pt-3 border-t border-border/20">
+                          <div className="flex gap-2">
+                            <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 text-green-400 border-green-500/20 hover:bg-green-500/10" onClick={() => handleOpenWhatsApp(c)}>
+                              <MessageCircle className="w-3 h-3" /> Enviar WhatsApp
+                            </Button>
+                            <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 text-muted-foreground border-border/30 hover:bg-secondary/30" onClick={() => handleCopyMessage(c)}>
+                              <ClipboardCopy className="w-3 h-3" /> Copiar Msg
+                            </Button>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 text-primary border-primary/20 hover:bg-primary/10" onClick={() => openEdit(c)}>
+                              <Pencil className="w-3 h-3" /> Editar
+                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 text-destructive border-destructive/20 hover:bg-destructive/10">
+                                  <Trash2 className="w-3 h-3" /> Remover
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Remover cliente</AlertDialogTitle>
+                                  <AlertDialogDescription>Tem certeza que deseja remover {c.name || "este cliente"}?</AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => handleDelete(c.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Remover</AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
                         </div>
                       </div>
                     )}
@@ -753,7 +819,7 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
         </DialogContent>
       </Dialog>
 
-      {/* ===== Import Preview / Approval Dialog ===== */}
+      {/* Import Preview Dialog */}
       <Dialog open={showPreview} onOpenChange={setShowPreview}>
         <DialogContent className="max-w-2xl max-h-[85vh] p-0 overflow-hidden">
           <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent px-6 pt-6 pb-4 border-b border-border">
@@ -764,31 +830,16 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
               </DialogTitle>
             </DialogHeader>
             <div className="flex gap-4 mt-3 text-xs">
-              <span className="text-muted-foreground">
-                Total na planilha: <strong className="text-foreground">{parsedCustomers.length}</strong>
-              </span>
-              <span className="text-green-400">
-                Novos: <strong>{newCount}</strong>
-              </span>
-              <span className="text-muted-foreground">
-                Já cadastrados: <strong>{existingCount}</strong> (ignorados)
-              </span>
-              <span className="text-primary">
-                Selecionados: <strong>{selectedCount}</strong>
-              </span>
+              <span className="text-muted-foreground">Total na planilha: <strong className="text-foreground">{parsedCustomers.length}</strong></span>
+              <span className="text-green-400">Novos: <strong>{newCount}</strong></span>
+              <span className="text-muted-foreground">Já cadastrados: <strong>{existingCount}</strong> (ignorados)</span>
+              <span className="text-primary">Selecionados: <strong>{selectedCount}</strong></span>
             </div>
           </div>
 
-          {/* Select all header */}
           <div className="px-6 py-2 border-b border-border/50 flex items-center justify-between">
-            <button
-              onClick={toggleSelectAll}
-              className="flex items-center gap-2 text-xs font-medium text-foreground hover:text-primary transition-colors"
-            >
-              <Checkbox
-                checked={newCount > 0 && selectedPhones.size === newCount}
-                onCheckedChange={toggleSelectAll}
-              />
+            <button onClick={toggleSelectAll} className="flex items-center gap-2 text-xs font-medium text-foreground hover:text-primary transition-colors">
+              <Checkbox checked={newCount > 0 && selectedPhones.size === newCount} onCheckedChange={toggleSelectAll} />
               Selecionar todos os novos ({newCount})
             </button>
           </div>
@@ -798,55 +849,29 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
               {parsedCustomers.map((p) => {
                 const isSelected = selectedPhones.has(p.phone);
                 const statusBadge = getStatusBadge(p.status);
-
                 return (
-                  <div
-                    key={p.phone}
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-all ${
-                      !p.isNew
-                        ? "border-border/20 bg-secondary/10 opacity-50"
-                        : isSelected
-                        ? "border-primary/30 bg-primary/[0.04]"
-                        : "border-border/30 bg-secondary/5 hover:bg-secondary/15"
-                    }`}
-                  >
+                  <div key={p.phone} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-all ${!p.isNew ? "border-border/20 bg-secondary/10 opacity-50" : isSelected ? "border-primary/30 bg-primary/[0.04]" : "border-border/30 bg-secondary/5 hover:bg-secondary/15"}`}>
                     {p.isNew ? (
-                      <Checkbox
-                        checked={isSelected}
-                        onCheckedChange={() => toggleSelect(p.phone)}
-                      />
+                      <Checkbox checked={isSelected} onCheckedChange={() => toggleSelect(p.phone)} />
                     ) : (
                       <div className="w-4 h-4 flex items-center justify-center">
                         <CheckCircle2 className="w-3.5 h-3.5 text-muted-foreground/40" />
                       </div>
                     )}
-
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium text-foreground truncate">{p.name || "Sem nome"}</p>
-                        <Badge variant="outline" className={`text-[9px] px-1.5 py-0 h-4 ${statusBadge.className}`}>
-                          {statusBadge.label}
-                        </Badge>
-                        {!p.isNew && (
-                          <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-muted/50 text-muted-foreground border-border/30">
-                            Já cadastrado
-                          </Badge>
-                        )}
-                        {p.isNew && (
-                          <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-green-500/10 text-green-400 border-green-500/20">
-                            Novo
-                          </Badge>
-                        )}
+                        <Badge variant="outline" className={`text-[9px] px-1.5 py-0 h-4 ${statusBadge.className}`}>{statusBadge.label}</Badge>
+                        {!p.isNew && <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-muted/50 text-muted-foreground border-border/30">Já cadastrado</Badge>}
+                        {p.isNew && <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-green-500/10 text-green-400 border-green-500/20">Novo</Badge>}
                       </div>
                       <div className="flex items-center gap-3 mt-0.5">
                         <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                          <Phone className="h-2.5 w-2.5" />
-                          {formatPhoneDisplay(p.phone)}
+                          <Phone className="h-2.5 w-2.5" />{formatPhoneDisplay(p.phone)}
                         </span>
                         {p.data.address_city && (
                           <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                            <MapPin className="h-2.5 w-2.5" />
-                            {String(p.data.address_city)}{p.data.address_state ? `/${p.data.address_state}` : ""}
+                            <MapPin className="h-2.5 w-2.5" />{String(p.data.address_city)}{p.data.address_state ? `/${p.data.address_state}` : ""}
                           </span>
                         )}
                       </div>
@@ -858,19 +883,10 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
           </ScrollArea>
 
           <div className="px-6 py-4 border-t border-border flex items-center justify-between">
-            <p className="text-xs text-muted-foreground">
-              Apenas clientes <strong className="text-green-400">novos</strong> serão adicionados. Clientes já cadastrados serão ignorados.
-            </p>
+            <p className="text-xs text-muted-foreground">Apenas clientes <strong className="text-green-400">novos</strong> serão adicionados.</p>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" className="h-9 text-xs px-4" onClick={() => setShowPreview(false)}>
-                Cancelar
-              </Button>
-              <Button
-                size="sm"
-                className="h-9 text-xs px-5 gap-1.5 font-semibold shadow-lg shadow-primary/20"
-                onClick={handleConfirmImport}
-                disabled={selectedCount === 0}
-              >
+              <Button variant="outline" size="sm" className="h-9 text-xs px-4" onClick={() => setShowPreview(false)}>Cancelar</Button>
+              <Button size="sm" className="h-9 text-xs px-5 gap-1.5 font-semibold shadow-lg shadow-primary/20" onClick={handleConfirmImport} disabled={selectedCount === 0}>
                 <Upload className="w-3.5 h-3.5" />
                 Importar {selectedCount} cliente{selectedCount !== 1 ? "s" : ""}
               </Button>
