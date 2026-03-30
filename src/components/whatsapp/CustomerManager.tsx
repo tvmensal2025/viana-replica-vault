@@ -113,6 +113,10 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
   const [editForm, setEditForm] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [profilePics, setProfilePics] = useState<Record<string, string>>({});
+  const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState({ current: 0, total: 0, newCount: 0, updatedCount: 0, errorCount: 0 });
+  const [showImportResult, setShowImportResult] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   // Fetch profile pictures from Evolution API
