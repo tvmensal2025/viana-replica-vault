@@ -84,6 +84,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const qrRecoveryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lockRef = useRef(false);
+  const createAttemptedAtRef = useRef<number | null>(null);
 
   const addLog = useCallback((msg: string) => {
     setConnectionLog((prev) => [...prev.slice(-14), logEntry(sanitize(msg))]);
@@ -101,6 +102,18 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       clearTimeout(qrRecoveryRef.current);
       qrRecoveryRef.current = null;
     }
+  }, []);
+
+  const markCreateAttempt = useCallback(() => {
+    createAttemptedAtRef.current = Date.now();
+  }, []);
+
+  const clearCreateAttempt = useCallback(() => {
+    createAttemptedAtRef.current = null;
+  }, []);
+
+  const hasRecentCreateAttempt = useCallback(() => {
+    return createAttemptedAtRef.current !== null && Date.now() - createAttemptedAtRef.current < 3 * 60 * 1000;
   }, []);
 
   /* ── Save/delete instance in DB ── */
@@ -158,6 +171,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
 
         if (state === "open") {
           clearQrRecovery();
+          clearCreateAttempt();
           setConnectionStatus((prev) => {
             if (prev !== "connected") {
               addLog("✅ WhatsApp conectado!");
@@ -208,6 +222,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
 
       if (result.qrCode) {
         clearQrRecovery();
+        clearCreateAttempt();
         await saveInstance(name);
         setQrCode(result.qrCode);
         setQrGeneratedAt(Date.now());
@@ -222,6 +237,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
 
       if (state === "open") {
         clearQrRecovery();
+        clearCreateAttempt();
         await saveInstance(name);
         setConnectionStatus("connected");
         setQrCode(null);
@@ -232,12 +248,12 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
         return;
       }
 
-      if (state === "connecting" || result.timedOut || !result.shouldCreate) {
+      if (state === "connecting" || result.timedOut || !result.shouldCreate || hasRecentCreateAttempt()) {
         addLog(attempt === 1 ? "⏳ Aguardando QR Code do servidor..." : "⏳ Ainda aguardando QR Code...");
         scheduleQrRecovery(name, attempt + 1);
       }
     }, Math.min(4000 * attempt, 12000));
-  }, [addLog, checkState, clearQrRecovery, fetchQr, saveInstance, startPolling]);
+  }, [addLog, checkState, clearCreateAttempt, clearQrRecovery, fetchQr, hasRecentCreateAttempt, saveInstance, startPolling]);
 
   const enterPendingConnection = useCallback((name: string, message: string) => {
     setConnectionStatus("connecting");
@@ -279,6 +295,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
 
           if (state === "open") {
             clearQrRecovery();
+            clearCreateAttempt();
             setConnectionStatus("connected");
             setError(null);
             addLog("✅ WhatsApp já está conectado!");
@@ -298,6 +315,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
 
           if (qrAttempt.qrCode) {
             clearQrRecovery();
+            clearCreateAttempt();
             await saveInstance(name);
             setQrCode(qrAttempt.qrCode);
             setQrGeneratedAt(Date.now());
@@ -313,6 +331,12 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
             return;
           }
 
+          if (hasRecentCreateAttempt()) {
+            await saveInstance(name);
+            enterPendingConnection(name, "⏳ A instância ainda está inicializando. Continuando recuperação automática do QR Code...");
+            return;
+          }
+
           if (!qrAttempt.shouldCreate) {
             if (retry < MAX_RETRIES) {
               addLog("⏳ O serviço de conexão ainda está processando. Tentando recuperar o QR Code...");
@@ -325,12 +349,14 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
           }
 
           addLog("Criando instância...");
+          markCreateAttempt();
           try {
             const response = await withTimeout(createInstance(name), 35000);
             const qr = response?.qrcode?.base64 || null;
 
             if (qr) {
               clearQrRecovery();
+              clearCreateAttempt();
               await saveInstance(name);
               setQrCode(qr);
               setQrGeneratedAt(Date.now());
@@ -352,6 +378,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
             const msg = sanitize(createErr instanceof Error ? createErr.message : "Erro ao criar instância");
 
             if (msg.includes("already") || msg.includes("403")) {
+              markCreateAttempt();
               await saveInstance(name);
               enterPendingConnection(name, "⏳ Instância já existente. Recuperando QR Code...");
               return;
@@ -385,7 +412,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       lockRef.current = false;
       setIsLoading(false);
     }
-  }, [consultantId, addLog, checkState, clearQrRecovery, enterPendingConnection, fetchQr, saveInstance, startPolling]);
+  }, [consultantId, addLog, checkState, clearCreateAttempt, clearQrRecovery, enterPendingConnection, fetchQr, hasRecentCreateAttempt, markCreateAttempt, saveInstance, startPolling]);
 
   /* ── Refresh QR ── */
   const refreshQr = useCallback(async () => {
@@ -422,6 +449,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
     try {
       try { await withTimeout(deleteInstance(name), 15000); } catch { /* ok */ }
       await deleteInstanceDb();
+      clearCreateAttempt();
 
       setConnectionStatus("disconnected");
       setInstanceName(null);
@@ -436,7 +464,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       setIsLoading(false);
       lockRef.current = false;
     }
-  }, [instanceName, consultantId, clearPolling, clearQrRecovery, addLog, deleteInstanceDb]);
+  }, [instanceName, consultantId, clearCreateAttempt, clearPolling, clearQrRecovery, addLog, deleteInstanceDb]);
 
   const reconnect = useCallback(() => createAndConnect(), [createAndConnect]);
 
@@ -454,6 +482,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
         if (cancelled) return;
 
         if (state === "open") {
+          clearCreateAttempt();
           setConnectionStatus("connected");
           setError(null);
           addLog("✅ WhatsApp conectado!");
