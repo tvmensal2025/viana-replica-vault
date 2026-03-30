@@ -273,7 +273,7 @@ export function useAnalytics(consultantId: string | null) {
         customersByStatus,
         totalKw,
         avgKw,
-        customerConsumption,
+        topLicenciados,
         weeklyNewCustomers,
         conversionRate,
       };
