@@ -67,7 +67,7 @@ export function useAnalytics(consultantId: string | null) {
       const since = thirtyDaysAgo.toISOString();
 
       // Fetch views, events, deals and ALL customers in parallel
-      const [viewsRes, eventsRes, dealsRes, allCustomersRes] = await Promise.all([
+      const [viewsRes, eventsRes, dealsRes] = await Promise.all([
         supabase
           .from("page_views")
           .select("page_type, created_at, device_type, utm_source")
