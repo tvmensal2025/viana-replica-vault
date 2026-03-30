@@ -1,46 +1,27 @@
 
 
-## Analysis: 401 "Token de autenticação inválido ou ausente"
+## Plano: Ranking de Licenciados que mais cadastram clientes (direto)
 
-### Root Cause
+### Resumo
+Substituir o gráfico "Consumo por Cliente" por um **ranking dos licenciados diretos que mais cadastraram contas**. Será necessário adicionar um campo `referred_by` na tabela `consultants` para identificar quem indicou cada licenciado (apenas 1 nível, sem árvore).
 
-The `request()` function in `evolutionApi.ts` (line 38) has:
-```typescript
-Authorization: `Bearer ${token || SUPABASE_ANON_KEY}`
-```
+### Mudanças
 
-When `supabase.auth.getSession()` returns no session (race condition during login/redirect), `token` is `undefined`, so the **anon key** is sent as a Bearer token. The edge function then calls `getUser(anonKey)` which fails → 401.
+**1. Migração SQL**
+- Adicionar coluna `referred_by UUID REFERENCES consultants(id)` na tabela `consultants`
+- Apenas vínculo direto (1 nível), sem recursão ou árvore
 
-This happens in two scenarios:
-1. **`preCreateWhatsAppInstance`** fires on Auth page before session is fully propagated
-2. **Admin page loads** and WhatsApp hook makes API calls before the auth state change fires
+**2. Hook `useAnalytics.ts`**
+- Remover `customerConsumption` (ranking de consumo kW)
+- Adicionar query: buscar consultores onde `referred_by = consultantId`, e para cada um contar seus `crm_deals`
+- Retornar array `topLicenciados: { name: string, deals: number }[]` ordenado por deals (desc), top 15
 
-The logs confirm the proxy works fine once authenticated (many 200s). The 401 is a timing issue.
+**3. Dashboard `Admin.tsx`**
+- Substituir o bloco "Consumo por Cliente" pelo novo gráfico "Top Licenciados por Cadastros"
+- Mesmo estilo visual (barras horizontais, cores verdes, fundo escuro)
+- Ícone e título atualizados: "🏆 Licenciados — Cadastros"
+- Tooltip mostrando quantidade de contas cadastradas
 
-### Plan
-
-#### 1. Guard `request()` against missing session (evolutionApi.ts)
-- Instead of falling back to `SUPABASE_ANON_KEY`, throw an early error if no session exists
-- This prevents sending invalid tokens and surfaces a clear message
-
-#### 2. Add session-ready check in `preCreateWhatsAppInstance` (preCreateInstance.ts)
-- Verify session exists before calling `createInstance`
-- If no session, skip silently (the hook will handle it later)
-
-#### 3. Guard WhatsAppTab rendering (WhatsAppTab.tsx)
-- Only render WhatsApp components when `consultantId` is truthy (already partially done)
-- Ensure no API calls fire before authentication is confirmed
-
-### Technical Details
-
-**File: `src/services/evolutionApi.ts`** (lines 30-42)
-- Change fallback: if no token from `getSession()`, throw a descriptive error instead of sending anon key
-- This prevents the 401 entirely and lets callers handle it gracefully
-
-**File: `src/services/preCreateInstance.ts`** (lines 19-42)  
-- Add `supabase.auth.getSession()` check at the top
-- Return early if no valid session
-
-**File: `src/pages/Auth.tsx`** (lines 22, 28)
-- Wrap `preCreateWhatsAppInstance` calls with a small delay or session verification to avoid race condition
+### Observação
+Após a migração, o campo `referred_by` estará vazio para consultores existentes. O gráfico ficará vazio até que os vínculos sejam preenchidos (via SQL direto ou futuro painel de gestão).
 
