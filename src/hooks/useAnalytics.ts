@@ -66,8 +66,8 @@ export function useAnalytics(consultantId: string | null) {
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       const since = thirtyDaysAgo.toISOString();
 
-      // Fetch views, events, deals, customers and licenciados in parallel
-      const [viewsRes, eventsRes, dealsRes, licenciadosRes] = await Promise.all([
+      // Fetch views, events and deals in parallel
+      const [viewsRes, eventsRes, dealsRes] = await Promise.all([
         supabase
           .from("page_views")
           .select("page_type, created_at, device_type, utm_source")
@@ -82,21 +82,15 @@ export function useAnalytics(consultantId: string | null) {
           .from("crm_deals")
           .select("customer_id")
           .eq("consultant_id", consultantId!),
-        supabase
-          .from("consultants")
-          .select("id, name")
-          .eq("referred_by", consultantId!),
       ]);
 
       if (viewsRes.error) throw viewsRes.error;
       if (eventsRes.error) throw eventsRes.error;
       if (dealsRes.error) throw dealsRes.error;
-      if (licenciadosRes.error) throw licenciadosRes.error;
 
       const views = viewsRes.data;
       const events = eventsRes.data;
       const deals = dealsRes.data;
-      const licenciados = licenciadosRes.data;
 
       // Get unique customer IDs from deals
       const customerIds = [...new Set(deals.map((d) => d.customer_id).filter(Boolean))] as string[];
@@ -109,12 +103,13 @@ export function useAnalytics(consultantId: string | null) {
         media_consumo: number | null;
         electricity_bill_value: number | null;
         created_at: string;
+        registered_by_name: string | null;
       }> = [];
 
       if (customerIds.length > 0) {
         const { data: custData, error: custError } = await supabase
           .from("customers")
-          .select("id, name, status, media_consumo, electricity_bill_value, created_at")
+          .select("id, name, status, media_consumo, electricity_bill_value, created_at, registered_by_name")
           .in("id", customerIds);
         if (!custError && custData) customers = custData;
       }
@@ -215,20 +210,16 @@ export function useAnalytics(consultantId: string | null) {
       const customersWithConsumption = customers.filter((c) => Number(c.media_consumo) > 0);
       const avgKw = customersWithConsumption.length > 0 ? totalKw / customersWithConsumption.length : 0;
 
-      // Top licenciados by deals count
-      let topLicenciados: TopLicenciado[] = [];
-      if (licenciados.length > 0) {
-        const licDealsPromises = licenciados.map(async (lic) => {
-          const { count } = await supabase
-            .from("crm_deals")
-            .select("*", { count: "exact", head: true })
-            .eq("consultant_id", lic.id);
-          return { name: lic.name, deals: count || 0 };
-        });
-        topLicenciados = (await Promise.all(licDealsPromises))
-          .sort((a, b) => b.deals - a.deals)
-          .slice(0, 15);
+      // Top licenciados by customer count (from registered_by_name)
+      const licMap = new Map<string, number>();
+      for (const c of customers) {
+        const lic = c.registered_by_name;
+        if (lic) licMap.set(lic, (licMap.get(lic) || 0) + 1);
       }
+      const topLicenciados: TopLicenciado[] = Array.from(licMap.entries())
+        .map(([name, deals]) => ({ name, deals }))
+        .sort((a, b) => b.deals - a.deals)
+        .slice(0, 15);
 
       // Weekly new customers (last 30 days)
       const weekMap = new Map<string, number>();

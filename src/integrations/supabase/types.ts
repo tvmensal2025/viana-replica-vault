@@ -214,6 +214,8 @@ export type Database = {
           phone_whatsapp: string
           portal_submitted_at: string | null
           possui_procurador: boolean | null
+          registered_by_igreen_id: string | null
+          registered_by_name: string | null
           rg: string | null
           senha_pdf: string | null
           status: string
@@ -256,6 +258,8 @@ export type Database = {
           phone_whatsapp: string
           portal_submitted_at?: string | null
           possui_procurador?: boolean | null
+          registered_by_igreen_id?: string | null
+          registered_by_name?: string | null
           rg?: string | null
           senha_pdf?: string | null
           status?: string
@@ -298,6 +302,8 @@ export type Database = {
           phone_whatsapp?: string
           portal_submitted_at?: string | null
           possui_procurador?: boolean | null
+          registered_by_igreen_id?: string | null
+          registered_by_name?: string | null
           rg?: string | null
           senha_pdf?: string | null
           status?: string

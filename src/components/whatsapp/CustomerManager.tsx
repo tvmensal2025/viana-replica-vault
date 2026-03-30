@@ -269,6 +269,12 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
     const nascimento = safeString(findColumnValue(row, "Data Nascimento", "Nascimento", "data_nascimento"));
     if (nascimento) data.data_nascimento = nascimento;
 
+    const licenciado = safeString(findColumnValue(row, "Licenciado", "licenciado"));
+    if (licenciado) data.registered_by_name = licenciado;
+
+    const codigoLic = safeString(findColumnValue(row, "Código Licenciado", "Codigo Licenciado", "código licenciado"));
+    if (codigoLic) data.registered_by_igreen_id = codigoLic;
+
     return data;
   }
 
