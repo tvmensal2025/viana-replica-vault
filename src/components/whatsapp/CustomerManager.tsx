@@ -380,8 +380,19 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
 
       for (const row of rows) {
         const phoneRaw = findColumnValue(row, "Celular", "celular", "Telefone", "telefone", "WhatsApp", "whatsapp", "Fone", "Phone");
-        const phone = normalizePhone(String(phoneRaw || ""));
-        if (!phone || phone.length < 12) continue;
+        let phone = normalizePhone(String(phoneRaw || ""));
+
+        // If no valid phone, generate a placeholder from Código or Instalação so we don't skip the row
+        if (!phone || phone.length < 12) {
+          const codigo = safeString(findColumnValue(row, "Código", "Codigo", "código", "codigo"));
+          const instalacao = safeString(findColumnValue(row, "Instalação", "Instalacao", "Nº Instalação", "N Instalacao"));
+          const fallbackId = codigo || instalacao;
+          if (fallbackId) {
+            phone = `sem_celular_${fallbackId.replace(/\D/g, "")}`;
+          } else {
+            continue;
+          }
+        }
         if (seenPhones.has(phone)) continue;
         seenPhones.add(phone);
 
