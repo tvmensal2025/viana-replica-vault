@@ -354,7 +354,7 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
             // Insert new
             const { data: newCustomer, error } = await supabase
               .from("customers")
-              .insert(customerData as TablesUpdate<"customers">)
+              .insert([customerData as TablesUpdate<"customers">])
               .select("id")
               .single();
             if (error) throw error;
