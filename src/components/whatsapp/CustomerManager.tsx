@@ -551,7 +551,7 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-green-400" />
                 <span className="text-xs font-medium text-foreground">
-                  Importação concluída: {importProgress.newCount} novos adicionados
+                  Importação concluída: {importProgress.newCount} novos, {importProgress.updatedCount} atualizados
                   {importProgress.errorCount > 0 && `, ${importProgress.errorCount} erros`}
                 </span>
               </div>
