@@ -390,8 +390,8 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
       }
 
       setParsedCustomers(parsed);
-      const newPhones = new Set(parsed.filter((p) => p.isNew).map((p) => p.phone));
-      setSelectedPhones(newPhones);
+      // Pre-select ALL customers (new + existing for update)
+      setSelectedPhones(new Set(parsed.map((p) => p.phone)));
       setShowPreview(true);
     } catch (err) {
       toast({ title: "Erro ao ler arquivo", description: err instanceof Error ? err.message : "Erro", variant: "destructive" });
@@ -410,14 +410,13 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
   }
 
   function toggleSelectAll() {
-    const newCustomers = parsedCustomers.filter((p) => p.isNew);
-    if (selectedPhones.size === newCustomers.length) setSelectedPhones(new Set());
-    else setSelectedPhones(new Set(newCustomers.map((p) => p.phone)));
+    if (selectedPhones.size === parsedCustomers.length) setSelectedPhones(new Set());
+    else setSelectedPhones(new Set(parsedCustomers.map((p) => p.phone)));
   }
 
   async function handleConfirmImport() {
-    const toImport = parsedCustomers.filter((p) => p.isNew && selectedPhones.has(p.phone));
-    if (toImport.length === 0) { toast({ title: "Nenhum cliente novo selecionado" }); return; }
+    const toImport = parsedCustomers.filter((p) => selectedPhones.has(p.phone));
+    if (toImport.length === 0) { toast({ title: "Nenhum cliente selecionado" }); return; }
 
     setShowPreview(false);
     setImporting(true);
@@ -438,7 +437,8 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
           if (!existingDeal) {
             await supabase.from("crm_deals").insert({ consultant_id: consultantId, customer_id: upserted.id, remote_jid: `${item.phone}@s.whatsapp.net`, stage: "novo_lead" });
           }
-          progress.newCount++;
+          if (item.isNew) progress.newCount++;
+          else progress.updatedCount++;
         }
       } catch (err) {
         console.error("[import] Error for phone", item.phone, err);
@@ -449,7 +449,7 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
 
     setShowImportResult(true);
     setImporting(false);
-    toast({ title: "✅ Importação concluída!", description: `${progress.newCount} novos adicionados${progress.errorCount > 0 ? `, ${progress.errorCount} erros` : ""}` });
+    toast({ title: "✅ Importação concluída!", description: `${progress.newCount} novos, ${progress.updatedCount} atualizados${progress.errorCount > 0 ? `, ${progress.errorCount} erros` : ""}` });
     onCustomersChange();
   }
 
@@ -551,7 +551,7 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-green-400" />
                 <span className="text-xs font-medium text-foreground">
-                  Importação concluída: {importProgress.newCount} novos adicionados
+                  Importação concluída: {importProgress.newCount} novos, {importProgress.updatedCount} atualizados
                   {importProgress.errorCount > 0 && `, ${importProgress.errorCount} erros`}
                 </span>
               </div>
@@ -897,8 +897,8 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
 
           <div className="px-6 py-2 border-b border-border/50 flex items-center justify-between">
             <button onClick={toggleSelectAll} className="flex items-center gap-2 text-xs font-medium text-foreground hover:text-primary transition-colors">
-              <Checkbox checked={newCount > 0 && selectedPhones.size === newCount} onCheckedChange={toggleSelectAll} />
-              Selecionar todos os novos ({newCount})
+              <Checkbox checked={parsedCustomers.length > 0 && selectedPhones.size === parsedCustomers.length} onCheckedChange={toggleSelectAll} />
+              Selecionar todos ({parsedCustomers.length})
             </button>
           </div>
 
@@ -908,19 +908,13 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
                 const isSelected = selectedPhones.has(p.phone);
                 const statusBadge = getStatusBadge(p.status);
                 return (
-                  <div key={p.phone} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-all ${!p.isNew ? "border-border/20 bg-secondary/10 opacity-50" : isSelected ? "border-primary/30 bg-primary/[0.04]" : "border-border/30 bg-secondary/5 hover:bg-secondary/15"}`}>
-                    {p.isNew ? (
-                      <Checkbox checked={isSelected} onCheckedChange={() => toggleSelect(p.phone)} />
-                    ) : (
-                      <div className="w-4 h-4 flex items-center justify-center">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-muted-foreground/40" />
-                      </div>
-                    )}
+                  <div key={p.phone} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-all ${isSelected ? "border-primary/30 bg-primary/[0.04]" : "border-border/30 bg-secondary/5 hover:bg-secondary/15"}`}>
+                    <Checkbox checked={isSelected} onCheckedChange={() => toggleSelect(p.phone)} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium text-foreground truncate">{p.name || "Sem nome"}</p>
                         <Badge variant="outline" className={`text-[9px] px-1.5 py-0 h-4 ${statusBadge.className}`}>{statusBadge.label}</Badge>
-                        {!p.isNew && <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-muted/50 text-muted-foreground border-border/30">Já cadastrado</Badge>}
+                        {!p.isNew && <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-yellow-500/10 text-yellow-400 border-yellow-500/20">Atualizar</Badge>}
                         {p.isNew && <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-green-500/10 text-green-400 border-green-500/20">Novo</Badge>}
                       </div>
                       <div className="flex items-center gap-3 mt-0.5">
@@ -941,7 +935,9 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
           </ScrollArea>
 
           <div className="px-6 py-4 border-t border-border flex items-center justify-between">
-            <p className="text-xs text-muted-foreground">Apenas clientes <strong className="text-green-400">novos</strong> serão adicionados.</p>
+            <p className="text-xs text-muted-foreground">
+              <strong className="text-green-400">Novos</strong> serão criados, <strong className="text-yellow-400">existentes</strong> serão atualizados com dados do Excel.
+            </p>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" className="h-9 text-xs px-4" onClick={() => setShowPreview(false)}>Cancelar</Button>
               <Button size="sm" className="h-9 text-xs px-5 gap-1.5 font-semibold shadow-lg shadow-primary/20" onClick={handleConfirmImport} disabled={selectedCount === 0}>
