@@ -41,10 +41,19 @@ export async function preCreateWhatsAppInstance(userId: string): Promise<void> {
     }
 
     // Fire instance creation on Evolution API
-    await createInstance(fixedName);
-    logger.info("[preCreate] Instance created successfully:", fixedName);
+    try {
+      await createInstance(fixedName);
+      logger.info("[preCreate] Instance created successfully:", fixedName);
+    } catch (createErr) {
+      const msg = createErr instanceof Error ? createErr.message : String(createErr);
+      // Instance already exists — this is fine, skip silently
+      if (msg.includes("already") || msg.includes("403")) {
+        logger.info("[preCreate] Instance already exists, skipping:", fixedName);
+      } else {
+        logger.error("[preCreate] Creation failed:", msg);
+      }
+    }
   } catch (err) {
     logger.error("[preCreate] Failed:", err instanceof Error ? err.message : err);
-    // Don't throw — the useWhatsApp hook will handle recovery
   }
 }
