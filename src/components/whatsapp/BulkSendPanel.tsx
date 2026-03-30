@@ -153,12 +153,25 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
         <Textarea placeholder="Digite sua mensagem..." value={message} onChange={(e) => setMessage(e.target.value)} rows={4} disabled={isSending} className="mb-3 rounded-xl bg-secondary/30 border-border/40 resize-none" />
 
         {isSending && progress && (
-          <div className="mb-4 space-y-2.5 rounded-xl bg-secondary/20 border border-border/30 p-4">
+          <div className="mb-4 space-y-3 rounded-xl bg-secondary/20 border border-border/30 p-4">
             <div className="flex items-center gap-2.5 text-sm text-muted-foreground">
               <Loader2 className="w-4 h-4 animate-spin text-orange-400" />
               <span className="font-medium">Enviando... {progress.sent + progress.failed}/{progress.total}</span>
             </div>
             <Progress value={pct} className="h-2" />
+            {countdown > 0 && (
+              <div className="flex items-center gap-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20 px-3 py-2">
+                <Shield className="w-4 h-4 text-blue-400 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-blue-300 font-medium">Proteção anti-bloqueio ativa</p>
+                  <p className="text-[11px] text-blue-400/70">Aguardando intervalo de segurança...</p>
+                </div>
+                <div className="flex items-center gap-1.5 bg-blue-500/15 px-2.5 py-1 rounded-full">
+                  <Timer className="w-3.5 h-3.5 text-blue-400" />
+                  <span className="text-sm font-mono font-bold text-blue-300">{countdown}s</span>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
