@@ -208,7 +208,7 @@ const Admin = () => {
             </div>
 
             {/* Customer KPI Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
               <StatCard
                 icon={<Users className="w-5 h-5" />}
                 label="Total de Clientes"
@@ -217,41 +217,57 @@ const Admin = () => {
               />
               <StatCard
                 icon={<Zap className="w-5 h-5" />}
-                label="Total kW"
+                label="Total kW (Consumo)"
                 value={`${(analytics?.totalKw ?? 0).toLocaleString("pt-BR")} kW`}
                 color="accent"
-              />
-              <StatCard
-                icon={<DollarSign className="w-5 h-5" />}
-                label="Valor Total Contas"
-                value={(analytics?.totalBillValue ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                color="primary"
-                subtitle={`Média: ${(analytics?.avgBillValue ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`}
+                subtitle={`Média: ${(analytics?.avgKw ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kW`}
               />
               <StatCard
                 icon={<TrendingUp className="w-5 h-5" />}
                 label="Taxa de Conversão"
                 value={`${(analytics?.conversionRate ?? 0).toFixed(1)}%`}
-                color="accent"
+                color="primary"
                 subtitle="Cliques / Visualizações"
               />
             </div>
 
-            {/* Clicks by target */}
+            {/* Clicks by target - separated by page */}
             {analytics?.clicksByTarget && Object.keys(analytics.clicksByTarget).length > 0 && (
               <div className="bg-card rounded-2xl border border-border p-4 sm:p-6">
                 <h3 className="font-heading font-bold text-foreground mb-1 flex items-center gap-2">
                   <MousePointerClick className="w-4 h-4 text-primary" /> Cliques por Botão
                 </h3>
-                <p className="text-xs text-muted-foreground mb-4">Quais botões seus visitantes mais clicam</p>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {Object.entries(analytics.clicksByTarget).map(([target, count]) => (
-                    <div key={target} className="bg-secondary rounded-xl p-4 text-center">
-                      <p className="text-2xl font-bold font-heading text-foreground">{count}</p>
-                      <p className="text-xs text-muted-foreground">{friendlyClickLabel(target)}</p>
+                <p className="text-xs text-muted-foreground mb-4">Quais botões seus visitantes mais clicam — separado por página</p>
+
+                {/* Página Cliente */}
+                {analytics.clicksByPage?.client && Object.keys(analytics.clicksByPage.client).length > 0 && (
+                  <div className="mb-4">
+                    <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">📄 Página Cliente</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      {Object.entries(analytics.clicksByPage.client).map(([target, count]) => (
+                        <div key={target} className="bg-secondary rounded-xl p-4 text-center">
+                          <p className="text-2xl font-bold font-heading text-foreground">{count}</p>
+                          <p className="text-xs text-muted-foreground">{friendlyClickLabel(target)}</p>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                )}
+
+                {/* Página Licenciada */}
+                {analytics.clicksByPage?.licenciada && Object.keys(analytics.clicksByPage.licenciada).length > 0 && (
+                  <div>
+                    <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">💼 Página Licenciada</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      {Object.entries(analytics.clicksByPage.licenciada).map(([target, count]) => (
+                        <div key={target} className="bg-secondary rounded-xl p-4 text-center">
+                          <p className="text-2xl font-bold font-heading text-foreground">{count}</p>
+                          <p className="text-xs text-muted-foreground">{friendlyClickLabel(target)}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
