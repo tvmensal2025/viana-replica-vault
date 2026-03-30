@@ -897,8 +897,8 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
 
           <div className="px-6 py-2 border-b border-border/50 flex items-center justify-between">
             <button onClick={toggleSelectAll} className="flex items-center gap-2 text-xs font-medium text-foreground hover:text-primary transition-colors">
-              <Checkbox checked={newCount > 0 && selectedPhones.size === newCount} onCheckedChange={toggleSelectAll} />
-              Selecionar todos os novos ({newCount})
+              <Checkbox checked={parsedCustomers.length > 0 && selectedPhones.size === parsedCustomers.length} onCheckedChange={toggleSelectAll} />
+              Selecionar todos ({parsedCustomers.length})
             </button>
           </div>
 
