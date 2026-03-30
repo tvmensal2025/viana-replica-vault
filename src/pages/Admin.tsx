@@ -89,6 +89,8 @@ const Admin = () => {
         licenciada_cadastro_url: form.licenciada_cadastro_url || null,
         facebook_pixel_id: form.facebook_pixel_id || null,
         google_analytics_id: form.google_analytics_id || null,
+        igreen_portal_email: form.igreen_portal_email || null,
+        igreen_portal_password: form.igreen_portal_password || null,
       };
       if (photo_url) payload.photo_url = photo_url;
       const { error } = await supabase.from("consultants").upsert(payload, { onConflict: "id" });
