@@ -66,8 +66,8 @@ export function useAnalytics(consultantId: string | null) {
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       const since = thirtyDaysAgo.toISOString();
 
-      // Fetch views, events and deals in parallel
-      const [viewsRes, eventsRes, dealsRes] = await Promise.all([
+      // Fetch views, events, deals and ALL customers in parallel
+      const [viewsRes, eventsRes, dealsRes, allCustomersRes] = await Promise.all([
         supabase
           .from("page_views")
           .select("page_type, created_at, device_type, utm_source")
@@ -82,6 +82,9 @@ export function useAnalytics(consultantId: string | null) {
           .from("crm_deals")
           .select("customer_id")
           .eq("consultant_id", consultantId!),
+        supabase
+          .from("customers")
+          .select("id, name, status, media_consumo, electricity_bill_value, created_at, registered_by_name, registered_by_igreen_id"),
       ]);
 
       if (viewsRes.error) throw viewsRes.error;
@@ -91,28 +94,13 @@ export function useAnalytics(consultantId: string | null) {
       const views = viewsRes.data;
       const events = eventsRes.data;
       const deals = dealsRes.data;
+      const allCustomers = allCustomersRes.data || [];
 
       // Get unique customer IDs from deals
       const customerIds = [...new Set(deals.map((d) => d.customer_id).filter(Boolean))] as string[];
 
-      // Fetch customers if we have IDs
-      let customers: Array<{
-        id: string;
-        name: string | null;
-        status: string;
-        media_consumo: number | null;
-        electricity_bill_value: number | null;
-        created_at: string;
-        registered_by_name: string | null;
-      }> = [];
-
-      if (customerIds.length > 0) {
-        const { data: custData, error: custError } = await supabase
-          .from("customers")
-          .select("id, name, status, media_consumo, electricity_bill_value, created_at, registered_by_name")
-          .in("id", customerIds);
-        if (!custError && custData) customers = custData;
-      }
+      // Filter deal-linked customers for status/consumption metrics
+      const customers = allCustomers.filter((c) => customerIds.includes(c.id));
 
       const totalClient = views.filter((v) => v.page_type === "client").length;
       const totalLicenciada = views.filter((v) => v.page_type === "licenciada").length;
