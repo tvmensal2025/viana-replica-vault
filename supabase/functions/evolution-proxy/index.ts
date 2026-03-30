@@ -31,7 +31,7 @@ function getTimeoutMs(path: string): number {
   if (path.startsWith("instance/connectionState/")) return 15000;
   if (path === "instance/fetchInstances") return 15000;
   if (path.startsWith("instance/connect/")) return 20000;
-  if (path === "instance/create") return 55000;
+  if (path === "instance/create") return 30000;
   if (path.startsWith("chat/findChats/")) return 25000;
   if (path.startsWith("chat/findMessages/")) return 25000;
   if (path.startsWith("message/")) return 20000;
