@@ -181,9 +181,17 @@ Deno.serve(async (req) => {
 
     // Step 1: Login to iGreen API
     console.log("Logging in to iGreen API...");
+    console.log("Email used:", portalEmail);
+    const browserHeaders = {
+      "Content-Type": "application/json",
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Accept": "application/json, text/plain, */*",
+      "Origin": "https://escritorio.igreenenergy.com.br",
+      "Referer": "https://escritorio.igreenenergy.com.br/",
+    };
     const loginRes = await fetch(`${API_BASE}/login`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: browserHeaders,
       body: JSON.stringify({ email: portalEmail, password: portalPassword }),
     });
 
@@ -225,6 +233,10 @@ Deno.serve(async (req) => {
     const authHeaders = {
       "Authorization": `Bearer ${token}`,
       "Content-Type": "application/json",
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+      "Accept": "application/json, text/plain, */*",
+      "Origin": "https://escritorio.igreenenergy.com.br",
+      "Referer": "https://escritorio.igreenenergy.com.br/",
     };
 
     // Step 2: Get consultant info to get the ID
