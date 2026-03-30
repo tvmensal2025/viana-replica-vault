@@ -372,12 +372,31 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
               <p className="text-[11px] text-muted-foreground">Gerencie sua carteira de clientes</p>
             </div>
           </div>
-          <Button onClick={() => setShowAddDialog(true)} size="sm" className="gap-2 rounded-xl font-semibold shadow-lg shadow-primary/15 h-9 px-4">
-            <UserPlus className="w-4 h-4" /> Novo Cliente
-          </Button>
-        </div>
-
-        {/* Search */}
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={() => fileInputRef.current?.click()}
+              size="sm"
+              variant="outline"
+              className="gap-2 rounded-xl font-semibold h-9 px-4 border-primary/20 text-primary hover:bg-primary/10"
+              disabled={importing}
+            >
+              {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+              Importar Excel
+            </Button>
+            <Button onClick={() => setShowAddDialog(true)} size="sm" className="gap-2 rounded-xl font-semibold shadow-lg shadow-primary/15 h-9 px-4">
+              <UserPlus className="w-4 h-4" /> Novo Cliente
+            </Button>
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleImportExcel(file);
+            }}
+          />
         <div className="px-5 pt-4 pb-3">
           <div className="relative">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
