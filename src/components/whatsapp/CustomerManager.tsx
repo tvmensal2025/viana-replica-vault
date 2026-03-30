@@ -317,10 +317,10 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
     const nascimento = safeString(findColumnValue(row, "Data Nascimento", "Nascimento", "data_nascimento"));
     if (nascimento) data.data_nascimento = nascimento;
 
-    const licenciado = safeString(findColumnValue(row, "Licenciado", "licenciado"));
+    const licenciado = safeString(findColumnValue(row, "Licenciado", "licenciado", "LICENCIADO", "Nome Licenciado", "Nome do Licenciado", "Consultor", "consultor", "Representante", "representante"));
     if (licenciado) data.registered_by_name = licenciado;
 
-    const codigoLic = safeString(findColumnValue(row, "Código Licenciado", "Codigo Licenciado", "código licenciado"));
+    const codigoLic = safeString(findColumnValue(row, "Código Licenciado", "Codigo Licenciado", "código licenciado", "CÓDIGO LICENCIADO", "Cod Licenciado", "Cod. Licenciado", "ID Licenciado", "Cód Licenciado", "Cód. Licenciado"));
     if (codigoLic) data.registered_by_igreen_id = codigoLic;
 
     // New fields
