@@ -197,7 +197,35 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  // Fetch last sync timestamp
   useEffect(() => {
+    supabase.from("settings").select("value").eq("key", "last_igreen_sync").maybeSingle().then(({ data }) => {
+      if (data?.value) setLastSync(data.value);
+    });
+  }, []);
+
+  async function handleSyncIgreen() {
+    setSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("sync-igreen-customers", {
+        body: { consultant_id: consultantId },
+      });
+      if (error) throw error;
+      if (data?.success) {
+        toast({ title: "✅ Sincronização concluída!", description: `${data.processed} clientes processados, ${data.updated} atualizados.` });
+        setLastSync(data.synced_at);
+        onCustomersChange();
+      } else {
+        toast({ title: "⚠️ Problema na sincronização", description: data?.error || "Erro desconhecido", variant: "destructive" });
+      }
+    } catch (err) {
+      toast({ title: "Erro na sincronização", description: err instanceof Error ? err.message : "Erro", variant: "destructive" });
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+
     if (!instanceName) return;
     const fetchPics = async () => {
       const pics: Record<string, string> = {};
