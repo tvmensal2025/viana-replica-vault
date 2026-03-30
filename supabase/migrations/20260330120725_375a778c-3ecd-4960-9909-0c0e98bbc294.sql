@@ -1,0 +1,2 @@
+ALTER TABLE public.customers DROP CONSTRAINT customers_status_check;
+ALTER TABLE public.customers ADD CONSTRAINT customers_status_check CHECK (status = ANY (ARRAY['pending','data_complete','registered_igreen','contract_sent','approved','rejected','lead']));

@@ -99,6 +99,7 @@ function normalizePhone(raw: string): string {
   return "";
 }
 
+// Allowed DB values: pending, data_complete, registered_igreen, contract_sent, approved, rejected, lead
 function mapStatus(andamento: string | undefined): string {
   if (!andamento) return "pending";
   const lower = andamento.toLowerCase().trim();
@@ -106,6 +107,9 @@ function mapStatus(andamento: string | undefined): string {
   if (lower === "devolutiva" || lower === "reprovado" || lower === "cancelado") return "rejected";
   if (lower === "pendente" || lower === "em análise" || lower === "em analise") return "pending";
   if (lower === "lead" || lower === "novo") return "lead";
+  if (lower === "dados completos" || lower === "data_complete") return "data_complete";
+  if (lower === "registrado" || lower === "registered_igreen") return "registered_igreen";
+  if (lower === "contrato enviado" || lower === "contract_sent") return "contract_sent";
   return "pending";
 }
 
