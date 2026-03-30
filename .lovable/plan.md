@@ -1,56 +1,58 @@
 
 
-# Plano: Dashboard Premium com Métricas de Clientes
+# Plano: Importação de Excel (.xlsx) do Mapa de Clientes iGreen
 
 ## O que será feito
 
-O hook `useAnalytics` já calcula todos os dados necessários (totalCustomers, totalKw, totalBillValue, customersByStatus, customerConsumption, weeklyNewCustomers, conversionRate). Falta apenas renderizar no `Admin.tsx`.
+Adicionar um botão **"Importar Excel"** na tela de Clientes que aceita o arquivo `.xlsx` exportado do portal iGreen (`escritorio.igreenenergy.com.br/mapa-clientes`) e importa/atualiza os clientes no banco de dados.
 
-### 1. Corrigir rótulos amigáveis nos cliques
-A função `friendlyClickLabel` já existe mas não é usada na renderização. Aplicar na linha 221.
+## Colunas do Excel iGreen (confirmadas pelo arquivo enviado)
 
-### 2. Novos KPI Cards (segunda fileira)
-Adicionar abaixo dos stats existentes:
-- **Total de Clientes** (ícone Users, cor verde)
-- **Total kW** (ícone Zap, cor amarela)
-- **Valor Total Contas** (ícone DollarSign, formatado R$)
-- **Taxa de Conversão** (ícone TrendingUp, com %)
+| Coluna Excel | Campo no banco (`customers`) |
+|---|---|
+| Nome do Cliente | `name` |
+| Consumo Médio | `media_consumo` |
+| Celular | `phone_whatsapp` |
+| Documento | `cpf` |
+| Instalação | `numero_instalacao` |
+| Cidade | `address_city` |
+| UF | `address_state` |
+| Distribuidora | `distribuidora` |
+| E-mail | `email` |
+| Desconto Cliente | `desconto_cliente` |
+| Data Nascimento | `data_nascimento` |
+| Andamento | `status` (mapeado) |
+| Código | usado como referência |
 
-### 3. Gráfico de Consumo por Cliente (BarChart horizontal)
-Card com barras horizontais mostrando `customerConsumption` (nome × kW), top 15, cores gradiente verde.
+## Fluxo do usuário
 
-### 4. Donut de Status de Clientes (PieChart)
-Card com gráfico pizza/donut mostrando distribuição por status (Aprovado, Pendente, Lead, Rejeitado) com cores distintas.
-
-### 5. Novos Clientes por Semana (AreaChart)
-Card com gráfico de área mostrando `weeklyNewCustomers` nos últimos 30 dias.
-
-### Layout
-```text
-┌─────────────┬──────────────┬──────────────┬──────────────┐
-│ Views       │ Pg Cliente   │ Pg Licenciado│ Cliques      │
-├─────────────┼──────────────┼──────────────┼──────────────┤
-│ Clientes    │ Total kW     │ Valor Contas │ Conversão    │
-├─────────────┴──────────────┴──────────────┴──────────────┤
-│ Cliques por Botão (rótulos amigáveis)                    │
-├──────────────────────────────┬───────────────────────────┤
-│ Consumo por Cliente (BarH)   │ Status Clientes (Donut)  │
-├──────────────────────────────┴───────────────────────────┤
-│ Visualizações 30 dias + Novos Clientes/Semana            │
-├─────────────┬──────────────┬────────────────────────────┤
-│ Horários    │ Dispositivos │ Origem Tráfego             │
-└─────────────┴──────────────┴────────────────────────────┘
-```
+1. Clica em **"Importar Excel"** (botão ao lado de "Adicionar Cliente")
+2. Seleciona o arquivo `.xlsx`
+3. Sistema lê no browser com a lib `xlsx` (SheetJS)
+4. Para cada linha: upsert em `customers` por `phone_whatsapp` (evita duplicatas)
+5. Clientes novos ganham um `crm_deals` vinculado ao consultor com stage `novo_lead`
+6. Exibe resumo: X novos, Y atualizados, Z erros
 
 ## Detalhes técnicos
 
-**Arquivo único**: `src/pages/Admin.tsx`
+### Dependência
+- Instalar `xlsx` (SheetJS) para parse de Excel no browser
 
-Alterações:
-1. **Linha 221**: Trocar `{target}` por `{friendlyClickLabel(target)}`
-2. **Após linha 208**: Inserir segunda grade de KPI cards com dados de clientes
-3. **Após seção cliques (linha 226)**: Inserir grid 2 colunas com BarChart horizontal + PieChart donut
-4. **Antes do gráfico de comparativo diário**: Inserir AreaChart de novos clientes por semana
-5. Formatar valores financeiros com `toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })`
-6. Cores do donut: verde (approved), amarelo (pending), vermelho (rejected), azul (lead)
+### Arquivos modificados
+1. **`src/components/whatsapp/CustomerManager.tsx`**
+   - Adicionar botão "Importar Excel" com ícone Upload
+   - Criar dialog com input de arquivo `.xlsx`
+   - Lógica de parse: ler sheet, mapear colunas, normalizar telefone
+   - Upsert em `customers` por `phone_whatsapp`
+   - Criar `crm_deals` para clientes novos
+   - Progress bar + toast com resumo
+
+### Mapeamento de status (Andamento → status)
+- "Validado" → `approved`
+- "Devolutiva" → `rejected`
+- Qualquer outro → `pending`
+
+### Normalização do telefone
+- Remover formatação: `(19) 98609-3713` → `5519986093713`
+- Prefixar `55` se não tiver código do país
 
