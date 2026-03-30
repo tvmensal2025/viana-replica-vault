@@ -767,7 +767,25 @@ const Admin = () => {
                 <div className="space-y-2">
                   <Label htmlFor="google_analytics_id" className="text-sm text-muted-foreground">Google Analytics ID (GA4)</Label>
                   <Input id="google_analytics_id" value={form.google_analytics_id} onChange={(e) => setForm({ ...form, google_analytics_id: e.target.value })} placeholder="Ex: G-XXXXXXXXXX" className="bg-secondary border-border" />
+            </div>
+
+            {/* Portal iGreen Credentials */}
+            <div className="bg-card rounded-2xl border border-border p-6">
+              <h3 className="font-heading font-bold text-foreground mb-4 flex items-center gap-2">
+                <KeyRound className="w-5 h-5 text-primary" /> Credenciais Portal iGreen
+              </h3>
+              <p className="text-xs text-muted-foreground mb-4">Email e senha do escritório virtual iGreen para sincronização automática de clientes</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="igreen_portal_email" className="text-sm text-muted-foreground">Email do Portal</Label>
+                  <Input id="igreen_portal_email" type="email" value={form.igreen_portal_email} onChange={(e) => setForm({ ...form, igreen_portal_email: e.target.value })} placeholder="seu@email.com" className="bg-secondary border-border" />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="igreen_portal_password" className="text-sm text-muted-foreground">Senha do Portal</Label>
+                  <Input id="igreen_portal_password" type="password" value={form.igreen_portal_password} onChange={(e) => setForm({ ...form, igreen_portal_password: e.target.value })} placeholder="••••••••" className="bg-secondary border-border" />
+                </div>
+              </div>
+            </div>
               </div>
             </div>
 
