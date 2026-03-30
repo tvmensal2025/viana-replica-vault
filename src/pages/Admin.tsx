@@ -218,7 +218,7 @@ const Admin = () => {
                   {Object.entries(analytics.clicksByTarget).map(([target, count]) => (
                     <div key={target} className="bg-secondary rounded-xl p-4 text-center">
                       <p className="text-2xl font-bold font-heading text-foreground">{count}</p>
-                      <p className="text-xs text-muted-foreground capitalize">{target}</p>
+                      <p className="text-xs text-muted-foreground">{friendlyClickLabel(target)}</p>
                     </div>
                   ))}
                 </div>
