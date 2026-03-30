@@ -28,20 +28,20 @@ function normalizeEvolutionBaseUrl(rawUrl: string | undefined): string {
 }
 
 function getTimeoutMs(path: string): number {
-  if (path.startsWith("instance/connectionState/")) return 25000;
+  if (path.startsWith("instance/connectionState/")) return 15000;
   if (path === "instance/fetchInstances") return 15000;
-  if (path.startsWith("instance/connect/")) return 30000;
-  if (path === "instance/create") return 60000;
-  if (path.startsWith("chat/findChats/")) return 30000;
-  if (path.startsWith("chat/findMessages/")) return 30000;
-  if (path.startsWith("message/")) return 25000;
-  return 25000;
+  if (path.startsWith("instance/connect/")) return 20000;
+  if (path === "instance/create") return 55000;
+  if (path.startsWith("chat/findChats/")) return 25000;
+  if (path.startsWith("chat/findMessages/")) return 25000;
+  if (path.startsWith("message/")) return 20000;
+  return 20000;
 }
 
 function getMaxAttempts(path: string): number {
-  if (path.startsWith("instance/connectionState/")) return 3;
-  if (path.startsWith("instance/connect/")) return 3;
-  if (path === "instance/create") return 2;
+  if (path.startsWith("instance/connectionState/")) return 2;
+  if (path.startsWith("instance/connect/")) return 2;
+  if (path === "instance/create") return 1;
   if (path === "instance/fetchInstances") return 2;
   return 1;
 }
@@ -120,6 +120,14 @@ async function proxyToEvolution(
 
         if (safePath === "instance/fetchInstances") {
           return new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
+        // Graceful fallback for connect timeout — return 200 with null QR
+        if (safePath.startsWith("instance/connect/")) {
+          return new Response(JSON.stringify({ base64: null, timeout: true }), {
             status: 200,
             headers: { "Content-Type": "application/json" },
           });

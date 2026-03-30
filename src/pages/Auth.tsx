@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { preCreateWhatsAppInstance } from "@/services/preCreateInstance";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,14 +18,11 @@ const Auth = () => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session) {
         navigate("/admin");
-        // Fire after navigation so session is fully propagated
-        setTimeout(() => preCreateWhatsAppInstance(session.user.id).catch(() => {}), 500);
       }
     });
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         navigate("/admin");
-        setTimeout(() => preCreateWhatsAppInstance(session.user.id).catch(() => {}), 500);
       }
     });
     return () => subscription.unsubscribe();
