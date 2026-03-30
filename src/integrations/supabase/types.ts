@@ -185,12 +185,18 @@ export type Database = {
           address_state: string | null
           address_street: string | null
           andamento_igreen: string | null
+          assinatura_cliente: string | null
+          assinatura_igreen: string | null
+          cashback: string | null
           cep: string | null
           conta_pdf_protegida: boolean | null
           conversation_step: string | null
           cpf: string | null
           created_at: string
+          data_ativo: string | null
+          data_cadastro: string | null
           data_nascimento: string | null
+          data_validado: string | null
           debitos_aberto: boolean | null
           desconto_cliente: number | null
           devolutiva: string | null
@@ -203,9 +209,12 @@ export type Database = {
           email: string | null
           error_message: string | null
           id: string
+          igreen_code: string | null
           igreen_link: string | null
+          link_assinatura: string | null
           media_consumo: number | null
           name: string | null
+          nivel_licenciado: string | null
           nome_mae: string | null
           nome_pai: string | null
           numero_instalacao: string | null
@@ -222,6 +231,7 @@ export type Database = {
           rg: string | null
           senha_pdf: string | null
           status: string
+          status_financeiro: string | null
           updated_at: string
         }
         Insert: {
@@ -232,12 +242,18 @@ export type Database = {
           address_state?: string | null
           address_street?: string | null
           andamento_igreen?: string | null
+          assinatura_cliente?: string | null
+          assinatura_igreen?: string | null
+          cashback?: string | null
           cep?: string | null
           conta_pdf_protegida?: boolean | null
           conversation_step?: string | null
           cpf?: string | null
           created_at?: string
+          data_ativo?: string | null
+          data_cadastro?: string | null
           data_nascimento?: string | null
+          data_validado?: string | null
           debitos_aberto?: boolean | null
           desconto_cliente?: number | null
           devolutiva?: string | null
@@ -250,9 +266,12 @@ export type Database = {
           email?: string | null
           error_message?: string | null
           id?: string
+          igreen_code?: string | null
           igreen_link?: string | null
+          link_assinatura?: string | null
           media_consumo?: number | null
           name?: string | null
+          nivel_licenciado?: string | null
           nome_mae?: string | null
           nome_pai?: string | null
           numero_instalacao?: string | null
@@ -269,6 +288,7 @@ export type Database = {
           rg?: string | null
           senha_pdf?: string | null
           status?: string
+          status_financeiro?: string | null
           updated_at?: string
         }
         Update: {
@@ -279,12 +299,18 @@ export type Database = {
           address_state?: string | null
           address_street?: string | null
           andamento_igreen?: string | null
+          assinatura_cliente?: string | null
+          assinatura_igreen?: string | null
+          cashback?: string | null
           cep?: string | null
           conta_pdf_protegida?: boolean | null
           conversation_step?: string | null
           cpf?: string | null
           created_at?: string
+          data_ativo?: string | null
+          data_cadastro?: string | null
           data_nascimento?: string | null
+          data_validado?: string | null
           debitos_aberto?: boolean | null
           desconto_cliente?: number | null
           devolutiva?: string | null
@@ -297,9 +323,12 @@ export type Database = {
           email?: string | null
           error_message?: string | null
           id?: string
+          igreen_code?: string | null
           igreen_link?: string | null
+          link_assinatura?: string | null
           media_consumo?: number | null
           name?: string | null
+          nivel_licenciado?: string | null
           nome_mae?: string | null
           nome_pai?: string | null
           numero_instalacao?: string | null
@@ -316,6 +345,7 @@ export type Database = {
           rg?: string | null
           senha_pdf?: string | null
           status?: string
+          status_financeiro?: string | null
           updated_at?: string
         }
         Relationships: []
