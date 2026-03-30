@@ -1,24 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
-  UserPlus,
-  Trash2,
-  Users,
-  Search,
-  Phone,
-  Mail,
-  MapPin,
-  Zap,
-  ChevronDown,
-  ChevronUp,
-  Pencil,
-  CreditCard,
-  User,
-  Save,
-  X,
-  Loader2,
-  Upload,
-  FileSpreadsheet,
-  CheckCircle2,
+  UserPlus, Trash2, Users, Search, Phone, Mail, MapPin, Zap,
+  ChevronDown, ChevronUp, Pencil, CreditCard, User, Save, X,
+  Loader2, Upload, FileSpreadsheet, CheckCircle2, CheckSquare, Square,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { Button } from "@/components/ui/button";
@@ -27,27 +11,19 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
+  Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { getProfilePicture } from "@/services/evolutionApi";
 import { AddCustomerDialog } from "./AddCustomerDialog";
-import type { TablesUpdate, TablesInsert } from "@/integrations/supabase/types";
+import type { TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface Customer {
   id: string;
@@ -74,6 +50,14 @@ interface CustomerManagerProps {
   consultantId: string;
   onCustomersChange: () => void;
   instanceName?: string | null;
+}
+
+interface ParsedCustomer {
+  phone: string;
+  name: string | null;
+  status: string;
+  data: Record<string, unknown>;
+  isNew: boolean; // true = not in DB yet
 }
 
 function formatPhoneDisplay(phone: string): string {
@@ -105,6 +89,47 @@ function getStatusBadge(status: string | null | undefined) {
   }
 }
 
+function normalizePhone(raw: string): string {
+  const digits = String(raw || "").replace(/\D/g, "");
+  if (digits.length === 0) return "";
+  if (digits.startsWith("55") && digits.length >= 12) return digits;
+  if (digits.length === 11) return `55${digits}`;
+  if (digits.length === 10) return `55${digits}`;
+  if (digits.length >= 12) return digits;
+  return "";
+}
+
+function mapStatus(andamento: string | undefined): string {
+  if (!andamento) return "pending";
+  const lower = andamento.toLowerCase().trim();
+  if (lower === "validado" || lower === "aprovado" || lower === "ativo") return "approved";
+  if (lower === "devolutiva" || lower === "reprovado" || lower === "cancelado") return "rejected";
+  if (lower === "pendente" || lower === "em análise" || lower === "em analise") return "pending";
+  if (lower === "lead" || lower === "novo") return "lead";
+  return "pending";
+}
+
+function safeString(val: unknown): string | null {
+  if (val == null || val === "" || val === undefined) return null;
+  const s = String(val).trim();
+  return s.length > 0 ? s : null;
+}
+
+function safeNumber(val: unknown): number | null {
+  if (val == null || val === "" || val === undefined) return null;
+  const n = parseFloat(String(val).replace(",", ".").replace("%", ""));
+  return isNaN(n) ? null : n;
+}
+
+function findColumnValue(row: Record<string, unknown>, ...keys: string[]): unknown {
+  for (const key of keys) {
+    if (row[key] != null && row[key] !== "") return row[key];
+    const found = Object.keys(row).find((k) => k.toLowerCase().trim() === key.toLowerCase().trim());
+    if (found && row[found] != null && row[found] !== "") return row[found];
+  }
+  return null;
+}
+
 export function CustomerManager({ customers, consultantId, onCustomersChange, instanceName }: CustomerManagerProps) {
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -116,10 +141,15 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState({ current: 0, total: 0, newCount: 0, updatedCount: 0, errorCount: 0 });
   const [showImportResult, setShowImportResult] = useState(false);
+  // Preview / approval state
+  const [showPreview, setShowPreview] = useState(false);
+  const [parsedCustomers, setParsedCustomers] = useState<ParsedCustomer[]>([]);
+  const [selectedPhones, setSelectedPhones] = useState<Set<string>>(new Set());
+  const [parsing, setParsing] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
-  // Fetch profile pictures from Evolution API
   useEffect(() => {
     if (!instanceName) return;
     const fetchPics = async () => {
@@ -129,12 +159,8 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
         if (phone.length < 10 || pics[c.id]) continue;
         try {
           const result = await getProfilePicture(instanceName, `${phone}@s.whatsapp.net`);
-          if (result && typeof result === "string") {
-            pics[c.id] = result;
-          }
-        } catch {
-          // skip
-        }
+          if (result && typeof result === "string") pics[c.id] = result;
+        } catch { /* skip */ }
       }
       setProfilePics((prev) => ({ ...prev, ...pics }));
     };
@@ -165,20 +191,12 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
   function openEdit(c: Customer) {
     setEditingCustomer(c);
     setEditForm({
-      name: c.name || "",
-      cpf: c.cpf || "",
-      data_nascimento: c.data_nascimento || "",
-      email: c.email || "",
-      phone_whatsapp: c.phone_whatsapp,
-      cep: c.cep || "",
-      address_street: c.address_street || "",
-      address_number: c.address_number || "",
-      address_neighborhood: c.address_neighborhood || "",
-      address_complement: c.address_complement || "",
-      address_city: c.address_city || "",
-      address_state: c.address_state || "",
-      numero_instalacao: c.numero_instalacao || "",
-      electricity_bill_value: c.electricity_bill_value?.toString() || "",
+      name: c.name || "", cpf: c.cpf || "", data_nascimento: c.data_nascimento || "",
+      email: c.email || "", phone_whatsapp: c.phone_whatsapp, cep: c.cep || "",
+      address_street: c.address_street || "", address_number: c.address_number || "",
+      address_neighborhood: c.address_neighborhood || "", address_complement: c.address_complement || "",
+      address_city: c.address_city || "", address_state: c.address_state || "",
+      numero_instalacao: c.numero_instalacao || "", electricity_bill_value: c.electricity_bill_value?.toString() || "",
       status: c.status || "pending",
     });
   }
@@ -216,179 +234,168 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
     }
   }
 
-  function normalizePhone(raw: string): string {
-    const digits = String(raw || "").replace(/\D/g, "");
-    if (digits.length === 0) return "";
-    // Already has country code 55
-    if (digits.startsWith("55") && digits.length >= 12) return digits;
-    // 11 digits = DDD + 9 + number (mobile)
-    if (digits.length === 11) return `55${digits}`;
-    // 10 digits = DDD + number (landline or old mobile)
-    if (digits.length === 10) return `55${digits}`;
-    // 9 digits = missing DDD, can't normalize reliably
-    if (digits.length === 9) return "";
-    // 8 digits = old format without DDD
-    if (digits.length === 8) return "";
-    // International or already complete
-    if (digits.length >= 12) return digits;
-    return "";
+  // ---- IMPORT: Parse Excel and show preview ----
+  function buildCustomerData(row: Record<string, unknown>): Record<string, unknown> {
+    const data: Record<string, unknown> = {};
+
+    const mediaConsumo = safeNumber(findColumnValue(row, "Consumo Médio", "Consumo Medio", "Consumo", "consumo"));
+    if (mediaConsumo != null) data.media_consumo = mediaConsumo;
+
+    const cpf = safeString(findColumnValue(row, "Documento", "CPF", "cpf", "CNPJ"));
+    if (cpf) data.cpf = cpf.replace(/\D/g, "");
+
+    const instalacao = safeString(findColumnValue(row, "Instalação", "Instalacao", "Código", "Codigo", "Nº Instalação"));
+    if (instalacao) data.numero_instalacao = instalacao;
+
+    const cidade = safeString(findColumnValue(row, "Cidade", "cidade", "Municipio", "Município"));
+    if (cidade) data.address_city = cidade;
+
+    const uf = safeString(findColumnValue(row, "UF", "uf", "Estado", "estado"));
+    if (uf) data.address_state = (uf as string).toUpperCase();
+
+    const distribuidora = safeString(findColumnValue(row, "Distribuidora", "distribuidora"));
+    if (distribuidora) data.distribuidora = distribuidora;
+
+    const email = safeString(findColumnValue(row, "E-mail", "Email", "email", "EMAIL"));
+    if (email) data.email = email;
+
+    const desconto = safeNumber(findColumnValue(row, "Desconto Cliente", "Desconto", "desconto"));
+    if (desconto != null) data.desconto_cliente = desconto;
+
+    const nascimento = safeString(findColumnValue(row, "Data Nascimento", "Nascimento", "data_nascimento"));
+    if (nascimento) data.data_nascimento = nascimento;
+
+    return data;
   }
 
-  function mapStatus(andamento: string | undefined): string {
-    if (!andamento) return "pending";
-    const lower = andamento.toLowerCase().trim();
-    if (lower === "validado" || lower === "aprovado" || lower === "ativo") return "approved";
-    if (lower === "devolutiva" || lower === "reprovado" || lower === "cancelado") return "rejected";
-    if (lower === "pendente" || lower === "em análise" || lower === "em analise") return "pending";
-    if (lower === "lead" || lower === "novo") return "lead";
-    return "pending";
-  }
-
-  function safeString(val: unknown): string | null {
-    if (val == null || val === "" || val === undefined) return null;
-    const s = String(val).trim();
-    return s.length > 0 ? s : null;
-  }
-
-  function safeNumber(val: unknown): number | null {
-    if (val == null || val === "" || val === undefined) return null;
-    const n = parseFloat(String(val).replace(",", ".").replace("%", ""));
-    return isNaN(n) ? null : n;
-  }
-
-  function findColumnValue(row: Record<string, unknown>, ...keys: string[]): unknown {
-    for (const key of keys) {
-      if (row[key] != null && row[key] !== "") return row[key];
-      // Case-insensitive fallback
-      const found = Object.keys(row).find((k) => k.toLowerCase().trim() === key.toLowerCase().trim());
-      if (found && row[found] != null && row[found] !== "") return row[found];
-    }
-    return null;
-  }
-
-  async function handleImportExcel(file: File) {
-    setImporting(true);
-    setShowImportResult(false);
-    const progress = { current: 0, total: 0, newCount: 0, updatedCount: 0, errorCount: 0 };
-    const seenPhones = new Set<string>(); // prevent duplicates within same batch
-
+  async function handleFileSelected(file: File) {
+    setParsing(true);
     try {
-      const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data, { type: "array" });
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
       const rows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet);
 
-      progress.total = rows.length;
-      setImportProgress({ ...progress });
+      // Get existing phones from DB
+      const existingPhones = new Set(customers.map((c) => c.phone_whatsapp.replace(/\D/g, "")));
+
+      const seenPhones = new Set<string>();
+      const parsed: ParsedCustomer[] = [];
 
       for (const row of rows) {
-        progress.current++;
-
         const phoneRaw = findColumnValue(row, "Celular", "celular", "Telefone", "telefone", "WhatsApp", "whatsapp", "Fone", "Phone");
         const phone = normalizePhone(String(phoneRaw || ""));
-        
-        if (!phone || phone.length < 12) {
-          progress.errorCount++;
-          setImportProgress({ ...progress });
-          continue;
-        }
-
-        // Skip duplicates within same import
-        if (seenPhones.has(phone)) {
-          setImportProgress({ ...progress });
-          continue;
-        }
+        if (!phone || phone.length < 12) continue;
+        if (seenPhones.has(phone)) continue;
         seenPhones.add(phone);
 
-        const customerData: Record<string, unknown> = {
-          phone_whatsapp: phone,
-          name: safeString(findColumnValue(row, "Nome do Cliente", "Nome", "nome", "NOME", "Cliente", "Name")),
-          status: mapStatus(safeString(findColumnValue(row, "Andamento", "Status", "status")) || undefined),
-        };
+        const name = safeString(findColumnValue(row, "Nome do Cliente", "Nome", "nome", "NOME", "Cliente", "Name"));
+        const statusRaw = safeString(findColumnValue(row, "Andamento", "Status", "status")) || undefined;
+        const isNew = !existingPhones.has(phone);
 
-        // Only add optional fields if they have values (avoid overwriting with null on updates)
-        const mediaConsumo = safeNumber(findColumnValue(row, "Consumo Médio", "Consumo Medio", "Consumo", "consumo"));
-        if (mediaConsumo != null) customerData.media_consumo = mediaConsumo;
+        parsed.push({
+          phone,
+          name,
+          status: mapStatus(statusRaw),
+          data: buildCustomerData(row),
+          isNew,
+        });
+      }
 
-        const cpf = safeString(findColumnValue(row, "Documento", "CPF", "cpf", "CNPJ"));
-        if (cpf) customerData.cpf = cpf.replace(/\D/g, "");
+      setParsedCustomers(parsed);
+      // Pre-select only new customers
+      const newPhones = new Set(parsed.filter((p) => p.isNew).map((p) => p.phone));
+      setSelectedPhones(newPhones);
+      setShowPreview(true);
+    } catch (err) {
+      toast({ title: "Erro ao ler arquivo", description: err instanceof Error ? err.message : "Erro", variant: "destructive" });
+    } finally {
+      setParsing(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
 
-        const instalacao = safeString(findColumnValue(row, "Instalação", "Instalacao", "Código", "Codigo", "Nº Instalação"));
-        if (instalacao) customerData.numero_instalacao = instalacao;
+  function toggleSelect(phone: string) {
+    setSelectedPhones((prev) => {
+      const next = new Set(prev);
+      if (next.has(phone)) next.delete(phone);
+      else next.add(phone);
+      return next;
+    });
+  }
 
-        const cidade = safeString(findColumnValue(row, "Cidade", "cidade", "Municipio", "Município"));
-        if (cidade) customerData.address_city = cidade;
+  function toggleSelectAll() {
+    const newCustomers = parsedCustomers.filter((p) => p.isNew);
+    if (selectedPhones.size === newCustomers.length) {
+      setSelectedPhones(new Set());
+    } else {
+      setSelectedPhones(new Set(newCustomers.map((p) => p.phone)));
+    }
+  }
 
-        const uf = safeString(findColumnValue(row, "UF", "uf", "Estado", "estado"));
-        if (uf) customerData.address_state = uf.toUpperCase();
+  async function handleConfirmImport() {
+    const toImport = parsedCustomers.filter((p) => p.isNew && selectedPhones.has(p.phone));
+    if (toImport.length === 0) {
+      toast({ title: "Nenhum cliente novo selecionado" });
+      return;
+    }
 
-        const distribuidora = safeString(findColumnValue(row, "Distribuidora", "distribuidora"));
-        if (distribuidora) customerData.distribuidora = distribuidora;
+    setShowPreview(false);
+    setImporting(true);
+    setShowImportResult(false);
+    const progress = { current: 0, total: toImport.length, newCount: 0, updatedCount: 0, errorCount: 0 };
+    setImportProgress({ ...progress });
 
-        const email = safeString(findColumnValue(row, "E-mail", "Email", "email", "EMAIL"));
-        if (email) customerData.email = email;
+    for (const item of toImport) {
+      progress.current++;
+      try {
+        const upsertData = {
+          phone_whatsapp: item.phone,
+          name: item.name,
+          status: item.status,
+          ...item.data,
+        } as TablesInsert<"customers">;
 
-        const desconto = safeNumber(findColumnValue(row, "Desconto Cliente", "Desconto", "desconto"));
-        if (desconto != null) customerData.desconto_cliente = desconto;
+        const { data: upserted, error } = await supabase
+          .from("customers")
+          .upsert(upsertData, { onConflict: "phone_whatsapp" })
+          .select("id")
+          .single();
 
-        const nascimento = safeString(findColumnValue(row, "Data Nascimento", "Nascimento", "data_nascimento"));
-        if (nascimento) customerData.data_nascimento = nascimento;
+        if (error) throw error;
 
-        try {
-          // Use upsert with phone_whatsapp as unique key (unique index exists)
-          const upsertData = { ...customerData, phone_whatsapp: phone } as TablesInsert<"customers">;
-          const { data: upserted, error } = await supabase
-            .from("customers")
-            .upsert(upsertData, { onConflict: "phone_whatsapp" })
-            .select("id")
-            .single();
-
-          if (error) throw error;
-
-          // Check if it was a new insert or update by checking if this phone existed before
+        if (upserted) {
           const { data: existingDeal } = await supabase
             .from("crm_deals")
             .select("id")
-            .eq("remote_jid", `${phone}@s.whatsapp.net`)
+            .eq("remote_jid", `${item.phone}@s.whatsapp.net`)
             .eq("consultant_id", consultantId)
             .maybeSingle();
 
-          if (!existingDeal && upserted) {
-            // New customer — create CRM deal
+          if (!existingDeal) {
             await supabase.from("crm_deals").insert({
               consultant_id: consultantId,
               customer_id: upserted.id,
-              remote_jid: `${phone}@s.whatsapp.net`,
+              remote_jid: `${item.phone}@s.whatsapp.net`,
               stage: "novo_lead",
             });
-            progress.newCount++;
-          } else {
-            progress.updatedCount++;
           }
-        } catch (err) {
-          console.error("[import] Error for phone", phone, err);
-          progress.errorCount++;
+          progress.newCount++;
         }
-
-        setImportProgress({ ...progress });
+      } catch (err) {
+        console.error("[import] Error for phone", item.phone, err);
+        progress.errorCount++;
       }
-
-      setShowImportResult(true);
-      toast({
-        title: "✅ Importação concluída!",
-        description: `${progress.newCount} novos, ${progress.updatedCount} atualizados, ${progress.errorCount} erros`,
-      });
-      onCustomersChange();
-    } catch (err) {
-      toast({
-        title: "Erro na importação",
-        description: err instanceof Error ? err.message : "Erro ao ler arquivo",
-        variant: "destructive",
-      });
-    } finally {
-      setImporting(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      setImportProgress({ ...progress });
     }
+
+    setShowImportResult(true);
+    setImporting(false);
+    toast({
+      title: "✅ Importação concluída!",
+      description: `${progress.newCount} novos adicionados${progress.errorCount > 0 ? `, ${progress.errorCount} erros` : ""}`,
+    });
+    onCustomersChange();
   }
 
   const fetchCep = async () => {
@@ -410,6 +417,10 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
   };
 
   const updateEdit = (field: string, value: string) => setEditForm((prev) => ({ ...prev, [field]: value }));
+
+  const newCount = parsedCustomers.filter((p) => p.isNew).length;
+  const existingCount = parsedCustomers.length - newCount;
+  const selectedCount = selectedPhones.size;
 
   return (
     <div className="relative overflow-hidden rounded-2xl border border-border bg-card">
@@ -436,9 +447,9 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
               size="sm"
               variant="outline"
               className="gap-2 rounded-xl font-semibold h-9 px-4 border-primary/20 text-primary hover:bg-primary/10"
-              disabled={importing}
+              disabled={importing || parsing}
             >
-              {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+              {(importing || parsing) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
               Importar Excel
             </Button>
             <Button onClick={() => setShowAddDialog(true)} size="sm" className="gap-2 rounded-xl font-semibold shadow-lg shadow-primary/15 h-9 px-4">
@@ -452,7 +463,7 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
             className="hidden"
             onChange={(e) => {
               const file = e.target.files?.[0];
-              if (file) handleImportExcel(file);
+              if (file) handleFileSelected(file);
             }}
           />
         </div>
@@ -474,7 +485,6 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
             </div>
             <div className="flex gap-4 mt-1.5 text-[10px] text-muted-foreground">
               <span className="text-green-400">{importProgress.newCount} novos</span>
-              <span className="text-blue-400">{importProgress.updatedCount} atualizados</span>
               {importProgress.errorCount > 0 && <span className="text-red-400">{importProgress.errorCount} erros</span>}
             </div>
           </div>
@@ -486,7 +496,7 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-green-400" />
                 <span className="text-xs font-medium text-foreground">
-                  Importação concluída: {importProgress.newCount} novos, {importProgress.updatedCount} atualizados
+                  Importação concluída: {importProgress.newCount} novos adicionados
                   {importProgress.errorCount > 0 && `, ${importProgress.errorCount} erros`}
                 </span>
               </div>
@@ -539,7 +549,6 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
                 return (
                   <div key={c.id} className={`rounded-xl border transition-all duration-200 ${isExpanded ? "border-primary/20 bg-primary/[0.02] shadow-md shadow-primary/5" : "border-border/40 bg-secondary/10 hover:border-border/60 hover:bg-secondary/20"}`}>
                     <div className="flex items-center gap-3 px-4 py-3 cursor-pointer" onClick={() => setExpandedId(isExpanded ? null : c.id)}>
-                      {/* Avatar with photo */}
                       <Avatar className="h-10 w-10 shrink-0 border border-primary/10">
                         <AvatarImage src={pic} />
                         <AvatarFallback className="bg-gradient-to-br from-primary/15 to-primary/5 text-xs font-bold text-primary">
@@ -646,7 +655,6 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
           <div className="px-6 pb-6 pt-2">
             <div className="grid grid-cols-2 gap-3">
               <SectionLabel icon={User} title="Dados Pessoais" />
-
               <div className="col-span-2">
                 <Label className="text-[11px] text-muted-foreground">Nome Completo</Label>
                 <Input value={editForm.name || ""} onChange={(e) => updateEdit("name", e.target.value)} className="h-9 text-xs mt-1 bg-secondary/30 border-border/50" />
@@ -678,7 +686,6 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
               </div>
 
               <SectionLabel icon={MapPin} title="Endereço" />
-
               <div>
                 <Label className="text-[11px] text-muted-foreground">CEP</Label>
                 <div className="flex gap-1.5 mt-1">
@@ -713,7 +720,6 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
               </div>
 
               <SectionLabel icon={Zap} title="Dados de Energia" />
-
               <div>
                 <Label className="text-[11px] text-muted-foreground">Nº Instalação</Label>
                 <Input value={editForm.numero_instalacao || ""} onChange={(e) => updateEdit("numero_instalacao", e.target.value)} className="h-9 text-xs mt-1 bg-secondary/30 border-border/50" />
@@ -731,6 +737,132 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
               <Button size="sm" className="h-9 text-xs px-5 gap-1.5 font-semibold shadow-lg shadow-primary/20" onClick={handleSaveEdit} disabled={saving}>
                 {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                 Salvar Alterações
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ===== Import Preview / Approval Dialog ===== */}
+      <Dialog open={showPreview} onOpenChange={setShowPreview}>
+        <DialogContent className="max-w-2xl max-h-[85vh] p-0 overflow-hidden">
+          <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent px-6 pt-6 pb-4 border-b border-border">
+            <DialogHeader>
+              <DialogTitle className="text-base font-bold flex items-center gap-2">
+                <FileSpreadsheet className="w-5 h-5 text-primary" />
+                Aprovar Importação
+              </DialogTitle>
+            </DialogHeader>
+            <div className="flex gap-4 mt-3 text-xs">
+              <span className="text-muted-foreground">
+                Total na planilha: <strong className="text-foreground">{parsedCustomers.length}</strong>
+              </span>
+              <span className="text-green-400">
+                Novos: <strong>{newCount}</strong>
+              </span>
+              <span className="text-muted-foreground">
+                Já cadastrados: <strong>{existingCount}</strong> (ignorados)
+              </span>
+              <span className="text-primary">
+                Selecionados: <strong>{selectedCount}</strong>
+              </span>
+            </div>
+          </div>
+
+          {/* Select all header */}
+          <div className="px-6 py-2 border-b border-border/50 flex items-center justify-between">
+            <button
+              onClick={toggleSelectAll}
+              className="flex items-center gap-2 text-xs font-medium text-foreground hover:text-primary transition-colors"
+            >
+              <Checkbox
+                checked={newCount > 0 && selectedPhones.size === newCount}
+                onCheckedChange={toggleSelectAll}
+              />
+              Selecionar todos os novos ({newCount})
+            </button>
+          </div>
+
+          <ScrollArea className="max-h-[55vh]">
+            <div className="px-6 py-2 space-y-1">
+              {parsedCustomers.map((p) => {
+                const isSelected = selectedPhones.has(p.phone);
+                const statusBadge = getStatusBadge(p.status);
+
+                return (
+                  <div
+                    key={p.phone}
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-all ${
+                      !p.isNew
+                        ? "border-border/20 bg-secondary/10 opacity-50"
+                        : isSelected
+                        ? "border-primary/30 bg-primary/[0.04]"
+                        : "border-border/30 bg-secondary/5 hover:bg-secondary/15"
+                    }`}
+                  >
+                    {p.isNew ? (
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={() => toggleSelect(p.phone)}
+                      />
+                    ) : (
+                      <div className="w-4 h-4 flex items-center justify-center">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-muted-foreground/40" />
+                      </div>
+                    )}
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-foreground truncate">{p.name || "Sem nome"}</p>
+                        <Badge variant="outline" className={`text-[9px] px-1.5 py-0 h-4 ${statusBadge.className}`}>
+                          {statusBadge.label}
+                        </Badge>
+                        {!p.isNew && (
+                          <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-muted/50 text-muted-foreground border-border/30">
+                            Já cadastrado
+                          </Badge>
+                        )}
+                        {p.isNew && (
+                          <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-green-500/10 text-green-400 border-green-500/20">
+                            Novo
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 mt-0.5">
+                        <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                          <Phone className="h-2.5 w-2.5" />
+                          {formatPhoneDisplay(p.phone)}
+                        </span>
+                        {p.data.address_city && (
+                          <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                            <MapPin className="h-2.5 w-2.5" />
+                            {String(p.data.address_city)}{p.data.address_state ? `/${p.data.address_state}` : ""}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </ScrollArea>
+
+          <div className="px-6 py-4 border-t border-border flex items-center justify-between">
+            <p className="text-xs text-muted-foreground">
+              Apenas clientes <strong className="text-green-400">novos</strong> serão adicionados. Clientes já cadastrados serão ignorados.
+            </p>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" className="h-9 text-xs px-4" onClick={() => setShowPreview(false)}>
+                Cancelar
+              </Button>
+              <Button
+                size="sm"
+                className="h-9 text-xs px-5 gap-1.5 font-semibold shadow-lg shadow-primary/20"
+                onClick={handleConfirmImport}
+                disabled={selectedCount === 0}
+              >
+                <Upload className="w-3.5 h-3.5" />
+                Importar {selectedCount} cliente{selectedCount !== 1 ? "s" : ""}
               </Button>
             </div>
           </div>
