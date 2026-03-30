@@ -273,23 +273,23 @@ const Admin = () => {
 
             {/* Customer Consumption + Status Donut */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Consumption by Customer - Horizontal Bar */}
+              {/* Top Licenciados by Deals */}
               <div className="bg-card rounded-2xl border border-border p-4 sm:p-6">
                 <h3 className="font-heading font-bold text-foreground mb-1 flex items-center gap-2">
-                  <Zap className="w-4 h-4 text-primary" /> Consumo por Cliente
+                  <TrendingUp className="w-4 h-4 text-primary" /> 🏆 Licenciados — Cadastros
                 </h3>
-                <p className="text-xs text-muted-foreground mb-4">Top clientes por consumo (kW)</p>
-                {analytics?.customerConsumption && analytics.customerConsumption.length > 0 ? (
-                  <div style={{ height: Math.max(200, analytics.customerConsumption.length * 36) }}>
+                <p className="text-xs text-muted-foreground mb-4">Top licenciados por contas cadastradas</p>
+                {analytics?.topLicenciados && analytics.topLicenciados.length > 0 ? (
+                  <div style={{ height: Math.max(200, analytics.topLicenciados.length * 36) }}>
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={analytics.customerConsumption} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
+                      <BarChart data={analytics.topLicenciados} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(120, 8%, 18%)" horizontal={false} />
                         <XAxis
                           type="number"
                           tick={{ fill: "hsl(120, 5%, 65%)", fontSize: 11 }}
                           tickLine={false}
                           axisLine={false}
-                          unit=" kW"
+                          allowDecimals={false}
                         />
                         <YAxis
                           type="category"
@@ -307,20 +307,20 @@ const Admin = () => {
                             fontSize: "13px",
                             color: "hsl(0, 0%, 95%)",
                           }}
-                          formatter={(value: number) => [`${value.toLocaleString("pt-BR")} kW`, "Consumo"]}
+                          formatter={(value: number) => [`${value} cadastros`, "Contas"]}
                         />
                         <defs>
-                          <linearGradient id="barGradient" x1="0" y1="0" x2="1" y2="0">
+                          <linearGradient id="barGradientLic" x1="0" y1="0" x2="1" y2="0">
                             <stop offset="0%" stopColor="hsl(130, 100%, 30%)" />
                             <stop offset="100%" stopColor="hsl(130, 100%, 45%)" />
                           </linearGradient>
                         </defs>
-                        <Bar dataKey="consumo" name="Consumo" fill="url(#barGradient)" radius={[0, 6, 6, 0]} barSize={20} />
+                        <Bar dataKey="deals" name="Cadastros" fill="url(#barGradientLic)" radius={[0, 6, 6, 0]} barSize={20} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground text-center py-8">Sem dados de consumo</p>
+                  <p className="text-sm text-muted-foreground text-center py-8">Nenhum licenciado vinculado ainda</p>
                 )}
               </div>
 
