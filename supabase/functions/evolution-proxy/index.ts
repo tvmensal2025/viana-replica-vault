@@ -31,7 +31,7 @@ function getTimeoutMs(path: string): number {
   if (path.startsWith("instance/connectionState/")) return 15000;
   if (path === "instance/fetchInstances") return 15000;
   if (path.startsWith("instance/connect/")) return 20000;
-  if (path === "instance/create") return 55000;
+  if (path === "instance/create") return 30000;
   if (path.startsWith("chat/findChats/")) return 25000;
   if (path.startsWith("chat/findMessages/")) return 25000;
   if (path.startsWith("message/")) return 20000;
@@ -128,6 +128,14 @@ async function proxyToEvolution(
         // Graceful fallback for connect timeout — return 200 with null QR
         if (safePath.startsWith("instance/connect/")) {
           return new Response(JSON.stringify({ base64: null, timeout: true }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
+        // Graceful fallback for create timeout — return 200 so frontend can retry connect
+        if (safePath === "instance/create") {
+          return new Response(JSON.stringify({ instance: { instanceName: "" }, timeout: true }), {
             status: 200,
             headers: { "Content-Type": "application/json" },
           });
