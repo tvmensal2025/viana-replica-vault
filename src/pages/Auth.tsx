@@ -18,14 +18,11 @@ const Auth = () => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session) {
         navigate("/admin");
-        // Fire after navigation so session is fully propagated
-        setTimeout(() => preCreateWhatsAppInstance(session.user.id).catch(() => {}), 500);
       }
     });
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         navigate("/admin");
-        setTimeout(() => preCreateWhatsAppInstance(session.user.id).catch(() => {}), 500);
       }
     });
     return () => subscription.unsubscribe();
