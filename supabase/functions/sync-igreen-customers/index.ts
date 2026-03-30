@@ -6,7 +6,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const API_BASE = "https://api-voffice.igreenenergy.com.br";
+const API_BASE = "https://api-voffice.igreenenergy.com.br/v1";
 
 function normalizePhone(raw: string): string {
   const digits = String(raw || "").replace(/\D/g, "");
