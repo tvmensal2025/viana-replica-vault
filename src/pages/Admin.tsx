@@ -207,6 +207,36 @@ const Admin = () => {
               />
             </div>
 
+            {/* Customer KPI Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <StatCard
+                icon={<Users className="w-5 h-5" />}
+                label="Total de Clientes"
+                value={analytics?.totalCustomers ?? 0}
+                color="primary"
+              />
+              <StatCard
+                icon={<Zap className="w-5 h-5" />}
+                label="Total kW"
+                value={`${(analytics?.totalKw ?? 0).toLocaleString("pt-BR")} kW`}
+                color="accent"
+              />
+              <StatCard
+                icon={<DollarSign className="w-5 h-5" />}
+                label="Valor Total Contas"
+                value={(analytics?.totalBillValue ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                color="primary"
+                subtitle={`Média: ${(analytics?.avgBillValue ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`}
+              />
+              <StatCard
+                icon={<TrendingUp className="w-5 h-5" />}
+                label="Taxa de Conversão"
+                value={`${(analytics?.conversionRate ?? 0).toFixed(1)}%`}
+                color="accent"
+                subtitle="Cliques / Visualizações"
+              />
+            </div>
+
             {/* Clicks by target */}
             {analytics?.clicksByTarget && Object.keys(analytics.clicksByTarget).length > 0 && (
               <div className="bg-card rounded-2xl border border-border p-4 sm:p-6">
