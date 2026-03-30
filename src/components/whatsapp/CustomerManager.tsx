@@ -207,8 +207,19 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
   async function handleSyncIgreen() {
     setSyncing(true);
     try {
+      // Fetch consultant's portal credentials
+      const { data: consultant } = await supabase.from("consultants").select("igreen_portal_email, igreen_portal_password").eq("id", consultantId).maybeSingle();
+      const portalEmail = (consultant as any)?.igreen_portal_email;
+      const portalPassword = (consultant as any)?.igreen_portal_password;
+
+      if (!portalEmail || !portalPassword) {
+        toast({ title: "⚠️ Credenciais não configuradas", description: "Preencha seu email e senha do portal iGreen na aba Dados.", variant: "destructive" });
+        setSyncing(false);
+        return;
+      }
+
       const { data, error } = await supabase.functions.invoke("sync-igreen-customers", {
-        body: { consultant_id: consultantId },
+        body: { consultant_id: consultantId, portal_email: portalEmail, portal_password: portalPassword },
       });
       if (error) throw error;
       if (data?.success) {

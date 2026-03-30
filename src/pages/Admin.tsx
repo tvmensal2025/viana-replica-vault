@@ -11,7 +11,7 @@ import type { Database } from "@/integrations/supabase/types";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, AreaChart, Area, PieChart, Pie, Cell, Legend,
 } from "recharts";
-import { Eye, Users, Copy, ExternalLink, LogOut, Save, Camera, BarChart3, LinkIcon, Settings, Monitor, MousePointerClick, Clock, Smartphone, Globe, QrCode, Download, X, MessageSquare, Zap, TrendingUp } from "lucide-react";
+import { Eye, Users, Copy, ExternalLink, LogOut, Save, Camera, BarChart3, LinkIcon, Settings, Monitor, MousePointerClick, Clock, Smartphone, Globe, QrCode, Download, X, MessageSquare, Zap, TrendingUp, KeyRound } from "lucide-react";
 import { WhatsAppTab } from "@/components/whatsapp/WhatsAppTab";
 import { QRCodeSVG } from "qrcode.react";
 
@@ -22,7 +22,7 @@ const Admin = () => {
   const [qrModal, setQrModal] = useState<{ url: string; label: string } | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [form, setForm] = useState({
-    name: "", license: "", phone: "", cadastro_url: "", igreen_id: "", licenciada_cadastro_url: "", facebook_pixel_id: "", google_analytics_id: "",
+    name: "", license: "", phone: "", cadastro_url: "", igreen_id: "", licenciada_cadastro_url: "", facebook_pixel_id: "", google_analytics_id: "", igreen_portal_email: "", igreen_portal_password: "",
   });
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
@@ -56,6 +56,8 @@ const Admin = () => {
         licenciada_cadastro_url: id ? `https://expansao.igreenenergy.com.br/?id=${id}&checkout=true` : c.licenciada_cadastro_url || "",
         facebook_pixel_id: c.facebook_pixel_id || "",
         google_analytics_id: c.google_analytics_id || "",
+        igreen_portal_email: (c as any).igreen_portal_email || "",
+        igreen_portal_password: (c as any).igreen_portal_password || "",
       });
       if (c.photo_url) setPhotoPreview(c.photo_url);
     }
@@ -87,6 +89,8 @@ const Admin = () => {
         licenciada_cadastro_url: form.licenciada_cadastro_url || null,
         facebook_pixel_id: form.facebook_pixel_id || null,
         google_analytics_id: form.google_analytics_id || null,
+        igreen_portal_email: form.igreen_portal_email || null,
+        igreen_portal_password: form.igreen_portal_password || null,
       };
       if (photo_url) payload.photo_url = photo_url;
       const { error } = await supabase.from("consultants").upsert(payload, { onConflict: "id" });
@@ -763,7 +767,25 @@ const Admin = () => {
                 <div className="space-y-2">
                   <Label htmlFor="google_analytics_id" className="text-sm text-muted-foreground">Google Analytics ID (GA4)</Label>
                   <Input id="google_analytics_id" value={form.google_analytics_id} onChange={(e) => setForm({ ...form, google_analytics_id: e.target.value })} placeholder="Ex: G-XXXXXXXXXX" className="bg-secondary border-border" />
+            </div>
+
+            {/* Portal iGreen Credentials */}
+            <div className="bg-card rounded-2xl border border-border p-6">
+              <h3 className="font-heading font-bold text-foreground mb-4 flex items-center gap-2">
+                <KeyRound className="w-5 h-5 text-primary" /> Credenciais Portal iGreen
+              </h3>
+              <p className="text-xs text-muted-foreground mb-4">Email e senha do escritório virtual iGreen para sincronização automática de clientes</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="igreen_portal_email" className="text-sm text-muted-foreground">Email do Portal</Label>
+                  <Input id="igreen_portal_email" type="email" value={form.igreen_portal_email} onChange={(e) => setForm({ ...form, igreen_portal_email: e.target.value })} placeholder="seu@email.com" className="bg-secondary border-border" />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="igreen_portal_password" className="text-sm text-muted-foreground">Senha do Portal</Label>
+                  <Input id="igreen_portal_password" type="password" value={form.igreen_portal_password} onChange={(e) => setForm({ ...form, igreen_portal_password: e.target.value })} placeholder="••••••••" className="bg-secondary border-border" />
+                </div>
+              </div>
+            </div>
               </div>
             </div>
 

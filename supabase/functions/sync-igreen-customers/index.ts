@@ -157,12 +157,22 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const portalEmail = Deno.env.get("IGREEN_PORTAL_EMAIL");
-    const portalPassword = Deno.env.get("IGREEN_PORTAL_PASSWORD");
+
+    // Get credentials from request body (per-consultant) or fallback to env vars
+    let portalEmail = Deno.env.get("IGREEN_PORTAL_EMAIL");
+    let portalPassword = Deno.env.get("IGREEN_PORTAL_PASSWORD");
+    let consultantId: string | null = null;
+
+    try {
+      const body = await req.json();
+      if (body.portal_email) portalEmail = body.portal_email;
+      if (body.portal_password) portalPassword = body.portal_password;
+      if (body.consultant_id) consultantId = body.consultant_id;
+    } catch (_) { /* no body or invalid json */ }
 
     if (!portalEmail || !portalPassword) {
       return new Response(
-        JSON.stringify({ success: false, error: "Credenciais do portal iGreen não configuradas" }),
+        JSON.stringify({ success: false, error: "Credenciais do portal iGreen não configuradas. Preencha na aba Dados." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

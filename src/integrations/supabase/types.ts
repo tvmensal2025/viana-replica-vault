@@ -22,6 +22,8 @@ export type Database = {
           google_analytics_id: string | null
           id: string
           igreen_id: string | null
+          igreen_portal_email: string | null
+          igreen_portal_password: string | null
           licenciada_cadastro_url: string | null
           license: string
           name: string
@@ -36,6 +38,8 @@ export type Database = {
           google_analytics_id?: string | null
           id: string
           igreen_id?: string | null
+          igreen_portal_email?: string | null
+          igreen_portal_password?: string | null
           licenciada_cadastro_url?: string | null
           license: string
           name: string
@@ -50,6 +54,8 @@ export type Database = {
           google_analytics_id?: string | null
           id?: string
           igreen_id?: string | null
+          igreen_portal_email?: string | null
+          igreen_portal_password?: string | null
           licenciada_cadastro_url?: string | null
           license?: string
           name?: string
