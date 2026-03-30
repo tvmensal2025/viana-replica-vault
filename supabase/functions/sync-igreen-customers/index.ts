@@ -191,8 +191,8 @@ Deno.serve(async (req) => {
       const errText = await loginRes.text();
       console.error(`Login failed: ${loginRes.status} - ${errText}`);
       return new Response(
-        JSON.stringify({ success: false, error: `Login falhou (${loginRes.status}). Verifique email e senha.` }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ success: false, error: "Login no portal iGreen falhou. Verifique email e senha informados na aba Dados." }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
