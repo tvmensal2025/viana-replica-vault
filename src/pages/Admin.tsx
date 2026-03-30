@@ -5,13 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { useAnalytics } from "@/hooks/useAnalytics";
+import { useAnalytics, friendlyClickLabel } from "@/hooks/useAnalytics";
 import type { Consultant } from "@/types/consultant";
 import type { Database } from "@/integrations/supabase/types";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, AreaChart, Area, PieChart, Pie, Cell, Legend,
 } from "recharts";
-import { Eye, Users, Copy, ExternalLink, LogOut, Save, Camera, BarChart3, LinkIcon, Settings, Monitor, MousePointerClick, Clock, Smartphone, Globe, QrCode, Download, X, MessageSquare } from "lucide-react";
+import { Eye, Users, Copy, ExternalLink, LogOut, Save, Camera, BarChart3, LinkIcon, Settings, Monitor, MousePointerClick, Clock, Smartphone, Globe, QrCode, Download, X, MessageSquare, Zap, DollarSign, TrendingUp } from "lucide-react";
 import { WhatsAppTab } from "@/components/whatsapp/WhatsAppTab";
 import { QRCodeSVG } from "qrcode.react";
 

@@ -22,6 +22,41 @@ export interface UtmData {
   count: number;
 }
 
+export interface CustomerStatusData {
+  status: string;
+  count: number;
+  label: string;
+}
+
+export interface CustomerConsumption {
+  name: string;
+  consumo: number;
+}
+
+export interface WeeklyNewCustomers {
+  week: string;
+  count: number;
+}
+
+// Friendly labels for click targets
+const CLICK_LABELS: Record<string, string> = {
+  whatsapp: "💬 WhatsApp",
+  whatsapp_intermediate: "💬 WhatsApp (CTA)",
+  cadastro_cta: "📋 Botão de Cadastro",
+  cadastro: "📋 Cadastro",
+  cadastro_hero: "🏠 Cadastro (Hero)",
+  cadastro_final: "📋 Cadastro (Final)",
+  licenciada_cta: "💼 Licenciada (CTA)",
+  licenciada: "💼 Licenciada",
+  telefone: "📞 Telefone",
+  instagram: "📸 Instagram",
+  facebook: "📘 Facebook",
+};
+
+export function friendlyClickLabel(target: string): string {
+  return CLICK_LABELS[target] || target.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export function useAnalytics(consultantId: string | null) {
   return useQuery({
     queryKey: ["analytics", consultantId],
@@ -31,8 +66,8 @@ export function useAnalytics(consultantId: string | null) {
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       const since = thirtyDaysAgo.toISOString();
 
-      // Fetch views and events in parallel
-      const [viewsRes, eventsRes] = await Promise.all([
+      // Fetch views, events, deals and customers in parallel
+      const [viewsRes, eventsRes, dealsRes] = await Promise.all([
         supabase
           .from("page_views")
           .select("page_type, created_at, device_type, utm_source")
@@ -43,13 +78,40 @@ export function useAnalytics(consultantId: string | null) {
           .select("event_type, event_target, page_type, created_at, device_type, utm_source")
           .eq("consultant_id", consultantId!)
           .gte("created_at", since),
+        supabase
+          .from("crm_deals")
+          .select("customer_id")
+          .eq("consultant_id", consultantId!),
       ]);
 
       if (viewsRes.error) throw viewsRes.error;
       if (eventsRes.error) throw eventsRes.error;
+      if (dealsRes.error) throw dealsRes.error;
 
       const views = viewsRes.data;
       const events = eventsRes.data;
+      const deals = dealsRes.data;
+
+      // Get unique customer IDs from deals
+      const customerIds = [...new Set(deals.map((d) => d.customer_id).filter(Boolean))] as string[];
+
+      // Fetch customers if we have IDs
+      let customers: Array<{
+        id: string;
+        name: string | null;
+        status: string;
+        media_consumo: number | null;
+        electricity_bill_value: number | null;
+        created_at: string;
+      }> = [];
+
+      if (customerIds.length > 0) {
+        const { data: custData, error: custError } = await supabase
+          .from("customers")
+          .select("id, name, status, media_consumo, electricity_bill_value, created_at")
+          .in("id", customerIds);
+        if (!custError && custData) customers = custData;
+      }
 
       const totalClient = views.filter((v) => v.page_type === "client").length;
       const totalLicenciada = views.filter((v) => v.page_type === "licenciada").length;
@@ -115,16 +177,92 @@ export function useAnalytics(consultantId: string | null) {
         .map(([source, count]) => ({ source, count }))
         .sort((a, b) => b.count - a.count);
 
+      // --- Customer Metrics ---
+      const totalCustomers = customers.length;
+
+      // Customer status distribution
+      const statusMap = new Map<string, number>();
+      for (const c of customers) {
+        const s = c.status || "pending";
+        statusMap.set(s, (statusMap.get(s) || 0) + 1);
+      }
+      const statusLabels: Record<string, string> = {
+        approved: "Aprovados",
+        pending: "Pendentes",
+        rejected: "Rejeitados",
+        lead: "Leads",
+      };
+      const customersByStatus: CustomerStatusData[] = Array.from(statusMap.entries())
+        .map(([status, count]) => ({
+          status,
+          count,
+          label: statusLabels[status] || status.charAt(0).toUpperCase() + status.slice(1),
+        }))
+        .sort((a, b) => b.count - a.count);
+
+      // Total kW and bill value
+      const totalKw = customers.reduce((sum, c) => sum + (Number(c.media_consumo) || 0), 0);
+      const totalBillValue = customers.reduce((sum, c) => sum + (Number(c.electricity_bill_value) || 0), 0);
+      const customersWithBill = customers.filter((c) => Number(c.electricity_bill_value) > 0);
+      const avgBillValue = customersWithBill.length > 0 ? totalBillValue / customersWithBill.length : 0;
+
+      // Customer consumption chart (top 15)
+      const customerConsumption: CustomerConsumption[] = customers
+        .filter((c) => Number(c.media_consumo) > 0)
+        .map((c) => ({
+          name: c.name || "Sem nome",
+          consumo: Number(c.media_consumo) || 0,
+        }))
+        .sort((a, b) => b.consumo - a.consumo)
+        .slice(0, 15);
+
+      // Weekly new customers (last 30 days)
+      const weekMap = new Map<string, number>();
+      for (let i = 3; i >= 0; i--) {
+        const start = new Date();
+        start.setDate(start.getDate() - (i + 1) * 7);
+        const end = new Date();
+        end.setDate(end.getDate() - i * 7);
+        const label = `${start.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} - ${end.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}`;
+        weekMap.set(label, 0);
+      }
+      for (const c of customers) {
+        const created = new Date(c.created_at);
+        if (created >= thirtyDaysAgo) {
+          const daysAgo = Math.floor((Date.now() - created.getTime()) / (1000 * 60 * 60 * 24));
+          const weekIdx = Math.min(3, Math.floor(daysAgo / 7));
+          const keys = Array.from(weekMap.keys());
+          const key = keys[3 - weekIdx];
+          if (key) weekMap.set(key, (weekMap.get(key) || 0) + 1);
+        }
+      }
+      const weeklyNewCustomers: WeeklyNewCustomers[] = Array.from(weekMap.entries()).map(
+        ([week, count]) => ({ week, count })
+      );
+
+      // Conversion rate
+      const total = totalClient + totalLicenciada;
+      const conversionRate = total > 0 ? (totalClicks / total) * 100 : 0;
+
       return {
         totalClient,
         totalLicenciada,
-        total: totalClient + totalLicenciada,
+        total,
         totalClicks,
         clicksByTarget,
         daily,
         hourly,
         devices,
         utmSources,
+        // New customer metrics
+        totalCustomers,
+        customersByStatus,
+        totalKw,
+        totalBillValue,
+        avgBillValue,
+        customerConsumption,
+        weeklyNewCustomers,
+        conversionRate,
       };
     },
   });
