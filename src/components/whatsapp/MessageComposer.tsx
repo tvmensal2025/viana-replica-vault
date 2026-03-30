@@ -34,6 +34,13 @@ export function MessageComposer({ onSend, onSendAudio, onSendMedia, templates, d
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
 
+  // Pre-fill text when initialMessage changes
+  useEffect(() => {
+    if (initialMessage) {
+      setText(initialMessage);
+    }
+  }, [initialMessage]);
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);

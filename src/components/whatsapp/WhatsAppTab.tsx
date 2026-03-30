@@ -212,12 +212,13 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
                 onSelectChat={setSelectedChatJid}
               />
             </div>
-            <ChatView
-              instanceName={instanceName}
-              chat={selectedChat}
-              templates={templates}
-              consultantId={userId}
-            />
+              <ChatView
+                instanceName={instanceName}
+                chat={selectedChat}
+                templates={templates}
+                consultantId={userId}
+                initialMessage={pendingMessage}
+              />
           </div>
         )}
 
