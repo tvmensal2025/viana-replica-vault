@@ -103,6 +103,7 @@ export function useAnalytics(consultantId: string | null) {
         media_consumo: number | null;
         electricity_bill_value: number | null;
         created_at: string;
+        registered_by_name: string | null;
       }> = [];
 
       if (customerIds.length > 0) {
