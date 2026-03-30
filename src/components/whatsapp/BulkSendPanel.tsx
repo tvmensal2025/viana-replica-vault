@@ -26,6 +26,8 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
   const [progress, setProgress] = useState<BulkSendResult | null>(null);
   const [result, setResult] = useState<BulkSendResult | null>(null);
   const [warning, setWarning] = useState("");
+  const [countdown, setCountdown] = useState(0); // countdown in seconds
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { toast } = useToast();
   const allSelected = customers.length > 0 && selectedIds.size === customers.length;
 
