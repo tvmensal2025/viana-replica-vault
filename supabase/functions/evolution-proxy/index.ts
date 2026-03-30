@@ -28,18 +28,26 @@ function normalizeEvolutionBaseUrl(rawUrl: string | undefined): string {
 }
 
 function getTimeoutMs(path: string): number {
-  if (path.startsWith("instance/connectionState/")) return 20000;
-  if (path === "instance/fetchInstances") return 12000;
-  if (path.startsWith("instance/connect/")) return 20000;
-  if (path === "instance/create") return 50000;
+  if (path.startsWith("instance/connectionState/")) return 25000;
+  if (path === "instance/fetchInstances") return 15000;
+  if (path.startsWith("instance/connect/")) return 30000;
+  if (path === "instance/create") return 60000;
+  if (path.startsWith("chat/findChats/")) return 30000;
+  if (path.startsWith("chat/findMessages/")) return 30000;
+  if (path.startsWith("message/")) return 25000;
   return 25000;
 }
 
 function getMaxAttempts(path: string): number {
-  if (path.startsWith("instance/connectionState/")) return 2;
-  if (path.startsWith("instance/connect/")) return 2;
-  if (path === "instance/create") return 1;
+  if (path.startsWith("instance/connectionState/")) return 3;
+  if (path.startsWith("instance/connect/")) return 3;
+  if (path === "instance/create") return 2;
+  if (path === "instance/fetchInstances") return 2;
   return 1;
+}
+
+function getRetryDelay(attempt: number): number {
+  return Math.min(1000 * Math.pow(2, attempt - 1), 5000);
 }
 
 function isRetriableResponseStatus(status: number): boolean {
@@ -90,7 +98,7 @@ async function proxyToEvolution(
         console.warn(
           `[evolution-proxy] Retriable status ${response.status} on attempt ${attempt}: ${bodyPreview.substring(0, 200)}`,
         );
-        await new Promise((resolve) => setTimeout(resolve, 1500));
+        await new Promise((resolve) => setTimeout(resolve, getRetryDelay(attempt)));
         continue;
       }
       return response;
@@ -102,6 +110,7 @@ async function proxyToEvolution(
           `[evolution-proxy] Timeout after ${timeoutMs}ms for ${method || "GET"} ${targetUrl} (attempt ${attempt}/${attempts})`,
         );
 
+        // Graceful fallbacks for timeouts on non-critical endpoints
         if (safePath.startsWith("instance/connectionState/")) {
           return new Response(JSON.stringify({ state: "connecting", timeout: true }), {
             status: 200,
@@ -117,13 +126,25 @@ async function proxyToEvolution(
         }
 
         if (attempt < attempts) {
-          await new Promise((resolve) => setTimeout(resolve, 2000));
+          const delay = getRetryDelay(attempt);
+          console.log(`[evolution-proxy] Retrying in ${delay}ms...`);
+          await new Promise((resolve) => setTimeout(resolve, delay));
           continue;
         }
+
+        // Final attempt timeout — return a clear error instead of throwing
+        console.error(`[evolution-proxy] All ${attempts} attempts exhausted for ${safePath}`);
+        return new Response(
+          JSON.stringify({
+            error: "O servidor WhatsApp está demorando para responder. Tente novamente em alguns instantes.",
+            timeout: true,
+          }),
+          { status: 504, headers: { "Content-Type": "application/json" } },
+        );
       }
 
       if (attempt < attempts) {
-        await new Promise((resolve) => setTimeout(resolve, 1200));
+        await new Promise((resolve) => setTimeout(resolve, getRetryDelay(attempt)));
         continue;
       }
 
@@ -222,7 +243,7 @@ Deno.serve(async (req) => {
     } catch (networkError) {
       console.error("[evolution-proxy] Network error connecting to service", networkError);
       return new Response(
-        JSON.stringify({ error: "Erro ao conectar com o serviço de conexão" }),
+        JSON.stringify({ error: "Erro ao conectar com o serviço de conexão. Tente novamente." }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
