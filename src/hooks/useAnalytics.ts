@@ -109,7 +109,7 @@ export function useAnalytics(consultantId: string | null) {
       if (customerIds.length > 0) {
         const { data: custData, error: custError } = await supabase
           .from("customers")
-          .select("id, name, status, media_consumo, electricity_bill_value, created_at")
+          .select("id, name, status, media_consumo, electricity_bill_value, created_at, registered_by_name")
           .in("id", customerIds);
         if (!custError && custData) customers = custData;
       }
