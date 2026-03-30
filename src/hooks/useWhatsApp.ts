@@ -179,28 +179,34 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
     const name = getFixedInstanceName(consultantId);
     setInstanceName(name);
 
-    const MAX_RETRIES = 2;
+    const MAX_RETRIES = 3;
 
     try {
       for (let retry = 0; retry <= MAX_RETRIES; retry++) {
         try {
           if (retry > 0) {
-            addLog(`🔄 Tentativa ${retry + 1}...`);
+            addLog(`🔄 Tentativa ${retry + 1}/${MAX_RETRIES + 1}...`);
             await new Promise((r) => setTimeout(r, 3000 * retry));
           }
 
-          // 1. Check if already connected
-          addLog("Verificando conexão...");
-          const state = await checkState(name);
+          if (!mountedRef.current) return;
 
-          if (state === "open") {
-            setConnectionStatus("connected");
-            setError(null);
-            addLog("✅ WhatsApp já está conectado!");
-            await saveInstance(name);
-            startPolling(name);
-            return;
+          // 1. Check if already connected (skip on retries - we already checked)
+          if (retry === 0) {
+            addLog("Verificando conexão...");
+            const state = await checkState(name);
+
+            if (state === "open") {
+              setConnectionStatus("connected");
+              setError(null);
+              addLog("✅ WhatsApp já está conectado!");
+              await saveInstance(name);
+              startPolling(name);
+              return;
+            }
           }
+
+          if (!mountedRef.current) return;
 
           // 2. Try to get QR from existing instance
           addLog("Gerando QR Code...");
@@ -210,20 +216,24 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
             // 3. Instance doesn't exist — create it
             addLog("Criando instância...");
             try {
-              const response = await withTimeout(createInstance(name), 60000);
-              qr = response?.qrcode?.base64 || null;
+              const response = await withTimeout(createInstance(name), 35000);
+              // If create timed out gracefully (proxy returns {timeout:true}), 
+              // the instance may have been created anyway — try connect
+              if (response?.timeout) {
+                addLog("⏳ Servidor lento, verificando se instância foi criada...");
+                await new Promise((r) => setTimeout(r, 3000));
+                qr = await fetchQr(name);
+              } else {
+                qr = response?.qrcode?.base64 || null;
+              }
             } catch (createErr) {
               const msg = createErr instanceof Error ? createErr.message : "";
               if (msg.includes("already") || msg.includes("403")) {
-                // Instance exists, try QR again after short delay
                 await new Promise((r) => setTimeout(r, 2000));
                 qr = await fetchQr(name);
-              } else if (msg.includes("timeout") || msg.includes("504")) {
-                if (retry < MAX_RETRIES) {
-                  addLog("⏳ Servidor lento, tentando novamente...");
-                  continue;
-                }
-                throw createErr;
+              } else if (retry < MAX_RETRIES) {
+                addLog("⏳ Servidor lento, tentando novamente...");
+                continue;
               } else {
                 throw createErr;
               }
@@ -243,16 +253,18 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
               addLog("⏳ QR Code não disponível, tentando novamente...");
               continue;
             }
-            setError("Não foi possível gerar o QR Code. Tente novamente.");
-            addLog("❌ Falha ao gerar QR Code");
+            setConnectionStatus("disconnected");
+            setError("Não foi possível gerar o QR Code. Clique em 'Conectar' para tentar novamente.");
+            addLog("❌ Falha ao gerar QR Code após todas as tentativas");
           }
           break;
         } catch (err) {
           const msg = sanitize(err instanceof Error ? err.message : "Erro ao conectar");
-          if (retry < MAX_RETRIES && (msg.includes("timeout") || msg.includes("504") || msg.includes("conexão"))) {
+          if (retry < MAX_RETRIES) {
             addLog("⏳ " + msg + " — tentando novamente...");
             continue;
           }
+          setConnectionStatus("disconnected");
           setError(msg);
           addLog("❌ " + msg);
           break;
