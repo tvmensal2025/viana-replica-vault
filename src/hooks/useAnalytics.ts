@@ -119,9 +119,13 @@ export function useAnalytics(consultantId: string | null) {
       // Clicks
       const totalClicks = events.filter((e) => e.event_type === "click").length;
       const clicksByTarget: Record<string, number> = {};
+      const clicksByPage: Record<string, Record<string, number>> = { client: {}, licenciada: {} };
       for (const e of events) {
         if (e.event_type === "click" && e.event_target) {
           clicksByTarget[e.event_target] = (clicksByTarget[e.event_target] || 0) + 1;
+          const page = e.page_type === "licenciada" ? "licenciada" : "client";
+          if (!clicksByPage[page][e.event_target]) clicksByPage[page][e.event_target] = 0;
+          clicksByPage[page][e.event_target]++;
         }
       }
 
