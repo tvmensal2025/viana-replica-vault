@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   UserPlus,
   Trash2,
@@ -16,7 +16,11 @@ import {
   Save,
   X,
   Loader2,
+  Upload,
+  FileSpreadsheet,
+  CheckCircle2,
 } from "lucide-react";
+import * as XLSX from "xlsx";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -109,6 +113,10 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
   const [editForm, setEditForm] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [profilePics, setProfilePics] = useState<Record<string, string>>({});
+  const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState({ current: 0, total: 0, newCount: 0, updatedCount: 0, errorCount: 0 });
+  const [showImportResult, setShowImportResult] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   // Fetch profile pictures from Evolution API
@@ -208,6 +216,123 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
     }
   }
 
+  function normalizePhone(raw: string): string {
+    const digits = String(raw || "").replace(/\D/g, "");
+    if (digits.length === 0) return "";
+    if (digits.startsWith("55") && digits.length >= 12) return digits;
+    if (digits.length === 10 || digits.length === 11) return `55${digits}`;
+    return digits;
+  }
+
+  function mapStatus(andamento: string | undefined): string {
+    if (!andamento) return "pending";
+    const lower = andamento.toLowerCase().trim();
+    if (lower === "validado" || lower === "aprovado") return "approved";
+    if (lower === "devolutiva" || lower === "reprovado") return "rejected";
+    return "pending";
+  }
+
+  async function handleImportExcel(file: File) {
+    setImporting(true);
+    setShowImportResult(false);
+    const progress = { current: 0, total: 0, newCount: 0, updatedCount: 0, errorCount: 0 };
+
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: "array" });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet);
+
+      progress.total = rows.length;
+      setImportProgress({ ...progress });
+
+      for (const row of rows) {
+        progress.current++;
+
+        const phoneRaw = String(row["Celular"] || row["celular"] || row["Telefone"] || row["telefone"] || "");
+        const phone = normalizePhone(phoneRaw);
+        if (!phone || phone.length < 10) {
+          progress.errorCount++;
+          setImportProgress({ ...progress });
+          continue;
+        }
+
+        const customerData = {
+          phone_whatsapp: phone,
+          name: String(row["Nome do Cliente"] || row["Nome"] || row["nome"] || "").trim() || null,
+          media_consumo: row["Consumo Médio"] != null ? parseFloat(String(row["Consumo Médio"]).replace(",", ".")) || null : null,
+          cpf: row["Documento"] ? String(row["Documento"]).replace(/\D/g, "") : null,
+          numero_instalacao: row["Instalação"] ? String(row["Instalação"]).trim() : (row["Código"] ? String(row["Código"]).trim() : null),
+          address_city: row["Cidade"] ? String(row["Cidade"]).trim() : null,
+          address_state: row["UF"] ? String(row["UF"]).trim().toUpperCase() : null,
+          distribuidora: row["Distribuidora"] ? String(row["Distribuidora"]).trim() : null,
+          email: row["E-mail"] || row["Email"] ? String(row["E-mail"] || row["Email"]).trim() : null,
+          desconto_cliente: row["Desconto Cliente"] != null ? parseFloat(String(row["Desconto Cliente"]).replace(",", ".").replace("%", "")) || null : null,
+          data_nascimento: row["Data Nascimento"] ? String(row["Data Nascimento"]).trim() : null,
+          status: mapStatus(String(row["Andamento"] || "")),
+        };
+
+        try {
+          // Check if customer exists by phone
+          const { data: existing } = await supabase
+            .from("customers")
+            .select("id")
+            .eq("phone_whatsapp", phone)
+            .maybeSingle();
+
+          if (existing) {
+            // Update existing
+            const { error } = await supabase
+              .from("customers")
+              .update(customerData)
+              .eq("id", existing.id);
+            if (error) throw error;
+            progress.updatedCount++;
+          } else {
+            // Insert new
+            const { data: newCustomer, error } = await supabase
+              .from("customers")
+              .insert(customerData)
+              .select("id")
+              .single();
+            if (error) throw error;
+            progress.newCount++;
+
+            // Create CRM deal for new customer
+            if (newCustomer) {
+              await supabase.from("crm_deals").insert({
+                consultant_id: consultantId,
+                customer_id: newCustomer.id,
+                remote_jid: `${phone}@s.whatsapp.net`,
+                stage: "novo_lead",
+              });
+            }
+          }
+        } catch {
+          progress.errorCount++;
+        }
+
+        setImportProgress({ ...progress });
+      }
+
+      setShowImportResult(true);
+      toast({
+        title: "✅ Importação concluída!",
+        description: `${progress.newCount} novos, ${progress.updatedCount} atualizados, ${progress.errorCount} erros`,
+      });
+      onCustomersChange();
+    } catch (err) {
+      toast({
+        title: "Erro na importação",
+        description: err instanceof Error ? err.message : "Erro ao ler arquivo",
+        variant: "destructive",
+      });
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
   const fetchCep = async () => {
     const cep = (editForm.cep || "").replace(/\D/g, "");
     if (cep.length !== 8) return;
@@ -247,10 +372,72 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
               <p className="text-[11px] text-muted-foreground">Gerencie sua carteira de clientes</p>
             </div>
           </div>
-          <Button onClick={() => setShowAddDialog(true)} size="sm" className="gap-2 rounded-xl font-semibold shadow-lg shadow-primary/15 h-9 px-4">
-            <UserPlus className="w-4 h-4" /> Novo Cliente
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={() => fileInputRef.current?.click()}
+              size="sm"
+              variant="outline"
+              className="gap-2 rounded-xl font-semibold h-9 px-4 border-primary/20 text-primary hover:bg-primary/10"
+              disabled={importing}
+            >
+              {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+              Importar Excel
+            </Button>
+            <Button onClick={() => setShowAddDialog(true)} size="sm" className="gap-2 rounded-xl font-semibold shadow-lg shadow-primary/15 h-9 px-4">
+              <UserPlus className="w-4 h-4" /> Novo Cliente
+            </Button>
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleImportExcel(file);
+            }}
+          />
         </div>
+
+        {/* Import Progress */}
+        {importing && (
+          <div className="px-5 py-3 border-b border-border/50">
+            <div className="flex items-center gap-3 mb-2">
+              <FileSpreadsheet className="w-4 h-4 text-primary animate-pulse" />
+              <span className="text-xs font-medium text-foreground">
+                Importando... {importProgress.current}/{importProgress.total}
+              </span>
+            </div>
+            <div className="w-full h-2 bg-secondary/50 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary rounded-full transition-all duration-300"
+                style={{ width: `${importProgress.total > 0 ? (importProgress.current / importProgress.total) * 100 : 0}%` }}
+              />
+            </div>
+            <div className="flex gap-4 mt-1.5 text-[10px] text-muted-foreground">
+              <span className="text-green-400">{importProgress.newCount} novos</span>
+              <span className="text-blue-400">{importProgress.updatedCount} atualizados</span>
+              {importProgress.errorCount > 0 && <span className="text-red-400">{importProgress.errorCount} erros</span>}
+            </div>
+          </div>
+        )}
+
+        {showImportResult && !importing && (
+          <div className="px-5 py-3 border-b border-border/50 bg-green-500/5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-green-400" />
+                <span className="text-xs font-medium text-foreground">
+                  Importação concluída: {importProgress.newCount} novos, {importProgress.updatedCount} atualizados
+                  {importProgress.errorCount > 0 && `, ${importProgress.errorCount} erros`}
+                </span>
+              </div>
+              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setShowImportResult(false)}>
+                <X className="w-3 h-3" />
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* Search */}
         <div className="px-5 pt-4 pb-3">
