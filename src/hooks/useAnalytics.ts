@@ -66,8 +66,8 @@ export function useAnalytics(consultantId: string | null) {
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       const since = thirtyDaysAgo.toISOString();
 
-      // Fetch views, events, deals, customers and licenciados in parallel
-      const [viewsRes, eventsRes, dealsRes, licenciadosRes] = await Promise.all([
+      // Fetch views, events and deals in parallel
+      const [viewsRes, eventsRes, dealsRes] = await Promise.all([
         supabase
           .from("page_views")
           .select("page_type, created_at, device_type, utm_source")
@@ -82,21 +82,15 @@ export function useAnalytics(consultantId: string | null) {
           .from("crm_deals")
           .select("customer_id")
           .eq("consultant_id", consultantId!),
-        supabase
-          .from("consultants")
-          .select("id, name")
-          .eq("referred_by", consultantId!),
       ]);
 
       if (viewsRes.error) throw viewsRes.error;
       if (eventsRes.error) throw eventsRes.error;
       if (dealsRes.error) throw dealsRes.error;
-      if (licenciadosRes.error) throw licenciadosRes.error;
 
       const views = viewsRes.data;
       const events = eventsRes.data;
       const deals = dealsRes.data;
-      const licenciados = licenciadosRes.data;
 
       // Get unique customer IDs from deals
       const customerIds = [...new Set(deals.map((d) => d.customer_id).filter(Boolean))] as string[];
