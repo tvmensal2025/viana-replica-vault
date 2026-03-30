@@ -390,8 +390,8 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
       }
 
       setParsedCustomers(parsed);
-      const newPhones = new Set(parsed.filter((p) => p.isNew).map((p) => p.phone));
-      setSelectedPhones(newPhones);
+      // Pre-select ALL customers (new + existing for update)
+      setSelectedPhones(new Set(parsed.map((p) => p.phone)));
       setShowPreview(true);
     } catch (err) {
       toast({ title: "Erro ao ler arquivo", description: err instanceof Error ? err.message : "Erro", variant: "destructive" });
