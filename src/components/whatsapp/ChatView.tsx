@@ -23,7 +23,7 @@ interface ChatViewProps {
   initialMessage?: string | null;
 }
 
-export function ChatView({ instanceName, chat, templates, consultantId }: ChatViewProps) {
+export function ChatView({ instanceName, chat, templates, consultantId, initialMessage }: ChatViewProps) {
   const { messages, isLoading, sendMessage, loadMedia } = useMessages(
     instanceName,
     chat?.remoteJid || null,
