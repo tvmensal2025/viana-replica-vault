@@ -233,6 +233,10 @@ Deno.serve(async (req) => {
     const authHeaders = {
       "Authorization": `Bearer ${token}`,
       "Content-Type": "application/json",
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+      "Accept": "application/json, text/plain, */*",
+      "Origin": "https://escritorio.igreenenergy.com.br",
+      "Referer": "https://escritorio.igreenenergy.com.br/",
     };
 
     // Step 2: Get consultant info to get the ID
