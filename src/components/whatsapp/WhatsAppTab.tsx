@@ -67,8 +67,21 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [activeSubTab, setActiveSubTab] = useState<SubTab>("conversas");
   const [selectedChatJid, setSelectedChatJid] = useState<string | null>(null);
+  const [pendingMessage, setPendingMessage] = useState<string | null>(null);
 
   const selectedChat = chats.find((c) => c.remoteJid === selectedChatJid) || null;
+
+  const handleOpenChatFromCustomer = useCallback((phone: string, suggestedMessage?: string) => {
+    setActiveSubTab("conversas");
+    const cleanPhone = phone.replace(/\D/g, "");
+    const match = chats.find((c) => c.remoteJid.includes(cleanPhone));
+    if (match) {
+      setSelectedChatJid(match.remoteJid);
+    } else {
+      setSelectedChatJid(null);
+    }
+    setPendingMessage(suggestedMessage || null);
+  }, [chats]);
 
   const fetchCustomers = useCallback(async () => {
     try {
@@ -199,12 +212,13 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
                 onSelectChat={setSelectedChatJid}
               />
             </div>
-            <ChatView
-              instanceName={instanceName}
-              chat={selectedChat}
-              templates={templates}
-              consultantId={userId}
-            />
+              <ChatView
+                instanceName={instanceName}
+                chat={selectedChat}
+                templates={templates}
+                consultantId={userId}
+                initialMessage={pendingMessage}
+              />
           </div>
         )}
 
@@ -252,6 +266,7 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
               consultantId={userId}
               onCustomersChange={fetchCustomers}
               instanceName={instanceName}
+              onOpenChat={handleOpenChatFromCustomer}
             />
           </div>
         )}

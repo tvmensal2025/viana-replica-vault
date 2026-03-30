@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Send, Paperclip, Mic, MicOff, MessageSquareText, Loader2, Image, File, Video, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { QuickReplyMenu } from "./QuickReplyMenu";
@@ -18,9 +18,10 @@ interface MessageComposerProps {
   onSendMedia?: (mediaUrl: string, caption: string, mediaType: MediaType) => Promise<void>;
   templates: MessageTemplate[];
   disabled?: boolean;
+  initialMessage?: string | null;
 }
 
-export function MessageComposer({ onSend, onSendAudio, onSendMedia, templates, disabled }: MessageComposerProps) {
+export function MessageComposer({ onSend, onSendAudio, onSendMedia, templates, disabled, initialMessage }: MessageComposerProps) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [showQuickReply, setShowQuickReply] = useState(false);
@@ -32,6 +33,13 @@ export function MessageComposer({ onSend, onSendAudio, onSendMedia, templates, d
   const [attachedFile, setAttachedFile] = useState<{ url: string; name: string; type: MediaType } | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+
+  // Pre-fill text when initialMessage changes
+  useEffect(() => {
+    if (initialMessage) {
+      setText(initialMessage);
+    }
+  }, [initialMessage]);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);

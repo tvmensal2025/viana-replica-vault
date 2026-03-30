@@ -20,9 +20,10 @@ interface ChatViewProps {
   chat: ChatItem | null;
   templates: MessageTemplate[];
   consultantId: string;
+  initialMessage?: string | null;
 }
 
-export function ChatView({ instanceName, chat, templates, consultantId }: ChatViewProps) {
+export function ChatView({ instanceName, chat, templates, consultantId, initialMessage }: ChatViewProps) {
   const { messages, isLoading, sendMessage, loadMedia } = useMessages(
     instanceName,
     chat?.remoteJid || null,
@@ -126,6 +127,7 @@ export function ChatView({ instanceName, chat, templates, consultantId }: ChatVi
       {/* Composer */}
       <MessageComposer
         onSend={sendMessage}
+        initialMessage={initialMessage}
         onSendAudio={async (base64) => {
           if (!chat) return;
           const targetJid = chat.sendTargetJid || chat.remoteJid;
