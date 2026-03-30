@@ -173,7 +173,7 @@ Deno.serve(async (req) => {
     if (!portalEmail || !portalPassword) {
       return new Response(
         JSON.stringify({ success: false, error: "Credenciais do portal iGreen não configuradas. Preencha na aba Dados." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
