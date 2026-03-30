@@ -224,8 +224,7 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
       setSyncing(false);
     }
   }
-
-
+  useEffect(() => {
     if (!instanceName) return;
     const fetchPics = async () => {
       const pics: Record<string, string> = {};
