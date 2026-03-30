@@ -216,7 +216,124 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
     }
   }
 
-  const fetchCep = async () => {
+  function normalizePhone(raw: string): string {
+    const digits = String(raw || "").replace(/\D/g, "");
+    if (digits.length === 0) return "";
+    if (digits.startsWith("55") && digits.length >= 12) return digits;
+    if (digits.length === 10 || digits.length === 11) return `55${digits}`;
+    return digits;
+  }
+
+  function mapStatus(andamento: string | undefined): string {
+    if (!andamento) return "pending";
+    const lower = andamento.toLowerCase().trim();
+    if (lower === "validado" || lower === "aprovado") return "approved";
+    if (lower === "devolutiva" || lower === "reprovado") return "rejected";
+    return "pending";
+  }
+
+  async function handleImportExcel(file: File) {
+    setImporting(true);
+    setShowImportResult(false);
+    const progress = { current: 0, total: 0, newCount: 0, updatedCount: 0, errorCount: 0 };
+
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: "array" });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet);
+
+      progress.total = rows.length;
+      setImportProgress({ ...progress });
+
+      for (const row of rows) {
+        progress.current++;
+
+        const phoneRaw = String(row["Celular"] || row["celular"] || row["Telefone"] || row["telefone"] || "");
+        const phone = normalizePhone(phoneRaw);
+        if (!phone || phone.length < 10) {
+          progress.errorCount++;
+          setImportProgress({ ...progress });
+          continue;
+        }
+
+        const customerData = {
+          phone_whatsapp: phone,
+          name: String(row["Nome do Cliente"] || row["Nome"] || row["nome"] || "").trim() || null,
+          media_consumo: row["Consumo Médio"] != null ? parseFloat(String(row["Consumo Médio"]).replace(",", ".")) || null : null,
+          cpf: row["Documento"] ? String(row["Documento"]).replace(/\D/g, "") : null,
+          numero_instalacao: row["Instalação"] ? String(row["Instalação"]).trim() : (row["Código"] ? String(row["Código"]).trim() : null),
+          address_city: row["Cidade"] ? String(row["Cidade"]).trim() : null,
+          address_state: row["UF"] ? String(row["UF"]).trim().toUpperCase() : null,
+          distribuidora: row["Distribuidora"] ? String(row["Distribuidora"]).trim() : null,
+          email: row["E-mail"] || row["Email"] ? String(row["E-mail"] || row["Email"]).trim() : null,
+          desconto_cliente: row["Desconto Cliente"] != null ? parseFloat(String(row["Desconto Cliente"]).replace(",", ".").replace("%", "")) || null : null,
+          data_nascimento: row["Data Nascimento"] ? String(row["Data Nascimento"]).trim() : null,
+          status: mapStatus(String(row["Andamento"] || "")),
+        };
+
+        try {
+          // Check if customer exists by phone
+          const { data: existing } = await supabase
+            .from("customers")
+            .select("id")
+            .eq("phone_whatsapp", phone)
+            .maybeSingle();
+
+          if (existing) {
+            // Update existing
+            const { error } = await supabase
+              .from("customers")
+              .update(customerData)
+              .eq("id", existing.id);
+            if (error) throw error;
+            progress.updatedCount++;
+          } else {
+            // Insert new
+            const { data: newCustomer, error } = await supabase
+              .from("customers")
+              .insert(customerData)
+              .select("id")
+              .single();
+            if (error) throw error;
+            progress.newCount++;
+
+            // Create CRM deal for new customer
+            if (newCustomer) {
+              await supabase.from("crm_deals").insert({
+                consultant_id: consultantId,
+                customer_id: newCustomer.id,
+                remote_jid: `${phone}@s.whatsapp.net`,
+                stage: "novo_lead",
+              });
+            }
+          }
+        } catch {
+          progress.errorCount++;
+        }
+
+        setImportProgress({ ...progress });
+      }
+
+      setShowImportResult(true);
+      toast({
+        title: "✅ Importação concluída!",
+        description: `${progress.newCount} novos, ${progress.updatedCount} atualizados, ${progress.errorCount} erros`,
+      });
+      onCustomersChange();
+    } catch (err) {
+      toast({
+        title: "Erro na importação",
+        description: err instanceof Error ? err.message : "Erro ao ler arquivo",
+        variant: "destructive",
+      });
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  
     const cep = (editForm.cep || "").replace(/\D/g, "");
     if (cep.length !== 8) return;
     try {
