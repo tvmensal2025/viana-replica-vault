@@ -58,8 +58,9 @@ async function request<T>(path: string, method: string, body?: unknown): Promise
 
 export async function createInstance(instanceName: string) {
   return request<{
-    instance: { instanceName: string; status: string };
-    qrcode: { base64: string; pairingCode?: string };
+    instance?: { instanceName: string; status: string };
+    qrcode?: { base64: string; pairingCode?: string };
+    timeout?: boolean;
   }>("instance/create", "POST", {
     instanceName,
     qrcode: true,
@@ -68,7 +69,7 @@ export async function createInstance(instanceName: string) {
 }
 
 export async function connectInstance(instanceName: string) {
-  return request<{ base64: string }>(
+  return request<{ base64: string | null; timeout?: boolean }>(
     `instance/connect/${instanceName}`,
     "GET"
   );

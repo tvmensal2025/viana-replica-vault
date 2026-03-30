@@ -224,6 +224,30 @@ export function ConnectionPanel({
           </div>
         )}
 
+        {/* Connecting — waiting for QR */}
+        {!error && connectionStatus === "connecting" && !qrCode && (
+          <div className="flex flex-col items-center justify-center py-10 gap-5 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-green-500/15 to-green-600/5 flex items-center justify-center border border-green-500/10">
+              <Loader2 className="w-8 h-8 text-green-400 animate-spin" />
+            </div>
+            <div className="space-y-1.5 max-w-md">
+              <p className="text-base font-heading font-bold text-foreground">Aguardando QR Code</p>
+              <p className="text-sm text-muted-foreground">
+                O servidor WhatsApp está processando sua conexão. O QR Code aparecerá automaticamente assim que ficar disponível.
+              </p>
+            </div>
+            {onRefreshQr && (
+              <Button
+                onClick={onRefreshQr}
+                variant="outline"
+                className="gap-2 rounded-xl border-border/60 hover:border-primary/40 hover:bg-primary/5 transition-all"
+              >
+                <RefreshCw className="w-4 h-4" /> Atualizar agora
+              </Button>
+            )}
+          </div>
+        )}
+
         {/* Connecting — QR code */}
         {!error && connectionStatus === "connecting" && qrCode && (
           <div className="flex flex-col items-center justify-center py-8 gap-5">
@@ -240,7 +264,6 @@ export function ConnectionPanel({
               </div>
             </div>
 
-            {/* QR timer */}
             {qrGeneratedAt && !qrExpired && (
               <QrTimer generatedAt={qrGeneratedAt} onExpired={handleQrExpired} />
             )}
@@ -252,7 +275,6 @@ export function ConnectionPanel({
               </p>
             </div>
 
-            {/* Manual refresh button */}
             {onRefreshQr && (
               <Button
                 onClick={onRefreshQr}
