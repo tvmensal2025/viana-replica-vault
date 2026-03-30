@@ -126,6 +126,8 @@ function mapStatus(andamento: string | undefined): string {
   const lower = andamento.toLowerCase().trim();
   if (lower === "validado" || lower === "aprovado" || lower === "ativo") return "approved";
   if (lower === "devolutiva" || lower === "reprovado" || lower === "cancelado") return "rejected";
+  if (lower.includes("falta assinatura")) return "pending";
+  if (lower.includes("aguardando")) return "pending";
   if (lower === "pendente" || lower === "em análise" || lower === "em analise") return "pending";
   if (lower === "lead" || lower === "novo") return "lead";
   if (lower === "dados completos" || lower === "data_complete") return "data_complete";
@@ -294,7 +296,7 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
     const cpf = safeString(findColumnValue(row, "Documento", "CPF", "cpf", "CNPJ"));
     if (cpf) data.cpf = cpf.replace(/\D/g, "");
 
-    const instalacao = safeString(findColumnValue(row, "Instalação", "Instalacao", "Código", "Codigo", "Nº Instalação"));
+    const instalacao = safeString(findColumnValue(row, "Instalação", "Instalacao", "Nº Instalação", "N Instalacao"));
     if (instalacao) data.numero_instalacao = instalacao;
 
     const cidade = safeString(findColumnValue(row, "Cidade", "cidade", "Municipio", "Município"));

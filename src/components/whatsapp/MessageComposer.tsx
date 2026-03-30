@@ -36,7 +36,7 @@ export function MessageComposer({ onSend, onSendAudio, onSendMedia, templates, d
 
   // Pre-fill text when initialMessage changes
   useEffect(() => {
-    if (initialMessage) {
+    if (initialMessage != null && initialMessage !== "") {
       setText(initialMessage);
     }
   }, [initialMessage]);
