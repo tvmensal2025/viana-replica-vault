@@ -61,20 +61,33 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
           : message;
 
         if (tplMediaUrl && tplMediaType === "audio") {
-          // Send audio as voice message
           await sendAudio(instanceName, selected[i].phone_whatsapp, tplMediaUrl);
-          // Send caption text separately if present
           if (msg.trim()) await sendTextMessage(instanceName, selected[i].phone_whatsapp, msg);
         } else if (tplMediaUrl && (tplMediaType === "image" || tplMediaType === "document")) {
-          // Send image or document with caption
           await sendMedia(instanceName, selected[i].phone_whatsapp, tplMediaUrl, msg, tplMediaType);
         } else {
-          // Text only
           await sendTextMessage(instanceName, selected[i].phone_whatsapp, msg);
         }
         sent++;
       } catch { failed++; }
-      if (i < selected.length - 1) await delay(2000);
+
+      // 20-second countdown between messages to protect the number
+      if (i < selected.length - 1) {
+        setCountdown(SEND_INTERVAL_MS / 1000);
+        await new Promise<void>((resolve) => {
+          let seconds = SEND_INTERVAL_MS / 1000;
+          countdownRef.current = setInterval(() => {
+            seconds--;
+            setCountdown(seconds);
+            if (seconds <= 0) {
+              if (countdownRef.current) clearInterval(countdownRef.current);
+              countdownRef.current = null;
+              resolve();
+            }
+          }, 1000);
+        });
+        setCountdown(0);
+      }
     }
     const r: BulkSendResult = { total: selected.length, sent, failed };
     setProgress(null); setResult(r); setIsSending(false);
