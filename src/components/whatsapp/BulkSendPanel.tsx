@@ -16,6 +16,7 @@ interface BulkSendPanelProps {
   applyTemplate: (t: MessageTemplate, c: { name: string; electricity_bill_value?: number }) => string;
 }
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const SEND_INTERVAL_MS = 20000; // 20 seconds between each message
 
 export function BulkSendPanel({ instanceName, customers, templates, applyTemplate }: BulkSendPanelProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
