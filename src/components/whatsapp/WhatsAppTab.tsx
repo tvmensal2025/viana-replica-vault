@@ -225,6 +225,7 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
                 templates={templates}
                 consultantId={userId}
                 initialMessage={pendingMessage}
+                key={`chat-${selectedChatJid}-${pendingMessageKey}`}
               />
           </div>
         )}
