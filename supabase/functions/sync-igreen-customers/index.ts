@@ -190,8 +190,23 @@ Deno.serve(async (req) => {
     if (!loginRes.ok) {
       const errText = await loginRes.text();
       console.error(`Login failed: ${loginRes.status} - ${errText}`);
+
+      // Parse Firebase error for a friendlier message
+      let friendlyError = "Login no portal iGreen falhou. Verifique email e senha informados na aba Dados.";
+      try {
+        const errJson = JSON.parse(errText);
+        const fbMsg = errJson?.error?.message || "";
+        if (fbMsg.includes("wrong-password")) {
+          friendlyError = `Senha incorreta para o email ${portalEmail}. Verifique a senha do portal iGreen na aba Dados.`;
+        } else if (fbMsg.includes("user-not-found")) {
+          friendlyError = `Email ${portalEmail} não encontrado no portal iGreen. Verifique o email na aba Dados.`;
+        } else if (fbMsg.includes("too-many-requests")) {
+          friendlyError = "Muitas tentativas de login. Aguarde alguns minutos e tente novamente.";
+        }
+      } catch { /* not JSON */ }
+
       return new Response(
-        JSON.stringify({ success: false, error: "Login no portal iGreen falhou. Verifique email e senha informados na aba Dados." }),
+        JSON.stringify({ success: false, error: friendlyError }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
