@@ -343,10 +343,10 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
             .maybeSingle();
 
           if (existing) {
-            // Update existing
+            // Update existing — only non-null fields
             const { error } = await supabase
               .from("customers")
-              .update(customerData)
+              .update(customerData as TablesUpdate<"customers">)
               .eq("id", existing.id);
             if (error) throw error;
             progress.updatedCount++;
@@ -354,7 +354,7 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
             // Insert new
             const { data: newCustomer, error } = await supabase
               .from("customers")
-              .insert(customerData)
+              .insert(customerData as TablesUpdate<"customers">)
               .select("id")
               .single();
             if (error) throw error;
