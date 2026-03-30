@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Send, Paperclip, Mic, MicOff, MessageSquareText, Loader2, Image, File, Video, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { QuickReplyMenu } from "./QuickReplyMenu";
