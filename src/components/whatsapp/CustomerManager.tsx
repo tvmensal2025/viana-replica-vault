@@ -69,6 +69,7 @@ interface CustomerManagerProps {
   consultantId: string;
   onCustomersChange: () => void;
   instanceName?: string | null;
+  onOpenChat?: (phone: string, suggestedMessage?: string) => void;
 }
 
 interface ParsedCustomer {
