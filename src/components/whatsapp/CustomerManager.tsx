@@ -410,9 +410,8 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
   }
 
   function toggleSelectAll() {
-    const newCustomers = parsedCustomers.filter((p) => p.isNew);
-    if (selectedPhones.size === newCustomers.length) setSelectedPhones(new Set());
-    else setSelectedPhones(new Set(newCustomers.map((p) => p.phone)));
+    if (selectedPhones.size === parsedCustomers.length) setSelectedPhones(new Set());
+    else setSelectedPhones(new Set(parsedCustomers.map((p) => p.phone)));
   }
 
   async function handleConfirmImport() {
