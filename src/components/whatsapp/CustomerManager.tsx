@@ -330,6 +330,36 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
     const observacao = safeString(findColumnValue(row, "Observação", "Observacao", "observação", "observacao", "Obs"));
     if (observacao) data.observacao = observacao;
 
+    const igreenCode = safeString(findColumnValue(row, "Código", "Codigo", "código", "codigo"));
+    if (igreenCode) data.igreen_code = igreenCode;
+
+    const dataCadastro = safeString(findColumnValue(row, "Data Cadastro", "data_cadastro"));
+    if (dataCadastro) data.data_cadastro = dataCadastro;
+
+    const dataAtivo = safeString(findColumnValue(row, "Data Ativo", "data_ativo"));
+    if (dataAtivo) data.data_ativo = dataAtivo;
+
+    const dataValidado = safeString(findColumnValue(row, "Data Validado", "data_validado"));
+    if (dataValidado) data.data_validado = dataValidado;
+
+    const statusFinanceiro = safeString(findColumnValue(row, "Status Financeiro", "status_financeiro"));
+    if (statusFinanceiro) data.status_financeiro = statusFinanceiro;
+
+    const cashbackVal = safeString(findColumnValue(row, "Cashback", "cashback"));
+    if (cashbackVal) data.cashback = cashbackVal;
+
+    const nivel = safeString(findColumnValue(row, "Nível", "Nivel", "nível", "nivel"));
+    if (nivel) data.nivel_licenciado = nivel;
+
+    const assinaturaCliente = safeString(findColumnValue(row, "Assinatura Cliente", "assinatura_cliente"));
+    if (assinaturaCliente) data.assinatura_cliente = assinaturaCliente;
+
+    const assinaturaIgreen = safeString(findColumnValue(row, "Assinatura iGreen", "Assinatura Igreen", "assinatura_igreen"));
+    if (assinaturaIgreen) data.assinatura_igreen = assinaturaIgreen;
+
+    const linkAssinatura = safeString(findColumnValue(row, "Link Assinatura", "link_assinatura"));
+    if (linkAssinatura) data.link_assinatura = linkAssinatura;
+
     return data;
   }
 
