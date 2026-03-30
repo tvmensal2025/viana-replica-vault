@@ -170,7 +170,7 @@ function isDevolutiva(c: Customer): boolean {
   return !!(c.devolutiva || c.andamento_igreen?.toLowerCase().includes("devolutiva"));
 }
 
-export function CustomerManager({ customers, consultantId, onCustomersChange, instanceName }: CustomerManagerProps) {
+export function CustomerManager({ customers, consultantId, onCustomersChange, instanceName, onOpenChat }: CustomerManagerProps) {
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
