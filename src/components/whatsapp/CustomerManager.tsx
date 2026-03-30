@@ -294,7 +294,7 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
     const cpf = safeString(findColumnValue(row, "Documento", "CPF", "cpf", "CNPJ"));
     if (cpf) data.cpf = cpf.replace(/\D/g, "");
 
-    const instalacao = safeString(findColumnValue(row, "Instalação", "Instalacao", "Código", "Codigo", "Nº Instalação"));
+    const instalacao = safeString(findColumnValue(row, "Instalação", "Instalacao", "Nº Instalação", "N Instalacao"));
     if (instalacao) data.numero_instalacao = instalacao;
 
     const cidade = safeString(findColumnValue(row, "Cidade", "cidade", "Municipio", "Município"));
