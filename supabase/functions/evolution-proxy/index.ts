@@ -125,6 +125,14 @@ async function proxyToEvolution(
           });
         }
 
+        // Graceful fallback for connect timeout — return 200 with null QR
+        if (safePath.startsWith("instance/connect/")) {
+          return new Response(JSON.stringify({ base64: null, timeout: true }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
         if (attempt < attempts) {
           const delay = getRetryDelay(attempt);
           console.log(`[evolution-proxy] Retrying in ${delay}ms...`);
