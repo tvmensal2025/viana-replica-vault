@@ -149,7 +149,22 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onDele
                     <p className="text-xs text-muted-foreground/70 mt-1 line-clamp-2">{t.content}</p>
                   )}
                   {t.media_url && (
-                    <p className="text-[10px] text-muted-foreground/50 mt-1 truncate font-mono">📎 {t.media_url}</p>
+                    <div className="mt-2">
+                      {(t.media_type === "image") && (
+                        <img src={t.media_url} alt={t.name} className="rounded-md max-h-20 object-contain border border-border/20" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                      )}
+                      {(t.media_type === "audio") && (
+                        <audio controls src={t.media_url} className="w-full h-8 max-w-[240px]" />
+                      )}
+                      {(t.media_type === "document") && (
+                        <a href={t.media_url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-blue-400 hover:underline flex items-center gap-1">
+                          <File className="w-3 h-3" /> Abrir documento
+                        </a>
+                      )}
+                      {!["image", "audio", "document"].includes(t.media_type || "") && (
+                        <p className="text-[10px] text-muted-foreground/50 truncate font-mono">📎 {t.media_url}</p>
+                      )}
+                    </div>
                   )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
@@ -285,9 +300,9 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onDele
 
               {/* Preview of uploaded file */}
               {mediaUrl && !isUploading && (
-                <div className="rounded-lg border border-border/30 bg-secondary/10 p-2">
+                <div className="rounded-lg border border-border/30 bg-secondary/10 p-2 overflow-hidden">
                   {mediaType === "image" && (
-                    <img src={mediaUrl} alt="Preview" className="rounded-lg max-h-32 object-contain" />
+                    <img src={mediaUrl} alt="Preview" className="rounded-lg max-h-32 object-contain" onError={(e) => { (e.target as HTMLImageElement).replaceWith(Object.assign(document.createElement("p"), { className: "text-xs text-muted-foreground py-2", textContent: "⚠️ Não foi possível carregar preview" })); }} />
                   )}
                   {mediaType === "audio" && (
                     <audio controls src={mediaUrl} className="w-full h-8" />
