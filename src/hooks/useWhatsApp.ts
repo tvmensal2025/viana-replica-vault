@@ -179,60 +179,87 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
     const name = getFixedInstanceName(consultantId);
     setInstanceName(name);
 
-    try {
-      // 1. Check if already connected
-      addLog("Verificando conexão...");
-      const state = await checkState(name);
+    const MAX_RETRIES = 2;
 
-      if (state === "open") {
-        setConnectionStatus("connected");
-        setError(null);
-        addLog("✅ WhatsApp já está conectado!");
-        await saveInstance(name);
-        startPolling(name);
-        return;
-      }
+    for (let retry = 0; retry <= MAX_RETRIES; retry++) {
+      try {
+        if (retry > 0) {
+          addLog(`🔄 Tentativa ${retry + 1}...`);
+          await new Promise((r) => setTimeout(r, 2000 * retry));
+        }
 
-      // 2. Try to get QR from existing instance
-      addLog("Gerando QR Code...");
-      let qr = await fetchQr(name);
+        // 1. Check if already connected
+        addLog("Verificando conexão...");
+        const state = await checkState(name);
 
-      if (!qr) {
-        // 3. Instance doesn't exist — create it
-        addLog("Criando instância...");
-        try {
-          const response = await withTimeout(createInstance(name), 50000);
-          qr = response?.qrcode?.base64 || null;
-        } catch (createErr) {
-          const msg = createErr instanceof Error ? createErr.message : "";
-          // If instance already exists, try getting QR again
-          if (msg.includes("already") || msg.includes("403")) {
-            qr = await fetchQr(name);
-          } else {
-            throw createErr;
+        if (state === "open") {
+          setConnectionStatus("connected");
+          setError(null);
+          addLog("✅ WhatsApp já está conectado!");
+          await saveInstance(name);
+          startPolling(name);
+          return;
+        }
+
+        // 2. Try to get QR from existing instance
+        addLog("Gerando QR Code...");
+        let qr = await fetchQr(name);
+
+        if (!qr) {
+          // 3. Instance doesn't exist — create it
+          addLog("Criando instância...");
+          try {
+            const response = await withTimeout(createInstance(name), 65000);
+            qr = response?.qrcode?.base64 || null;
+          } catch (createErr) {
+            const msg = createErr instanceof Error ? createErr.message : "";
+            // If instance already exists, try getting QR again
+            if (msg.includes("already") || msg.includes("403")) {
+              qr = await fetchQr(name);
+            } else if (msg.includes("timeout") || msg.includes("504")) {
+              // Server slow, retry
+              if (retry < MAX_RETRIES) {
+                addLog("⏳ Servidor lento, tentando novamente...");
+                continue;
+              }
+              throw createErr;
+            } else {
+              throw createErr;
+            }
           }
         }
-      }
 
-      if (qr) {
-        await saveInstance(name);
-        setQrCode(qr);
-        setQrGeneratedAt(Date.now());
-        setConnectionStatus("connecting");
-        addLog("📱 QR Code gerado — escaneie com seu celular");
-        startPolling(name);
-      } else {
-        setError("Não foi possível gerar o QR Code. Tente novamente.");
-        addLog("❌ Falha ao gerar QR Code");
+        if (qr) {
+          await saveInstance(name);
+          setQrCode(qr);
+          setQrGeneratedAt(Date.now());
+          setConnectionStatus("connecting");
+          addLog("📱 QR Code gerado — escaneie com seu celular");
+          startPolling(name);
+          return;
+        } else {
+          if (retry < MAX_RETRIES) {
+            addLog("⏳ QR Code não disponível, tentando novamente...");
+            continue;
+          }
+          setError("Não foi possível gerar o QR Code. Tente novamente.");
+          addLog("❌ Falha ao gerar QR Code");
+        }
+        break;
+      } catch (err) {
+        const msg = sanitize(err instanceof Error ? err.message : "Erro ao conectar");
+        if (retry < MAX_RETRIES && (msg.includes("timeout") || msg.includes("504") || msg.includes("conexão"))) {
+          addLog("⏳ " + msg + " — tentando novamente...");
+          continue;
+        }
+        setError(msg);
+        addLog("❌ " + msg);
+        break;
       }
-    } catch (err) {
-      const msg = sanitize(err instanceof Error ? err.message : "Erro ao conectar");
-      setError(msg);
-      addLog("❌ " + msg);
-    } finally {
-      setIsLoading(false);
-      lockRef.current = false;
     }
+
+    setIsLoading(false);
+    lockRef.current = false;
   }, [consultantId, addLog, checkState, fetchQr, saveInstance, startPolling]);
 
   /* ── Refresh QR ── */
