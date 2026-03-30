@@ -1,0 +1,10 @@
+ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS igreen_code text;
+ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS data_cadastro text;
+ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS data_ativo text;
+ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS data_validado text;
+ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS status_financeiro text;
+ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS cashback text;
+ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS nivel_licenciado text;
+ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS assinatura_cliente text;
+ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS assinatura_igreen text;
+ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS link_assinatura text;

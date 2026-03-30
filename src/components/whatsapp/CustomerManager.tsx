@@ -52,6 +52,16 @@ interface Customer {
   andamento_igreen?: string | null;
   devolutiva?: string | null;
   observacao?: string | null;
+  igreen_code?: string | null;
+  data_cadastro?: string | null;
+  data_ativo?: string | null;
+  data_validado?: string | null;
+  status_financeiro?: string | null;
+  cashback?: string | null;
+  nivel_licenciado?: string | null;
+  assinatura_cliente?: string | null;
+  assinatura_igreen?: string | null;
+  link_assinatura?: string | null;
 }
 
 interface CustomerManagerProps {
@@ -319,6 +329,36 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
 
     const observacao = safeString(findColumnValue(row, "Observação", "Observacao", "observação", "observacao", "Obs"));
     if (observacao) data.observacao = observacao;
+
+    const igreenCode = safeString(findColumnValue(row, "Código", "Codigo", "código", "codigo"));
+    if (igreenCode) data.igreen_code = igreenCode;
+
+    const dataCadastro = safeString(findColumnValue(row, "Data Cadastro", "data_cadastro"));
+    if (dataCadastro) data.data_cadastro = dataCadastro;
+
+    const dataAtivo = safeString(findColumnValue(row, "Data Ativo", "data_ativo"));
+    if (dataAtivo) data.data_ativo = dataAtivo;
+
+    const dataValidado = safeString(findColumnValue(row, "Data Validado", "data_validado"));
+    if (dataValidado) data.data_validado = dataValidado;
+
+    const statusFinanceiro = safeString(findColumnValue(row, "Status Financeiro", "status_financeiro"));
+    if (statusFinanceiro) data.status_financeiro = statusFinanceiro;
+
+    const cashbackVal = safeString(findColumnValue(row, "Cashback", "cashback"));
+    if (cashbackVal) data.cashback = cashbackVal;
+
+    const nivel = safeString(findColumnValue(row, "Nível", "Nivel", "nível", "nivel"));
+    if (nivel) data.nivel_licenciado = nivel;
+
+    const assinaturaCliente = safeString(findColumnValue(row, "Assinatura Cliente", "assinatura_cliente"));
+    if (assinaturaCliente) data.assinatura_cliente = assinaturaCliente;
+
+    const assinaturaIgreen = safeString(findColumnValue(row, "Assinatura iGreen", "Assinatura Igreen", "assinatura_igreen"));
+    if (assinaturaIgreen) data.assinatura_igreen = assinaturaIgreen;
+
+    const linkAssinatura = safeString(findColumnValue(row, "Link Assinatura", "link_assinatura"));
+    if (linkAssinatura) data.link_assinatura = linkAssinatura;
 
     return data;
   }
@@ -624,21 +664,39 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
 
                     {isExpanded && (
                       <div className="px-4 pb-4 pt-1 border-t border-border/30">
-                        <div className="grid grid-cols-2 gap-x-6 gap-y-2 mt-2">
+                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-2 mt-2">
+                          {c.igreen_code && <DetailItem icon={FileText} label="Código iGreen" value={c.igreen_code} />}
                           {c.cpf && <DetailItem icon={CreditCard} label="CPF" value={formatCpfDisplay(c.cpf)} />}
                           {c.email && <DetailItem icon={Mail} label="Email" value={c.email} />}
                           <DetailItem icon={Phone} label="WhatsApp" value={formatPhoneDisplay(c.phone_whatsapp)} />
                           {c.data_nascimento && <DetailItem icon={User} label="Nascimento" value={c.data_nascimento} />}
                           {c.distribuidora && <DetailItem icon={Building2} label="Distribuidora" value={c.distribuidora} />}
                           {c.registered_by_name && <DetailItem icon={User} label="Licenciado" value={`${c.registered_by_name}${c.registered_by_igreen_id ? ` (${c.registered_by_igreen_id})` : ""}`} />}
+                          {c.nivel_licenciado && <DetailItem icon={User} label="Nível" value={c.nivel_licenciado} />}
                           {c.andamento_igreen && <DetailItem icon={FileText} label="Andamento iGreen" value={c.andamento_igreen} />}
+                          {c.status_financeiro && <DetailItem icon={CreditCard} label="Status Financeiro" value={c.status_financeiro} />}
                           {c.media_consumo != null && <DetailItem icon={Zap} label="Consumo Médio" value={`${c.media_consumo} kWh`} />}
                           {c.desconto_cliente != null && <DetailItem icon={Zap} label="Desconto" value={`${c.desconto_cliente}%`} />}
+                          {c.cashback && <DetailItem icon={Zap} label="Cashback" value={c.cashback} />}
                           {(c.address_city || c.address_state) && <DetailItem icon={MapPin} label="Localidade" value={`${c.address_city || ""}${c.address_state ? ` / ${c.address_state}` : ""}`} />}
                           {c.address_street && <DetailItem icon={MapPin} label="Endereço" value={`${c.address_street}${c.address_number ? `, ${c.address_number}` : ""}`} />}
                           {c.numero_instalacao && <DetailItem icon={Zap} label="Nº Instalação" value={c.numero_instalacao} />}
                           {c.electricity_bill_value != null && <DetailItem icon={Zap} label="Valor Conta" value={`R$ ${c.electricity_bill_value.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`} />}
-                          {c.created_at && <DetailItem icon={User} label="Cadastrado em" value={new Date(c.created_at).toLocaleDateString("pt-BR")} />}
+                          {c.assinatura_cliente && <DetailItem icon={FileText} label="Assinatura Cliente" value={c.assinatura_cliente} />}
+                          {c.assinatura_igreen && <DetailItem icon={FileText} label="Assinatura iGreen" value={c.assinatura_igreen} />}
+                          {c.data_cadastro && <DetailItem icon={User} label="Data Cadastro" value={c.data_cadastro} />}
+                          {c.data_ativo && <DetailItem icon={User} label="Data Ativo" value={c.data_ativo} />}
+                          {c.data_validado && <DetailItem icon={User} label="Data Validado" value={c.data_validado} />}
+                          {c.created_at && <DetailItem icon={User} label="Cadastrado Sistema" value={new Date(c.created_at).toLocaleDateString("pt-BR")} />}
+                          {c.link_assinatura && (
+                            <div className="flex items-start gap-2">
+                              <FileText className="h-3 w-3 text-muted-foreground mt-0.5 shrink-0" />
+                              <div>
+                                <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Link Assinatura</p>
+                                <a href={c.link_assinatura} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline truncate block max-w-[200px]">Abrir link</a>
+                              </div>
+                            </div>
+                          )}
                         </div>
 
                         {/* Devolutiva highlight */}
