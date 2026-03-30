@@ -91,6 +91,7 @@ export function useAnalytics(consultantId: string | null) {
       if (viewsRes.error) throw viewsRes.error;
       if (eventsRes.error) throw eventsRes.error;
       if (dealsRes.error) throw dealsRes.error;
+      if (licenciadosRes.error) throw licenciadosRes.error;
 
       const views = viewsRes.data;
       const events = eventsRes.data;
