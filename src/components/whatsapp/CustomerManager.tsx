@@ -335,43 +335,38 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
         if (nascimento) customerData.data_nascimento = nascimento;
 
         try {
-          // Check if customer exists by phone
-          const { data: existing } = await supabase
+          // Use upsert with phone_whatsapp as unique key (unique index exists)
+          const upsertData = { ...customerData, phone_whatsapp: phone } as TablesInsert<"customers">;
+          const { data: upserted, error } = await supabase
             .from("customers")
+            .upsert(upsertData, { onConflict: "phone_whatsapp" })
             .select("id")
-            .eq("phone_whatsapp", phone)
+            .single();
+
+          if (error) throw error;
+
+          // Check if it was a new insert or update by checking if this phone existed before
+          const { data: existingDeal } = await supabase
+            .from("crm_deals")
+            .select("id")
+            .eq("remote_jid", `${phone}@s.whatsapp.net`)
+            .eq("consultant_id", consultantId)
             .maybeSingle();
 
-          if (existing) {
-            // Update existing — only non-null fields
-            const { error } = await supabase
-              .from("customers")
-              .update(customerData as TablesUpdate<"customers">)
-              .eq("id", existing.id);
-            if (error) throw error;
-            progress.updatedCount++;
-          } else {
-            // Insert new
-            const insertData = { ...customerData, phone_whatsapp: phone } as TablesInsert<"customers">;
-            const { data: newCustomer, error } = await supabase
-              .from("customers")
-              .insert(insertData)
-              .select("id")
-              .single();
-            if (error) throw error;
+          if (!existingDeal && upserted) {
+            // New customer — create CRM deal
+            await supabase.from("crm_deals").insert({
+              consultant_id: consultantId,
+              customer_id: upserted.id,
+              remote_jid: `${phone}@s.whatsapp.net`,
+              stage: "novo_lead",
+            });
             progress.newCount++;
-
-            // Create CRM deal for new customer
-            if (newCustomer) {
-              await supabase.from("crm_deals").insert({
-                consultant_id: consultantId,
-                customer_id: newCustomer.id,
-                remote_jid: `${phone}@s.whatsapp.net`,
-                stage: "novo_lead",
-              });
-            }
+          } else {
+            progress.updatedCount++;
           }
-        } catch {
+        } catch (err) {
+          console.error("[import] Error for phone", phone, err);
           progress.errorCount++;
         }
 
