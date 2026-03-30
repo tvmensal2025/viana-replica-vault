@@ -333,7 +333,7 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
     }
   }
 
-  
+  const fetchCep = async () => {
     const cep = (editForm.cep || "").replace(/\D/g, "");
     if (cep.length !== 8) return;
     try {
