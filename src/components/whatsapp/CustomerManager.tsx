@@ -352,9 +352,10 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
             progress.updatedCount++;
           } else {
             // Insert new
+            const insertData = { ...customerData, phone_whatsapp: phone } as TablesInsert<"customers">;
             const { data: newCustomer, error } = await supabase
               .from("customers")
-              .insert([customerData as TablesUpdate<"customers">])
+              .insert(insertData)
               .select("id")
               .single();
             if (error) throw error;
