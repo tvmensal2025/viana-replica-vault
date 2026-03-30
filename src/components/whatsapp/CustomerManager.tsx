@@ -415,8 +415,8 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
   }
 
   async function handleConfirmImport() {
-    const toImport = parsedCustomers.filter((p) => p.isNew && selectedPhones.has(p.phone));
-    if (toImport.length === 0) { toast({ title: "Nenhum cliente novo selecionado" }); return; }
+    const toImport = parsedCustomers.filter((p) => selectedPhones.has(p.phone));
+    if (toImport.length === 0) { toast({ title: "Nenhum cliente selecionado" }); return; }
 
     setShowPreview(false);
     setImporting(true);
@@ -437,7 +437,8 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
           if (!existingDeal) {
             await supabase.from("crm_deals").insert({ consultant_id: consultantId, customer_id: upserted.id, remote_jid: `${item.phone}@s.whatsapp.net`, stage: "novo_lead" });
           }
-          progress.newCount++;
+          if (item.isNew) progress.newCount++;
+          else progress.updatedCount++;
         }
       } catch (err) {
         console.error("[import] Error for phone", item.phone, err);
@@ -448,7 +449,7 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
 
     setShowImportResult(true);
     setImporting(false);
-    toast({ title: "✅ Importação concluída!", description: `${progress.newCount} novos adicionados${progress.errorCount > 0 ? `, ${progress.errorCount} erros` : ""}` });
+    toast({ title: "✅ Importação concluída!", description: `${progress.newCount} novos, ${progress.updatedCount} atualizados${progress.errorCount > 0 ? `, ${progress.errorCount} erros` : ""}` });
     onCustomersChange();
   }
 
