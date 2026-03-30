@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   UserPlus, Trash2, Users, Search, Phone, Mail, MapPin, Zap,
   ChevronDown, ChevronUp, Pencil, CreditCard, User, Save, X,
@@ -191,6 +192,7 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (!instanceName) return;
@@ -495,6 +497,7 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
     setImporting(false);
     toast({ title: "✅ Importação concluída!", description: `${progress.newCount} novos, ${progress.updatedCount} atualizados${progress.errorCount > 0 ? `, ${progress.errorCount} erros` : ""}` });
     onCustomersChange();
+    await queryClient.invalidateQueries({ queryKey: ["analytics", consultantId] });
   }
 
   const fetchCep = async () => {
