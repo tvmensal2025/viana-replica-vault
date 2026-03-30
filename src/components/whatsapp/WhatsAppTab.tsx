@@ -136,12 +136,23 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
 
   const fetchCustomers = useCallback(async () => {
     try {
-      const { data } = await supabase
-        .from("customers")
-        .select("id, name, phone_whatsapp, electricity_bill_value, email, cpf, address_city, address_state, address_street, address_neighborhood, address_complement, address_number, cep, numero_instalacao, data_nascimento, status, created_at, distribuidora, registered_by_name, registered_by_igreen_id, media_consumo, desconto_cliente, andamento_igreen, devolutiva, observacao, igreen_code, data_cadastro, data_ativo, data_validado, status_financeiro, cashback, nivel_licenciado, assinatura_cliente, assinatura_igreen, link_assinatura");
-      if (data) {
+      const selectFields = "id, name, phone_whatsapp, electricity_bill_value, email, cpf, address_city, address_state, address_street, address_neighborhood, address_complement, address_number, cep, numero_instalacao, data_nascimento, status, created_at, distribuidora, registered_by_name, registered_by_igreen_id, media_consumo, desconto_cliente, andamento_igreen, devolutiva, observacao, igreen_code, data_cadastro, data_ativo, data_validado, status_financeiro, cashback, nivel_licenciado, assinatura_cliente, assinatura_igreen, link_assinatura";
+      const allRows: any[] = [];
+      const pageSize = 1000;
+      let page = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from("customers")
+          .select(selectFields)
+          .range(page * pageSize, (page + 1) * pageSize - 1);
+        if (error) throw error;
+        if (data) allRows.push(...data);
+        if (!data || data.length < pageSize) break;
+        page++;
+      }
+      if (allRows.length > 0) {
         setCustomers(
-          data.map((c) => ({
+          allRows.map((c) => ({
             id: c.id,
             name: c.name || "Sem nome",
             phone_whatsapp: c.phone_whatsapp,
