@@ -207,6 +207,36 @@ const Admin = () => {
               />
             </div>
 
+            {/* Customer KPI Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <StatCard
+                icon={<Users className="w-5 h-5" />}
+                label="Total de Clientes"
+                value={analytics?.totalCustomers ?? 0}
+                color="primary"
+              />
+              <StatCard
+                icon={<Zap className="w-5 h-5" />}
+                label="Total kW"
+                value={`${(analytics?.totalKw ?? 0).toLocaleString("pt-BR")} kW`}
+                color="accent"
+              />
+              <StatCard
+                icon={<DollarSign className="w-5 h-5" />}
+                label="Valor Total Contas"
+                value={(analytics?.totalBillValue ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                color="primary"
+                subtitle={`Média: ${(analytics?.avgBillValue ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`}
+              />
+              <StatCard
+                icon={<TrendingUp className="w-5 h-5" />}
+                label="Taxa de Conversão"
+                value={`${(analytics?.conversionRate ?? 0).toFixed(1)}%`}
+                color="accent"
+                subtitle="Cliques / Visualizações"
+              />
+            </div>
+
             {/* Clicks by target */}
             {analytics?.clicksByTarget && Object.keys(analytics.clicksByTarget).length > 0 && (
               <div className="bg-card rounded-2xl border border-border p-4 sm:p-6">
@@ -218,9 +248,185 @@ const Admin = () => {
                   {Object.entries(analytics.clicksByTarget).map(([target, count]) => (
                     <div key={target} className="bg-secondary rounded-xl p-4 text-center">
                       <p className="text-2xl font-bold font-heading text-foreground">{count}</p>
-                      <p className="text-xs text-muted-foreground capitalize">{target}</p>
+                      <p className="text-xs text-muted-foreground">{friendlyClickLabel(target)}</p>
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {/* Customer Consumption + Status Donut */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Consumption by Customer - Horizontal Bar */}
+              <div className="bg-card rounded-2xl border border-border p-4 sm:p-6">
+                <h3 className="font-heading font-bold text-foreground mb-1 flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-primary" /> Consumo por Cliente
+                </h3>
+                <p className="text-xs text-muted-foreground mb-4">Top clientes por consumo (kW)</p>
+                {analytics?.customerConsumption && analytics.customerConsumption.length > 0 ? (
+                  <div style={{ height: Math.max(200, analytics.customerConsumption.length * 36) }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={analytics.customerConsumption} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(120, 8%, 18%)" horizontal={false} />
+                        <XAxis
+                          type="number"
+                          tick={{ fill: "hsl(120, 5%, 65%)", fontSize: 11 }}
+                          tickLine={false}
+                          axisLine={false}
+                          unit=" kW"
+                        />
+                        <YAxis
+                          type="category"
+                          dataKey="name"
+                          tick={{ fill: "hsl(120, 5%, 65%)", fontSize: 11 }}
+                          tickLine={false}
+                          axisLine={false}
+                          width={100}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            background: "hsl(120, 8%, 8%)",
+                            border: "1px solid hsl(120, 8%, 18%)",
+                            borderRadius: "12px",
+                            fontSize: "13px",
+                            color: "hsl(0, 0%, 95%)",
+                          }}
+                          formatter={(value: number) => [`${value.toLocaleString("pt-BR")} kW`, "Consumo"]}
+                        />
+                        <defs>
+                          <linearGradient id="barGradient" x1="0" y1="0" x2="1" y2="0">
+                            <stop offset="0%" stopColor="hsl(130, 100%, 30%)" />
+                            <stop offset="100%" stopColor="hsl(130, 100%, 45%)" />
+                          </linearGradient>
+                        </defs>
+                        <Bar dataKey="consumo" name="Consumo" fill="url(#barGradient)" radius={[0, 6, 6, 0]} barSize={20} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-8">Sem dados de consumo</p>
+                )}
+              </div>
+
+              {/* Customer Status Donut */}
+              <div className="bg-card rounded-2xl border border-border p-4 sm:p-6">
+                <h3 className="font-heading font-bold text-foreground mb-1 flex items-center gap-2">
+                  <Users className="w-4 h-4 text-primary" /> Status dos Clientes
+                </h3>
+                <p className="text-xs text-muted-foreground mb-4">Distribuição por status</p>
+                {analytics?.customersByStatus && analytics.customersByStatus.length > 0 ? (
+                  <>
+                    <div className="h-52">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={analytics.customersByStatus.map((s) => ({ name: s.label, value: s.count }))}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={50}
+                            outerRadius={80}
+                            paddingAngle={4}
+                            dataKey="value"
+                            stroke="none"
+                          >
+                            {analytics.customersByStatus.map((s, i) => {
+                              const statusColors: Record<string, string> = {
+                                approved: "hsl(130, 100%, 36%)",
+                                pending: "hsl(45, 100%, 50%)",
+                                rejected: "hsl(0, 80%, 55%)",
+                                lead: "hsl(200, 100%, 50%)",
+                              };
+                              return <Cell key={i} fill={statusColors[s.status] || "hsl(260, 60%, 55%)"} />;
+                            })}
+                          </Pie>
+                          <Tooltip
+                            contentStyle={{
+                              background: "hsl(120, 8%, 8%)",
+                              border: "1px solid hsl(120, 8%, 18%)",
+                              borderRadius: "12px",
+                              fontSize: "13px",
+                              color: "hsl(0, 0%, 95%)",
+                            }}
+                          />
+                          <Legend
+                            iconType="circle"
+                            iconSize={8}
+                            formatter={(value: string) => <span className="text-xs text-muted-foreground">{value}</span>}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    {/* Status badges */}
+                    <div className="flex flex-wrap gap-2 mt-3 justify-center">
+                      {analytics.customersByStatus.map((s) => {
+                        const badgeColors: Record<string, string> = {
+                          approved: "bg-green-500/20 text-green-400",
+                          pending: "bg-yellow-500/20 text-yellow-400",
+                          rejected: "bg-red-500/20 text-red-400",
+                          lead: "bg-blue-500/20 text-blue-400",
+                        };
+                        return (
+                          <span key={s.status} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${badgeColors[s.status] || "bg-purple-500/20 text-purple-400"}`}>
+                            {s.label}: {s.count}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-8">Sem clientes cadastrados</p>
+                )}
+              </div>
+            </div>
+
+            {/* Weekly New Customers */}
+            {analytics?.weeklyNewCustomers && analytics.weeklyNewCustomers.some((w) => w.count > 0) && (
+              <div className="bg-card rounded-2xl border border-border p-4 sm:p-6">
+                <h3 className="font-heading font-bold text-foreground mb-1 flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-primary" /> Novos Clientes por Semana
+                </h3>
+                <p className="text-xs text-muted-foreground mb-4">Últimos 30 dias</p>
+                <div className="h-52">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={analytics.weeklyNewCustomers} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="colorNewCust" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="hsl(200, 100%, 50%)" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="hsl(200, 100%, 50%)" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(120, 8%, 18%)" />
+                      <XAxis
+                        dataKey="week"
+                        tick={{ fill: "hsl(120, 5%, 65%)", fontSize: 10 }}
+                        tickLine={false}
+                        axisLine={false}
+                      />
+                      <YAxis
+                        tick={{ fill: "hsl(120, 5%, 65%)", fontSize: 11 }}
+                        tickLine={false}
+                        axisLine={false}
+                        allowDecimals={false}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          background: "hsl(120, 8%, 8%)",
+                          border: "1px solid hsl(120, 8%, 18%)",
+                          borderRadius: "12px",
+                          fontSize: "13px",
+                          color: "hsl(0, 0%, 95%)",
+                        }}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="count"
+                        name="Novos Clientes"
+                        stroke="hsl(200, 100%, 50%)"
+                        strokeWidth={2}
+                        fill="url(#colorNewCust)"
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
                 </div>
               </div>
             )}
@@ -710,17 +916,18 @@ const Admin = () => {
 
 /* ── Sub-components ── */
 
-function StatCard({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: number; color: "primary" | "accent" }) {
+function StatCard({ icon, label, value, color, subtitle }: { icon: React.ReactNode; label: string; value: number | string; color: "primary" | "accent"; subtitle?: string }) {
   return (
-    <div className="bg-card rounded-2xl border border-border p-5 flex items-center gap-4">
+    <div className="bg-card rounded-2xl border border-border p-5 flex items-center gap-4 hover:border-primary/30 transition-colors">
       <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
         color === "primary" ? "bg-primary/15 text-primary" : "bg-accent/15 text-accent"
       }`}>
         {icon}
       </div>
       <div>
-        <p className="text-2xl font-bold font-heading text-foreground">{value.toLocaleString("pt-BR")}</p>
+        <p className="text-2xl font-bold font-heading text-foreground">{typeof value === "number" ? value.toLocaleString("pt-BR") : value}</p>
         <p className="text-xs text-muted-foreground">{label}</p>
+        {subtitle && <p className="text-[10px] text-muted-foreground/70 mt-0.5">{subtitle}</p>}
       </div>
     </div>
   );
