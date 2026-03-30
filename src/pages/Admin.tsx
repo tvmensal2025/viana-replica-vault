@@ -56,6 +56,8 @@ const Admin = () => {
         licenciada_cadastro_url: id ? `https://expansao.igreenenergy.com.br/?id=${id}&checkout=true` : c.licenciada_cadastro_url || "",
         facebook_pixel_id: c.facebook_pixel_id || "",
         google_analytics_id: c.google_analytics_id || "",
+        igreen_portal_email: (c as any).igreen_portal_email || "",
+        igreen_portal_password: (c as any).igreen_portal_password || "",
       });
       if (c.photo_url) setPhotoPreview(c.photo_url);
     }
