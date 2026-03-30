@@ -68,8 +68,14 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
   const [activeSubTab, setActiveSubTab] = useState<SubTab>("conversas");
   const [selectedChatJid, setSelectedChatJid] = useState<string | null>(null);
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
+  const [pendingMessageKey, setPendingMessageKey] = useState(0);
 
   const selectedChat = chats.find((c) => c.remoteJid === selectedChatJid) || null;
+
+  const handleSelectChat = useCallback((jid: string | null) => {
+    setSelectedChatJid(jid);
+    setPendingMessage(null); // Clear pending message when manually selecting a chat
+  }, []);
 
   const handleOpenChatFromCustomer = useCallback((phone: string, suggestedMessage?: string) => {
     setActiveSubTab("conversas");
@@ -81,6 +87,7 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
       setSelectedChatJid(null);
     }
     setPendingMessage(suggestedMessage || null);
+    setPendingMessageKey((k) => k + 1);
   }, [chats]);
 
   const fetchCustomers = useCallback(async () => {
