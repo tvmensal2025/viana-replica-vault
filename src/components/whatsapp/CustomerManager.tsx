@@ -427,26 +427,56 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
     const progress = { current: 0, total: toImport.length, newCount: 0, updatedCount: 0, errorCount: 0 };
     setImportProgress({ ...progress });
 
-    for (const item of toImport) {
-      progress.current++;
+    const BATCH_SIZE = 100;
+    for (let i = 0; i < toImport.length; i += BATCH_SIZE) {
+      const batch = toImport.slice(i, i + BATCH_SIZE);
+      const batchData = batch.map((item) => ({
+        phone_whatsapp: item.phone,
+        name: item.name,
+        status: item.status,
+        ...item.data,
+      })) as TablesInsert<"customers">[];
+
       try {
-        const upsertData = { phone_whatsapp: item.phone, name: item.name, status: item.status, ...item.data } as TablesInsert<"customers">;
         const { data: upserted, error } = await supabase
-          .from("customers").upsert(upsertData, { onConflict: "phone_whatsapp" }).select("id").single();
+          .from("customers")
+          .upsert(batchData, { onConflict: "phone_whatsapp" })
+          .select("id, phone_whatsapp");
         if (error) throw error;
-        if (upserted) {
-          const { data: existingDeal } = await supabase
-            .from("crm_deals").select("id").eq("remote_jid", `${item.phone}@s.whatsapp.net`).eq("consultant_id", consultantId).maybeSingle();
-          if (!existingDeal) {
-            await supabase.from("crm_deals").insert({ consultant_id: consultantId, customer_id: upserted.id, remote_jid: `${item.phone}@s.whatsapp.net`, stage: "novo_lead" });
+
+        if (upserted && upserted.length > 0) {
+          // Build deals for new customers in batch
+          const jids = upserted.map((u) => `${u.phone_whatsapp}@s.whatsapp.net`);
+          const { data: existingDeals } = await supabase
+            .from("crm_deals")
+            .select("remote_jid")
+            .in("remote_jid", jids)
+            .eq("consultant_id", consultantId);
+          const existingJids = new Set((existingDeals || []).map((d) => d.remote_jid));
+
+          const newDeals = upserted
+            .filter((u) => !existingJids.has(`${u.phone_whatsapp}@s.whatsapp.net`))
+            .map((u) => ({
+              consultant_id: consultantId,
+              customer_id: u.id,
+              remote_jid: `${u.phone_whatsapp}@s.whatsapp.net`,
+              stage: "novo_lead",
+            }));
+          if (newDeals.length > 0) {
+            await supabase.from("crm_deals").insert(newDeals);
           }
-          if (item.isNew) progress.newCount++;
-          else progress.updatedCount++;
+
+          const newPhones = new Set(batch.filter((b) => b.isNew).map((b) => b.phone));
+          for (const u of upserted) {
+            if (newPhones.has(u.phone_whatsapp)) progress.newCount++;
+            else progress.updatedCount++;
+          }
         }
       } catch (err) {
-        console.error("[import] Error for phone", item.phone, err);
-        progress.errorCount++;
+        console.error("[import] Batch error at offset", i, err);
+        progress.errorCount += batch.length;
       }
+      progress.current = Math.min(i + BATCH_SIZE, toImport.length);
       setImportProgress({ ...progress });
     }
 
