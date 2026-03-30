@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { useAnalytics } from "@/hooks/useAnalytics";
+import { useAnalytics, friendlyClickLabel } from "@/hooks/useAnalytics";
 import type { Consultant } from "@/types/consultant";
 import type { Database } from "@/integrations/supabase/types";
 import {
