@@ -3,6 +3,11 @@ import { supabase } from "@/integrations/supabase/client";
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
+function normalizeQrBase64(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  return value;
+}
+
 async function handleResponse<T>(response: Response): Promise<T> {
   if (response.status === 401) {
     throw new Error("Erro de autenticação com a API do WhatsApp");
@@ -57,22 +62,46 @@ async function request<T>(path: string, method: string, body?: unknown): Promise
 // ─── Instance Management ───
 
 export async function createInstance(instanceName: string) {
-  return request<{
+  const response = await request<{
     instance?: { instanceName: string; status: string };
-    qrcode?: { base64: string; pairingCode?: string };
+    qrcode?: { base64?: string | null; pairingCode?: string; count?: number };
     timeout?: boolean;
   }>("instance/create", "POST", {
     instanceName,
     qrcode: true,
     integration: "WHATSAPP-BAILEYS",
   });
+
+  return {
+    ...response,
+    timeout: Boolean(response?.timeout || response?.qrcode?.count === 0),
+    qrcode: response?.qrcode
+      ? {
+          ...response.qrcode,
+          base64: normalizeQrBase64(response.qrcode.base64),
+        }
+      : undefined,
+  };
 }
 
 export async function connectInstance(instanceName: string) {
-  return request<{ base64: string | null; timeout?: boolean }>(
+  const response = await request<{
+    base64?: string | null;
+    code?: string | null;
+    pairingCode?: string;
+    count?: number;
+    timeout?: boolean;
+    qrcode?: { base64?: string | null; count?: number; pairingCode?: string };
+  }>(
     `instance/connect/${instanceName}`,
     "GET"
   );
+
+  return {
+    base64: normalizeQrBase64(response?.base64) ?? normalizeQrBase64(response?.qrcode?.base64),
+    timeout: Boolean(response?.timeout || response?.count === 0 || response?.qrcode?.count === 0),
+    pairingCode: response?.pairingCode || response?.qrcode?.pairingCode || null,
+  };
 }
 
 export async function getConnectionState(instanceName: string) {

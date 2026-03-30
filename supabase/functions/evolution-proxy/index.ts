@@ -51,7 +51,39 @@ function getRetryDelay(attempt: number): number {
 }
 
 function isRetriableResponseStatus(status: number): boolean {
-  return status === 546 || status === 502 || status === 503 || status === 504;
+  return status === 408 || status === 546 || status === 502 || status === 503 || status === 504;
+}
+
+function createGracefulTimeoutResponse(safePath: string): Response | null {
+  if (safePath.startsWith("instance/connectionState/")) {
+    return new Response(JSON.stringify({ state: "connecting", timeout: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  if (safePath === "instance/fetchInstances") {
+    return new Response(JSON.stringify([]), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  if (safePath.startsWith("instance/connect/")) {
+    return new Response(JSON.stringify({ base64: null, timeout: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  if (safePath === "instance/create") {
+    return new Response(JSON.stringify({ instance: { instanceName: "" }, timeout: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  return null;
 }
 
 async function fetchWithTimeout(
@@ -93,13 +125,28 @@ async function proxyToEvolution(
 
     try {
       const response = await fetchWithTimeout(targetUrl, fetchOptions, timeoutMs);
-      if (attempt < attempts && isRetriableResponseStatus(response.status)) {
+      if (isRetriableResponseStatus(response.status)) {
         const bodyPreview = await response.text();
         console.warn(
           `[evolution-proxy] Retriable status ${response.status} on attempt ${attempt}: ${bodyPreview.substring(0, 200)}`,
         );
-        await new Promise((resolve) => setTimeout(resolve, getRetryDelay(attempt)));
-        continue;
+
+        if (attempt < attempts) {
+          await new Promise((resolve) => setTimeout(resolve, getRetryDelay(attempt)));
+          continue;
+        }
+
+        const gracefulResponse = createGracefulTimeoutResponse(safePath);
+        if (gracefulResponse) {
+          return gracefulResponse;
+        }
+
+        return new Response(bodyPreview, {
+          status: response.status,
+          headers: {
+            "Content-Type": response.headers.get("Content-Type") || "application/json",
+          },
+        });
       }
       return response;
     } catch (networkError) {
@@ -110,35 +157,9 @@ async function proxyToEvolution(
           `[evolution-proxy] Timeout after ${timeoutMs}ms for ${method || "GET"} ${targetUrl} (attempt ${attempt}/${attempts})`,
         );
 
-        // Graceful fallbacks for timeouts on non-critical endpoints
-        if (safePath.startsWith("instance/connectionState/")) {
-          return new Response(JSON.stringify({ state: "connecting", timeout: true }), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          });
-        }
-
-        if (safePath === "instance/fetchInstances") {
-          return new Response(JSON.stringify([]), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          });
-        }
-
-        // Graceful fallback for connect timeout — return 200 with null QR
-        if (safePath.startsWith("instance/connect/")) {
-          return new Response(JSON.stringify({ base64: null, timeout: true }), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          });
-        }
-
-        // Graceful fallback for create timeout — return 200 so frontend can retry connect
-        if (safePath === "instance/create") {
-          return new Response(JSON.stringify({ instance: { instanceName: "" }, timeout: true }), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          });
+        const gracefulResponse = createGracefulTimeoutResponse(safePath);
+        if (gracefulResponse) {
+          return gracefulResponse;
         }
 
         if (attempt < attempts) {
