@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Users, Send, CheckSquare, Loader2, Sparkles, Megaphone } from "lucide-react";
+import { useState, useRef } from "react";
+import { Users, Send, CheckSquare, Loader2, Sparkles, Megaphone, Timer, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,6 +16,7 @@ interface BulkSendPanelProps {
   applyTemplate: (t: MessageTemplate, c: { name: string; electricity_bill_value?: number }) => string;
 }
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const SEND_INTERVAL_MS = 20000; // 20 seconds between each message
 
 export function BulkSendPanel({ instanceName, customers, templates, applyTemplate }: BulkSendPanelProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -25,6 +26,8 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
   const [progress, setProgress] = useState<BulkSendResult | null>(null);
   const [result, setResult] = useState<BulkSendResult | null>(null);
   const [warning, setWarning] = useState("");
+  const [countdown, setCountdown] = useState(0); // countdown in seconds
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { toast } = useToast();
   const allSelected = customers.length > 0 && selectedIds.size === customers.length;
 
@@ -58,20 +61,33 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
           : message;
 
         if (tplMediaUrl && tplMediaType === "audio") {
-          // Send audio as voice message
           await sendAudio(instanceName, selected[i].phone_whatsapp, tplMediaUrl);
-          // Send caption text separately if present
           if (msg.trim()) await sendTextMessage(instanceName, selected[i].phone_whatsapp, msg);
         } else if (tplMediaUrl && (tplMediaType === "image" || tplMediaType === "document")) {
-          // Send image or document with caption
           await sendMedia(instanceName, selected[i].phone_whatsapp, tplMediaUrl, msg, tplMediaType);
         } else {
-          // Text only
           await sendTextMessage(instanceName, selected[i].phone_whatsapp, msg);
         }
         sent++;
       } catch { failed++; }
-      if (i < selected.length - 1) await delay(2000);
+
+      // 20-second countdown between messages to protect the number
+      if (i < selected.length - 1) {
+        setCountdown(SEND_INTERVAL_MS / 1000);
+        await new Promise<void>((resolve) => {
+          let seconds = SEND_INTERVAL_MS / 1000;
+          countdownRef.current = setInterval(() => {
+            seconds--;
+            setCountdown(seconds);
+            if (seconds <= 0) {
+              if (countdownRef.current) clearInterval(countdownRef.current);
+              countdownRef.current = null;
+              resolve();
+            }
+          }, 1000);
+        });
+        setCountdown(0);
+      }
     }
     const r: BulkSendResult = { total: selected.length, sent, failed };
     setProgress(null); setResult(r); setIsSending(false);
@@ -137,12 +153,25 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
         <Textarea placeholder="Digite sua mensagem..." value={message} onChange={(e) => setMessage(e.target.value)} rows={4} disabled={isSending} className="mb-3 rounded-xl bg-secondary/30 border-border/40 resize-none" />
 
         {isSending && progress && (
-          <div className="mb-4 space-y-2.5 rounded-xl bg-secondary/20 border border-border/30 p-4">
+          <div className="mb-4 space-y-3 rounded-xl bg-secondary/20 border border-border/30 p-4">
             <div className="flex items-center gap-2.5 text-sm text-muted-foreground">
               <Loader2 className="w-4 h-4 animate-spin text-orange-400" />
               <span className="font-medium">Enviando... {progress.sent + progress.failed}/{progress.total}</span>
             </div>
             <Progress value={pct} className="h-2" />
+            {countdown > 0 && (
+              <div className="flex items-center gap-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20 px-3 py-2">
+                <Shield className="w-4 h-4 text-blue-400 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-blue-300 font-medium">Proteção anti-bloqueio ativa</p>
+                  <p className="text-[11px] text-blue-400/70">Aguardando intervalo de segurança...</p>
+                </div>
+                <div className="flex items-center gap-1.5 bg-blue-500/15 px-2.5 py-1 rounded-full">
+                  <Timer className="w-3.5 h-3.5 text-blue-400" />
+                  <span className="text-sm font-mono font-bold text-blue-300">{countdown}s</span>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
