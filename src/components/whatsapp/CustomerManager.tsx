@@ -52,6 +52,16 @@ interface Customer {
   andamento_igreen?: string | null;
   devolutiva?: string | null;
   observacao?: string | null;
+  igreen_code?: string | null;
+  data_cadastro?: string | null;
+  data_ativo?: string | null;
+  data_validado?: string | null;
+  status_financeiro?: string | null;
+  cashback?: string | null;
+  nivel_licenciado?: string | null;
+  assinatura_cliente?: string | null;
+  assinatura_igreen?: string | null;
+  link_assinatura?: string | null;
 }
 
 interface CustomerManagerProps {
