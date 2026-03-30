@@ -1,74 +1,56 @@
 
 
-# Plano: Métricas de Clientes e kW no Dashboard
+# Plano: Dashboard Premium com Métricas de Clientes
 
 ## O que será feito
 
-### 1. Rótulos amigáveis nos cliques por botão
-Substituir identificadores técnicos (`whatsapp_intermediate`, `whatsapp`, `cadastro`) por nomes legíveis com ícones.
+O hook `useAnalytics` já calcula todos os dados necessários (totalCustomers, totalKw, totalBillValue, customersByStatus, customerConsumption, weeklyNewCustomers, conversionRate). Falta apenas renderizar no `Admin.tsx`.
 
-### 2. Novos KPI Cards de Clientes
-Adicionar ao topo do dashboard:
-- **Total de Clientes** — contagem da tabela `customers` do consultor
-- **Clientes por Status** — aprovados, pendentes, leads (badges coloridos)
-- **Total kW (média consumo)** — soma de `media_consumo` de todos os clientes
-- **Valor Total Contas** — soma de `electricity_bill_value` (formatado R$)
+### 1. Corrigir rótulos amigáveis nos cliques
+A função `friendlyClickLabel` já existe mas não é usada na renderização. Aplicar na linha 221.
 
-### 3. Gráfico de Consumo por Cliente
-Um **BarChart horizontal** mostrando cada cliente (nome) e seu `media_consumo` em kW, ordenado do maior para o menor. Visualização rápida de quem consome mais energia.
+### 2. Novos KPI Cards (segunda fileira)
+Adicionar abaixo dos stats existentes:
+- **Total de Clientes** (ícone Users, cor verde)
+- **Total kW** (ícone Zap, cor amarela)
+- **Valor Total Contas** (ícone DollarSign, formatado R$)
+- **Taxa de Conversão** (ícone TrendingUp, com %)
 
-### 4. Sugestões adicionais incluídas no plano
-- **Taxa de conversão**: cliques / visualizações como percentual no stat card
-- **Gráfico de novos clientes por semana**: AreaChart com clientes criados nos últimos 30 dias agrupados por semana
-- **Distribuição de status**: PieChart (donut) com a proporção de clientes por status (aprovado/pendente/lead/rejeitado)
+### 3. Gráfico de Consumo por Cliente (BarChart horizontal)
+Card com barras horizontais mostrando `customerConsumption` (nome × kW), top 15, cores gradiente verde.
 
-## Detalhes técnicos
+### 4. Donut de Status de Clientes (PieChart)
+Card com gráfico pizza/donut mostrando distribuição por status (Aprovado, Pendente, Lead, Rejeitado) com cores distintas.
 
-### Hook `useAnalytics.ts`
-- Adicionar query paralela à tabela `customers` filtrando por... Na verdade, `customers` não tem `consultant_id`. Preciso verificar como clientes são vinculados ao consultor.
+### 5. Novos Clientes por Semana (AreaChart)
+Card com gráfico de área mostrando `weeklyNewCustomers` nos últimos 30 dias.
 
-Verificação necessária: a tabela `customers` não possui `consultant_id` diretamente. Os clientes são vinculados via `crm_deals.consultant_id` → `crm_deals.customer_id`.
-
-### Arquivos impactados
-1. **`src/hooks/useAnalytics.ts`** — adicionar fetch de `customers` (via join com `crm_deals`) e computar métricas
-2. **`src/pages/Admin.tsx`** — adicionar KPI cards, gráfico de consumo por cliente, rótulos amigáveis, donut de status, taxa de conversão
-
-### Estrutura dos novos dados no retorno do hook
-```typescript
-{
-  // Existentes...
-  // Novos:
-  totalCustomers: number;
-  customersByStatus: { status: string; count: number }[];
-  totalKw: number;
-  totalBillValue: number;
-  customerConsumption: { name: string; consumo: number }[];
-  weeklyNewCustomers: { week: string; count: number }[];
-  conversionRate: number; // (totalClicks / total) * 100
-}
-```
-
-### Lógica de vinculação cliente-consultor
-Buscar `crm_deals` do consultor → extrair `customer_id`s → buscar `customers` com esses IDs. Ou, se RLS de `customers` for pública, buscar todos e filtrar pelo join.
-
-Alternativa mais simples: como `customers` tem RLS pública e `crm_deals` filtra por `consultant_id`, fazer duas queries:
-1. `crm_deals` WHERE `consultant_id = userId` → lista de `customer_id`
-2. `customers` WHERE `id IN (...)` → dados dos clientes
-
-### Layout visual
+### Layout
 ```text
 ┌─────────────┬──────────────┬──────────────┬──────────────┐
-│ Total Views │ Total Cliques│ Tot Clientes │ Total kW     │
+│ Views       │ Pg Cliente   │ Pg Licenciado│ Cliques      │
+├─────────────┼──────────────┼──────────────┼──────────────┤
+│ Clientes    │ Total kW     │ Valor Contas │ Conversão    │
 ├─────────────┴──────────────┴──────────────┴──────────────┤
 │ Cliques por Botão (rótulos amigáveis)                    │
 ├──────────────────────────────┬───────────────────────────┤
 │ Consumo por Cliente (BarH)   │ Status Clientes (Donut)  │
 ├──────────────────────────────┴───────────────────────────┤
-│ Visualizações — 30 dias (AreaChart existente)            │
-├──────────────────────────────────────────────────────────┤
-│ Novos Clientes por Semana (AreaChart)                    │
+│ Visualizações 30 dias + Novos Clientes/Semana            │
 ├─────────────┬──────────────┬────────────────────────────┤
 │ Horários    │ Dispositivos │ Origem Tráfego             │
 └─────────────┴──────────────┴────────────────────────────┘
 ```
+
+## Detalhes técnicos
+
+**Arquivo único**: `src/pages/Admin.tsx`
+
+Alterações:
+1. **Linha 221**: Trocar `{target}` por `{friendlyClickLabel(target)}`
+2. **Após linha 208**: Inserir segunda grade de KPI cards com dados de clientes
+3. **Após seção cliques (linha 226)**: Inserir grid 2 colunas com BarChart horizontal + PieChart donut
+4. **Antes do gráfico de comparativo diário**: Inserir AreaChart de novos clientes por semana
+5. Formatar valores financeiros com `toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })`
+6. Cores do donut: verde (approved), amarelo (pending), vermelho (rejected), azul (lead)
 
