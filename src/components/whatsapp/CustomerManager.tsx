@@ -908,19 +908,13 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
                 const isSelected = selectedPhones.has(p.phone);
                 const statusBadge = getStatusBadge(p.status);
                 return (
-                  <div key={p.phone} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-all ${!p.isNew ? "border-border/20 bg-secondary/10 opacity-50" : isSelected ? "border-primary/30 bg-primary/[0.04]" : "border-border/30 bg-secondary/5 hover:bg-secondary/15"}`}>
-                    {p.isNew ? (
-                      <Checkbox checked={isSelected} onCheckedChange={() => toggleSelect(p.phone)} />
-                    ) : (
-                      <div className="w-4 h-4 flex items-center justify-center">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-muted-foreground/40" />
-                      </div>
-                    )}
+                  <div key={p.phone} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-all ${isSelected ? "border-primary/30 bg-primary/[0.04]" : "border-border/30 bg-secondary/5 hover:bg-secondary/15"}`}>
+                    <Checkbox checked={isSelected} onCheckedChange={() => toggleSelect(p.phone)} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium text-foreground truncate">{p.name || "Sem nome"}</p>
                         <Badge variant="outline" className={`text-[9px] px-1.5 py-0 h-4 ${statusBadge.className}`}>{statusBadge.label}</Badge>
-                        {!p.isNew && <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-muted/50 text-muted-foreground border-border/30">Já cadastrado</Badge>}
+                        {!p.isNew && <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-yellow-500/10 text-yellow-400 border-yellow-500/20">Atualizar</Badge>}
                         {p.isNew && <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-green-500/10 text-green-400 border-green-500/20">Novo</Badge>}
                       </div>
                       <div className="flex items-center gap-3 mt-0.5">
