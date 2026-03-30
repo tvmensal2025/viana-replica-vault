@@ -201,8 +201,8 @@ Deno.serve(async (req) => {
     if (!token) {
       console.error("No token in login response:", Object.keys(loginData));
       return new Response(
-        JSON.stringify({ success: false, error: "Login retornou sem token de acesso." }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ success: false, error: "Login no portal iGreen retornou sem token de acesso." }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
     console.log("Login successful, token obtained.");
