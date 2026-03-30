@@ -70,7 +70,25 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const [pendingMessageKey, setPendingMessageKey] = useState(0);
 
-  const selectedChat = chats.find((c) => c.remoteJid === selectedChatJid) || null;
+  // Build selectedChat: either from existing chats or a synthetic entry for new conversations
+  const selectedChat = (() => {
+    const found = chats.find((c) => c.remoteJid === selectedChatJid);
+    if (found) return found;
+    // If we have a JID but no chat (new conversation from customer list), create synthetic entry
+    if (selectedChatJid) {
+      const phone = selectedChatJid.split("@")[0];
+      return {
+        remoteJid: selectedChatJid,
+        sendTargetJid: selectedChatJid,
+        name: phone,
+        lastMessage: "",
+        lastMessageTimestamp: 0,
+        unreadCount: 0,
+        isGroup: false,
+      } as import("@/hooks/useChats").ChatItem;
+    }
+    return null;
+  })();
 
   const handleSelectChat = useCallback((jid: string | null) => {
     setSelectedChatJid(jid);
@@ -80,11 +98,37 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
   const handleOpenChatFromCustomer = useCallback((phone: string, suggestedMessage?: string) => {
     setActiveSubTab("conversas");
     const cleanPhone = phone.replace(/\D/g, "");
-    const match = chats.find((c) => c.remoteJid.includes(cleanPhone));
+
+    // Try exact match first
+    let match = chats.find((c) => c.remoteJid.includes(cleanPhone));
+
+    // Try Brazilian 9th digit variations (add or remove the 9 after area code)
+    if (!match && cleanPhone.startsWith("55") && cleanPhone.length >= 12) {
+      const ddd = cleanPhone.substring(2, 4);
+      const rest = cleanPhone.substring(4);
+      // If has 9 digits after DDD (with 9th digit), try without
+      if (rest.length === 9 && rest.startsWith("9")) {
+        const without9 = `55${ddd}${rest.substring(1)}`;
+        match = chats.find((c) => c.remoteJid.includes(without9));
+      }
+      // If has 8 digits after DDD (without 9th digit), try with
+      if (!match && rest.length === 8) {
+        const with9 = `55${ddd}9${rest}`;
+        match = chats.find((c) => c.remoteJid.includes(with9));
+      }
+    }
+
+    // Also try matching by chat name containing the phone
+    if (!match) {
+      match = chats.find((c) => c.name?.includes(cleanPhone.slice(-8)));
+    }
+
     if (match) {
       setSelectedChatJid(match.remoteJid);
     } else {
-      setSelectedChatJid(null);
+      // No existing chat — create a synthetic JID so user can start a new conversation
+      const syntheticJid = `${cleanPhone}@s.whatsapp.net`;
+      setSelectedChatJid(syntheticJid);
     }
     setPendingMessage(suggestedMessage || null);
     setPendingMessageKey((k) => k + 1);
