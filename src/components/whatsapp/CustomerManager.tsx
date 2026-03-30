@@ -5,7 +5,7 @@ import {
   ChevronDown, ChevronUp, Pencil, CreditCard, User, Save, X,
   Loader2, Upload, FileSpreadsheet, CheckCircle2, CheckSquare, Square,
   MessageCircle, Copy, Building2, AlertTriangle, FileText, ClipboardCopy,
-  RefreshCw, Cloud,
+  RefreshCw,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { Button } from "@/components/ui/button";
@@ -603,7 +603,7 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
           </div>
           <div className="flex items-center gap-2">
             <Button onClick={handleSyncIgreen} size="sm" variant="outline" className="gap-2 rounded-xl font-semibold h-9 px-4 border-green-500/20 text-green-600 hover:bg-green-500/10" disabled={syncing}>
-              {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Cloud className="w-4 h-4" />}
+              {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
               Sincronizar iGreen
             </Button>
             <Button onClick={() => fileInputRef.current?.click()} size="sm" variant="outline" className="gap-2 rounded-xl font-semibold h-9 px-4 border-primary/20 text-primary hover:bg-primary/10" disabled={importing || parsing}>
