@@ -17,6 +17,13 @@ function getFixedInstanceName(consultantId: string): string {
  * Fire-and-forget — errors are logged but don't block the user.
  */
 export async function preCreateWhatsAppInstance(userId: string): Promise<void> {
+  // Guard: only proceed if we have a valid session token
+  const { data: sessionData } = await supabase.auth.getSession();
+  if (!sessionData?.session?.access_token) {
+    logger.info("[preCreate] Skipped — no active session yet");
+    return;
+  }
+
   const fixedName = getFixedInstanceName(userId);
 
   try {

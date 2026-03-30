@@ -18,15 +18,15 @@ const Auth = () => {
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session) {
-        // Pre-create WhatsApp instance in background so it's ready when they open the tab
-        preCreateWhatsAppInstance(session.user.id).catch(() => {});
         navigate("/admin");
+        // Fire after navigation so session is fully propagated
+        setTimeout(() => preCreateWhatsAppInstance(session.user.id).catch(() => {}), 500);
       }
     });
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
-        preCreateWhatsAppInstance(session.user.id).catch(() => {});
         navigate("/admin");
+        setTimeout(() => preCreateWhatsAppInstance(session.user.id).catch(() => {}), 500);
       }
     });
     return () => subscription.unsubscribe();
