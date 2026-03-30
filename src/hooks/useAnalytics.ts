@@ -198,16 +198,16 @@ export function useAnalytics(consultantId: string | null) {
       const customersWithConsumption = customers.filter((c) => Number(c.media_consumo) > 0);
       const avgKw = customersWithConsumption.length > 0 ? totalKw / customersWithConsumption.length : 0;
 
-      // Top licenciados by customer count (from registered_by_name)
+      // Top licenciados by customer count (from ALL customers, not just deal-linked)
       const licMap = new Map<string, number>();
-      for (const c of customers) {
+      for (const c of allCustomers) {
         const lic = c.registered_by_name;
         if (lic) licMap.set(lic, (licMap.get(lic) || 0) + 1);
       }
       const topLicenciados: TopLicenciado[] = Array.from(licMap.entries())
         .map(([name, deals]) => ({ name, deals }))
         .sort((a, b) => b.deals - a.deals)
-        .slice(0, 15);
+        .slice(0, 10);
 
       // Weekly new customers (last 30 days)
       const weekMap = new Map<string, number>();
