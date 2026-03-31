@@ -534,7 +534,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
     clearQrRecovery();
 
     try {
-      try { await withTimeout(deleteInstance(name), 15000); } catch { /* ok */ }
+      try { await withTimeout(logoutInstance(name), 15000); } catch { /* ok */ }
       await deleteInstanceDb();
       clearCreateAttempt();
 
