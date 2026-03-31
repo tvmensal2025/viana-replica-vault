@@ -31,7 +31,8 @@ export function MessageComposer({ onSend, onSendAudio, onSendAudioUrl, onSendMed
   const [recordingTime, setRecordingTime] = useState(0);
 
   // File attach state
-  const [attachedFile, setAttachedFile] = useState<{ url: string; name: string; type: MediaType } | null>(null);
+  const [attachedFile, setAttachedFile] = useState<{ url: string; name: string; type: MediaType | "audio" } | null>(null);
+  const [pendingImageUrl, setPendingImageUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
 
