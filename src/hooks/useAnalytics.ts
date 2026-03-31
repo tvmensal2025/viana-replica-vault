@@ -264,6 +264,7 @@ export function useAnalytics(consultantId: string | null) {
         topLicenciados,
         weeklyNewCustomers,
         conversionRate,
+        allCustomers,
       };
     },
   });
