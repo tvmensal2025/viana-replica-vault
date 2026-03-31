@@ -38,7 +38,68 @@ const Admin = () => {
   const queryClient = useQueryClient();
   const { data: analytics } = useAnalytics(userId);
 
-  useEffect(() => {
+  // Derive unique licenciados list and filtered metrics
+  const licenciadoOptions = useMemo(() => {
+    if (!analytics?.allCustomers) return [];
+    const names = new Set<string>();
+    for (const c of analytics.allCustomers) {
+      if (c.registered_by_name) names.add(c.registered_by_name);
+    }
+    return Array.from(names).sort();
+  }, [analytics?.allCustomers]);
+
+  const filteredMetrics = useMemo(() => {
+    if (!analytics) return null;
+    const filtered = selectedLicenciado === "all"
+      ? analytics.allCustomers
+      : analytics.allCustomers.filter((c: any) => c.registered_by_name === selectedLicenciado);
+
+    const totalCustomers = filtered.length;
+    const totalKw = filtered.reduce((sum: number, c: any) => sum + (Number(c.media_consumo) || 0), 0);
+    const withConsumption = filtered.filter((c: any) => Number(c.media_consumo) > 0);
+    const avgKw = withConsumption.length > 0 ? totalKw / withConsumption.length : 0;
+
+    const statusMap = new Map<string, number>();
+    for (const c of filtered) {
+      const s = (c as any).status || "pending";
+      statusMap.set(s, (statusMap.get(s) || 0) + 1);
+    }
+    const statusLabels: Record<string, string> = {
+      approved: "Aprovados", pending: "Pendentes", rejected: "Rejeitados", lead: "Leads",
+      data_complete: "Dados Completos", registered_igreen: "Cadastrado iGreen", contract_sent: "Contrato Enviado",
+    };
+    const customersByStatus = Array.from(statusMap.entries())
+      .map(([status, count]) => ({
+        status, count,
+        label: statusLabels[status] || status.charAt(0).toUpperCase() + status.slice(1),
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    // Weekly new customers
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const weekMap = new Map<string, number>();
+    for (let i = 3; i >= 0; i--) {
+      const start = new Date(); start.setDate(start.getDate() - (i + 1) * 7);
+      const end = new Date(); end.setDate(end.getDate() - i * 7);
+      const label = `${start.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} - ${end.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}`;
+      weekMap.set(label, 0);
+    }
+    for (const c of filtered) {
+      const created = new Date((c as any).created_at);
+      if (created >= thirtyDaysAgo) {
+        const daysAgo = Math.floor((Date.now() - created.getTime()) / (1000 * 60 * 60 * 24));
+        const weekIdx = Math.min(3, Math.floor(daysAgo / 7));
+        const keys = Array.from(weekMap.keys());
+        const key = keys[3 - weekIdx];
+        if (key) weekMap.set(key, (weekMap.get(key) || 0) + 1);
+      }
+    }
+    const weeklyNewCustomers = Array.from(weekMap.entries()).map(([week, count]) => ({ week, count }));
+
+    return { totalCustomers, totalKw, avgKw, customersByStatus, weeklyNewCustomers };
+  }, [analytics, selectedLicenciado]);
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
       if (!session) navigate("/auth");
       else { setUserId(session.user.id); loadConsultant(session.user.id); }
