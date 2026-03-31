@@ -196,8 +196,8 @@ export function ChatView({ instanceName, chat, templates, consultantId, initialM
             Nenhuma mensagem encontrada
           </div>
         )}
-        {messages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} onLoadMedia={loadMedia} />
+        {messages.map((msg, index) => (
+          <MessageBubble key={`${msg.id}-${index}`} message={msg} onLoadMedia={loadMedia} />
         ))}
       </div>
 
