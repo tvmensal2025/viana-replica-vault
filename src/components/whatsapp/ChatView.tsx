@@ -36,6 +36,58 @@ export function ChatView({ instanceName, chat, templates, consultantId, initialM
   const [isCustomer, setIsCustomer] = useState(false);
   const [addingCustomer, setAddingCustomer] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [kanbanStages, setKanbanStages] = useState<Tables<"kanban_stages">[]>([]);
+  const [sendingToCrm, setSendingToCrm] = useState(false);
+
+  // Fetch kanban stages
+  useEffect(() => {
+    supabase
+      .from("kanban_stages")
+      .select("*")
+      .eq("consultant_id", consultantId)
+      .order("position")
+      .then(({ data }) => {
+        if (data && data.length > 0) setKanbanStages(data);
+      });
+  }, [consultantId]);
+
+  const handleSendToCrm = useCallback(async (stageKey: string) => {
+    if (!chat) return;
+    setSendingToCrm(true);
+    try {
+      // Check if deal already exists for this remoteJid
+      const { data: existing } = await supabase
+        .from("crm_deals")
+        .select("id")
+        .eq("consultant_id", consultantId)
+        .eq("remote_jid", chat.remoteJid)
+        .maybeSingle();
+
+      if (existing) {
+        // Update stage
+        await supabase
+          .from("crm_deals")
+          .update({ stage: stageKey, updated_at: new Date().toISOString() })
+          .eq("id", existing.id);
+        toast({ title: "CRM atualizado", description: `Movido para ${kanbanStages.find(s => s.stage_key === stageKey)?.label || stageKey}` });
+      } else {
+        // Create new deal
+        await supabase
+          .from("crm_deals")
+          .insert({
+            consultant_id: consultantId,
+            remote_jid: chat.remoteJid,
+            stage: stageKey,
+          });
+        toast({ title: "Adicionado ao CRM", description: `Enviado para ${kanbanStages.find(s => s.stage_key === stageKey)?.label || stageKey}` });
+      }
+    } catch (err) {
+      logger.error("Erro ao enviar ao CRM:", err);
+      toast({ title: "Erro ao enviar ao CRM", variant: "destructive" });
+    } finally {
+      setSendingToCrm(false);
+    }
+  }, [chat, consultantId, kanbanStages, toast]);
 
   // Check if this contact is already a customer
   useEffect(() => {
