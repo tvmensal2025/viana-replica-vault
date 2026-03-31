@@ -201,45 +201,43 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
     fetchCustomers();
   }, [fetchCustomers]);
 
-  // If not connected, show only the connection panel
-  if (connectionStatus !== "connected") {
-    return (
-      <div className="flex flex-col gap-4">
-        <ConnectionPanel
-          connectionStatus={connectionStatus}
-          qrCode={qrCode}
-          qrGeneratedAt={qrGeneratedAt}
-          instanceName={instanceName}
-          phoneNumber={phoneNumber}
-          isLoading={isLoading}
-          error={error}
-          connectionLog={connectionLog}
-          onConnect={createAndConnect}
-          onDisconnect={disconnect}
-          onReconnect={reconnect}
-          onRefreshQr={refreshQr}
-        />
-      </div>
-    );
-  }
+  const isConnected = connectionStatus === "connected";
 
   return (
     <div className="flex flex-col gap-0 h-[calc(100vh-200px)] min-h-[500px]">
       {/* Compact connection status */}
       <div className="flex items-center justify-between px-3 py-1.5 bg-card border border-border rounded-t-lg">
-        <div className="flex items-center gap-2">
-          <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-          <span className="text-xs text-foreground font-medium">WhatsApp Conectado</span>
-          {instanceName && (
-            <span className="text-[10px] text-muted-foreground">({instanceName})</span>
-          )}
-        </div>
-        <button
-          onClick={disconnect}
-          className="text-[10px] text-destructive hover:underline"
-        >
-          Desconectar
-        </button>
+        {isConnected ? (
+          <>
+            <div className="flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+              <span className="text-xs text-foreground font-medium">WhatsApp Conectado</span>
+              {instanceName && (
+                <span className="text-[10px] text-muted-foreground">({instanceName})</span>
+              )}
+            </div>
+            <button
+              onClick={disconnect}
+              className="text-[10px] text-destructive hover:underline"
+            >
+              Desconectar
+            </button>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full bg-destructive" />
+              <span className="text-xs text-foreground font-medium">WhatsApp Desconectado</span>
+            </div>
+            <button
+              onClick={createAndConnect}
+              disabled={isLoading}
+              className="text-[10px] text-primary hover:underline font-medium"
+            >
+              {isLoading ? "Conectando..." : "Conectar"}
+            </button>
+          </>
+        )}
       </div>
 
       {/* Sub-tab navigation */}
@@ -265,16 +263,17 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
 
       {/* Content area */}
       <div className="flex-1 border border-t-0 border-border rounded-b-lg overflow-hidden bg-background">
-        {activeSubTab === "conversas" && instanceName && (
-          <div className="flex h-full">
-            <div className="w-[300px] shrink-0">
-              <ChatSidebar
-                chats={chats}
-                isLoading={chatsLoading}
-                selectedJid={selectedChatJid}
-                onSelectChat={handleSelectChat}
-              />
-            </div>
+        {activeSubTab === "conversas" && (
+          isConnected && instanceName ? (
+            <div className="flex h-full">
+              <div className="w-[300px] shrink-0">
+                <ChatSidebar
+                  chats={chats}
+                  isLoading={chatsLoading}
+                  selectedJid={selectedChatJid}
+                  onSelectChat={handleSelectChat}
+                />
+              </div>
               <ChatView
                 instanceName={instanceName}
                 chat={selectedChat}
@@ -283,7 +282,25 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
                 initialMessage={pendingMessage}
                 key={`chat-${selectedChatJid}-${pendingMessageKey}`}
               />
-          </div>
+            </div>
+          ) : (
+            <div className="p-4 overflow-auto h-full">
+              <ConnectionPanel
+                connectionStatus={connectionStatus}
+                qrCode={qrCode}
+                qrGeneratedAt={qrGeneratedAt}
+                instanceName={instanceName}
+                phoneNumber={phoneNumber}
+                isLoading={isLoading}
+                error={error}
+                connectionLog={connectionLog}
+                onConnect={createAndConnect}
+                onDisconnect={disconnect}
+                onReconnect={reconnect}
+                onRefreshQr={refreshQr}
+              />
+            </div>
+          )
         )}
 
         {activeSubTab === "crm" && (
@@ -292,14 +309,20 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
           </div>
         )}
 
-        {activeSubTab === "envio_massa" && instanceName && (
+        {activeSubTab === "envio_massa" && (
           <div className="p-4 overflow-auto h-full">
-            <BulkSendPanel
-              instanceName={instanceName}
-              customers={customers}
-              templates={templates}
-              applyTemplate={applyTemplate}
-            />
+            {isConnected && instanceName ? (
+              <BulkSendPanel
+                instanceName={instanceName}
+                customers={customers}
+                templates={templates}
+                applyTemplate={applyTemplate}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-40 text-sm text-muted-foreground">
+                Conecte o WhatsApp para enviar mensagens em massa.
+              </div>
+            )}
           </div>
         )}
 
@@ -314,12 +337,18 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
           </div>
         )}
 
-        {activeSubTab === "agendamentos" && instanceName && (
+        {activeSubTab === "agendamentos" && (
           <div className="p-4 overflow-auto h-full">
-            <SchedulePanel
-              consultantId={userId}
-              instanceName={instanceName}
-            />
+            {isConnected && instanceName ? (
+              <SchedulePanel
+                consultantId={userId}
+                instanceName={instanceName}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-40 text-sm text-muted-foreground">
+                Conecte o WhatsApp para gerenciar agendamentos.
+              </div>
+            )}
           </div>
         )}
 
