@@ -11,7 +11,9 @@ import type { Database } from "@/integrations/supabase/types";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, AreaChart, Area, PieChart, Pie, Cell, Legend,
 } from "recharts";
-import { Eye, Users, Copy, ExternalLink, LogOut, Save, Camera, BarChart3, LinkIcon, Settings, Monitor, MousePointerClick, Clock, Smartphone, Globe, QrCode, Download, X, MessageSquare, Zap, TrendingUp, KeyRound } from "lucide-react";
+import { Eye, Users, Copy, ExternalLink, LogOut, Save, Camera, BarChart3, LinkIcon, Settings, Monitor, MousePointerClick, Clock, Smartphone, Globe, QrCode, Download, X, MessageSquare, Zap, TrendingUp, KeyRound, RefreshCw, Loader2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useQueryClient } from "@tanstack/react-query";
 import { WhatsAppTab } from "@/components/whatsapp/WhatsAppTab";
 import { QRCodeSVG } from "qrcode.react";
 
@@ -26,8 +28,12 @@ const Admin = () => {
   });
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [syncingDashboard, setSyncingDashboard] = useState(false);
+  const [showCredentialsDialog, setShowCredentialsDialog] = useState(false);
+  const [credForm, setCredForm] = useState({ email: "", password: "" });
   const navigate = useNavigate();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const { data: analytics } = useAnalytics(userId);
 
   useEffect(() => {
@@ -102,6 +108,52 @@ const Admin = () => {
   };
 
   const handleLogout = async () => { await supabase.auth.signOut(); navigate("/auth"); };
+
+  const runSync = async (email: string, password: string) => {
+    setSyncingDashboard(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("sync-igreen-customers", {
+        body: { portal_email: email, portal_password: password, consultant_id: userId },
+      });
+      if (error) throw error;
+      if (data?.success) {
+        toast({ title: "✅ Sincronização concluída!", description: `${data.processed} clientes processados, ${data.updated} atualizados.` });
+        queryClient.invalidateQueries({ queryKey: ["analytics"] });
+      } else {
+        toast({ title: "Erro na sincronização", description: data?.error || "Erro desconhecido", variant: "destructive" });
+      }
+    } catch (err: unknown) {
+      toast({ title: "Erro na sincronização", description: err instanceof Error ? err.message : "Erro desconhecido", variant: "destructive" });
+    } finally {
+      setSyncingDashboard(false);
+    }
+  };
+
+  const handleDashboardSync = () => {
+    if (form.igreen_portal_email && form.igreen_portal_password) {
+      runSync(form.igreen_portal_email, form.igreen_portal_password);
+    } else {
+      setCredForm({ email: "", password: "" });
+      setShowCredentialsDialog(true);
+    }
+  };
+
+  const handleSaveCredentialsAndSync = async () => {
+    if (!credForm.email || !credForm.password || !userId) return;
+    try {
+      const { error } = await supabase.from("consultants").update({
+        igreen_portal_email: credForm.email,
+        igreen_portal_password: credForm.password,
+      }).eq("id", userId);
+      if (error) throw error;
+      setForm(prev => ({ ...prev, igreen_portal_email: credForm.email, igreen_portal_password: credForm.password }));
+      setShowCredentialsDialog(false);
+      toast({ title: "✅ Credenciais salvas!" });
+      runSync(credForm.email, credForm.password);
+    } catch (err: unknown) {
+      toast({ title: "Erro ao salvar credenciais", description: err instanceof Error ? err.message : "Erro", variant: "destructive" });
+    }
+  };
 
   const baseUrl = "igreen.institutodossonhos.com.br";
   const slug = form.license || "sua-licenca";
@@ -212,6 +264,21 @@ const Admin = () => {
             </div>
 
             {/* Customer KPI Cards */}
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-heading font-bold text-foreground text-sm flex items-center gap-2">
+                <Users className="w-4 h-4 text-primary" /> Clientes iGreen
+              </h3>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDashboardSync}
+                disabled={syncingDashboard}
+                className="h-8 text-xs gap-1.5"
+              >
+                {syncingDashboard ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                {syncingDashboard ? "Sincronizando..." : "Sincronizar iGreen"}
+              </Button>
+            </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
               <StatCard
                 icon={<Users className="w-5 h-5" />}
@@ -681,6 +748,51 @@ const Admin = () => {
             </div>
           </div>
         )}
+
+        {/* Credentials Dialog */}
+        <Dialog open={showCredentialsDialog} onOpenChange={setShowCredentialsDialog}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <KeyRound className="w-5 h-5 text-primary" />
+                Conectar ao Portal iGreen
+              </DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">
+              Informe suas credenciais do portal iGreen para sincronizar seus clientes automaticamente.
+            </p>
+            <div className="space-y-4 mt-2">
+              <div>
+                <Label htmlFor="cred-email">Email do Portal</Label>
+                <Input
+                  id="cred-email"
+                  type="email"
+                  placeholder="seu@email.com"
+                  value={credForm.email}
+                  onChange={(e) => setCredForm(prev => ({ ...prev, email: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label htmlFor="cred-password">Senha do Portal</Label>
+                <Input
+                  id="cred-password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={credForm.password}
+                  onChange={(e) => setCredForm(prev => ({ ...prev, password: e.target.value }))}
+                />
+              </div>
+              <Button
+                className="w-full"
+                onClick={handleSaveCredentialsAndSync}
+                disabled={!credForm.email || !credForm.password}
+              >
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Conectar e Sincronizar
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Dados Tab */}
         {activeTab === "dados" && (
