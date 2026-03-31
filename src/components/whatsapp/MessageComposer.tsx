@@ -22,7 +22,7 @@ interface MessageComposerProps {
   initialMessage?: string | null;
 }
 
-export function MessageComposer({ onSend, onSendAudio, onSendMedia, templates, disabled, initialMessage }: MessageComposerProps) {
+export function MessageComposer({ onSend, onSendAudio, onSendAudioUrl, onSendMedia, templates, disabled, initialMessage }: MessageComposerProps) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [showQuickReply, setShowQuickReply] = useState(false);
