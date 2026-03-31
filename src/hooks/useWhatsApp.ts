@@ -135,7 +135,9 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       const result = await withTimeout(getConnectionState(name), 20000);
       return result?.state || "close";
     } catch {
-      return "close";
+      // Transient error (timeout, network) → treat as "connecting" not "close"
+      // This prevents unnecessary QR regeneration on temporary failures
+      return "connecting";
     }
   }, []);
 

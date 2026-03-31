@@ -69,7 +69,7 @@ function mapChat(chat: EvolutionChat, contactsMap: Map<string, EvolutionContact>
   };
 }
 
-// Low-concurrency queue: process items with max N concurrent tasks
+// Low-concurrency queue
 async function processWithConcurrency<T, R>(
   items: T[],
   concurrency: number,
@@ -102,6 +102,8 @@ export function useChats(instanceName: string | null) {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const contactsMapRef = useRef<Map<string, EvolutionContact>>(new Map());
   const profilePicCacheRef = useRef<Map<string, PicCacheEntry>>(new Map());
+  const fetchingChatsRef = useRef(false);
+  const fetchingPicsRef = useRef(false);
 
   const fetchContacts = useCallback(async () => {
     if (!instanceName) return;
@@ -114,12 +116,16 @@ export function useChats(instanceName: string | null) {
       });
       contactsMapRef.current = map;
     } catch {
-      // silently handle — contacts are optional enrichment
+      // contacts are optional enrichment
     }
   }, [instanceName]);
 
   const fetchChats = useCallback(async () => {
     if (!instanceName) return;
+    // Prevent overlapping fetches
+    if (fetchingChatsRef.current) return;
+    fetchingChatsRef.current = true;
+
     try {
       setIsLoading((prev) => (!prev ? true : prev));
       const raw = await findChats(instanceName);
@@ -129,7 +135,6 @@ export function useChats(instanceName: string | null) {
         .map((c) => {
           const item = mapChat(c, contactsMapRef.current);
           if (!item) return null;
-          // Reapply cached profile pic
           const cached = cache.get(item.remoteJid);
           if (cached?.url && !item.profilePicUrl) {
             item.profilePicUrl = cached.url;
@@ -141,8 +146,12 @@ export function useChats(instanceName: string | null) {
       setChats(mapped);
       setError(null);
 
-      // Fetch profile pictures ONLY for chats missing them — aggressive cache + very low throughput
-      const CACHE_TTL = 60 * 60 * 1000; // 1 hour (was 10 min — too aggressive)
+      // Fetch profile pictures — skip if another pic fetch is in progress
+      if (fetchingPicsRef.current) {
+        return; // don't start another pic round
+      }
+
+      const CACHE_TTL = 60 * 60 * 1000; // 1 hour
       const now = Date.now();
       const missingPics = mapped
         .filter((c) => {
@@ -151,10 +160,10 @@ export function useChats(instanceName: string | null) {
           if (cached && now - cached.fetchedAt < CACHE_TTL) return false;
           return true;
         })
-        .slice(0, 3); // max 3 per cycle (was 10)
+        .slice(0, 3);
 
       if (missingPics.length > 0 && instanceName) {
-        // Use low concurrency (1 at a time) to avoid overloading the Evolution API
+        fetchingPicsRef.current = true;
         processWithConcurrency(missingPics, 1, async (chat) => {
           const targetJid = chat.sendTargetJid || chat.remoteJid;
           try {
@@ -162,7 +171,6 @@ export function useChats(instanceName: string | null) {
             cache.set(chat.remoteJid, { url: picUrl || null, fetchedAt: Date.now() });
             return { jid: chat.remoteJid, picUrl };
           } catch {
-            // Mark as failed so we don't retry immediately
             cache.set(chat.remoteJid, { url: null, fetchedAt: Date.now() });
             return { jid: chat.remoteJid, picUrl: null };
           }
@@ -175,11 +183,13 @@ export function useChats(instanceName: string | null) {
               prev.map((c) => (picMap.has(c.remoteJid) ? { ...c, profilePicUrl: picMap.get(c.remoteJid) } : c))
             );
           }
-        }).catch(() => { /* non-critical */ });
+        }).catch(() => { /* non-critical */ })
+          .finally(() => { fetchingPicsRef.current = false; });
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao buscar conversas");
     } finally {
+      fetchingChatsRef.current = false;
       setIsLoading(false);
     }
   }, [instanceName]);
@@ -196,7 +206,7 @@ export function useChats(instanceName: string | null) {
     };
     init();
 
-    intervalRef.current = setInterval(fetchChats, 30000); // 30s (was 15s)
+    intervalRef.current = setInterval(fetchChats, 30000);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };

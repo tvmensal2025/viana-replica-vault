@@ -74,7 +74,7 @@ function ImageViewer({ message, onLoadMedia }: { message: ChatMessage; onLoadMed
   const [expanded, setExpanded] = useState(false);
   const [loadAttempted, setLoadAttempted] = useState(false);
 
-  // Auto-load image on mount
+  // Load on demand only (no auto-load)
   const handleLoad = useCallback(async () => {
     if (imgSrc || !onLoadMedia || loadAttempted) return;
     setLoadAttempted(true);
@@ -83,13 +83,6 @@ function ImageViewer({ message, onLoadMedia }: { message: ChatMessage; onLoadMed
     if (src) setImgSrc(src);
     setLoading(false);
   }, [imgSrc, onLoadMedia, message.id, loadAttempted]);
-
-  // Trigger auto-load
-  useEffect(() => {
-    if (!imgSrc && onLoadMedia && !loadAttempted) {
-      handleLoad();
-    }
-  }, [imgSrc, onLoadMedia, loadAttempted, handleLoad]);
 
   if (loading) {
     return (
