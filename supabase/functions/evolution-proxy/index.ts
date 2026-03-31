@@ -369,6 +369,16 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Gracefully handle connect/QR errors — instance may still be initializing
+    // Return { base64: null } so the frontend keeps polling instead of crashing
+    if (safePath.startsWith("instance/connect/") && evolutionResponse.status >= 400) {
+      console.warn(`[evolution-proxy] connect returned ${evolutionResponse.status}, returning graceful null QR`);
+      return new Response(
+        JSON.stringify({ base64: null, notReady: true }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     // Gracefully handle infrastructure errors (DNS/MinIO) on message-sending routes
     if (safePath.startsWith("message/") && evolutionResponse.status >= 400 && isLikelyMediaInfrastructureError(responseBody)) {
       console.warn(

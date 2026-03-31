@@ -178,6 +178,14 @@ export function ConnectionPanel({
                 O sistema está tentando restabelecer a conexão. Aguarde alguns instantes.
               </p>
             )}
+            <Button
+              onClick={() => setShowDisconnectConfirm(true)}
+              variant="ghost"
+              size="sm"
+              className="gap-2 text-xs text-red-400 hover:text-red-400 hover:bg-red-500/5 mt-2"
+            >
+              <WifiOff className="w-3.5 h-3.5" /> Cancelar
+            </Button>
           </div>
         )}
 
@@ -247,15 +255,25 @@ export function ConnectionPanel({
                 O servidor WhatsApp está processando sua conexão. O QR Code aparecerá automaticamente assim que ficar disponível.
               </p>
             </div>
-            {onRefreshQr && (
+            <div className="flex items-center gap-3">
+              {onRefreshQr && (
+                <Button
+                  onClick={onRefreshQr}
+                  variant="outline"
+                  className="gap-2 rounded-xl border-border/60 hover:border-primary/40 hover:bg-primary/5 transition-all"
+                >
+                  <RefreshCw className="w-4 h-4" /> Atualizar agora
+                </Button>
+              )}
               <Button
-                onClick={onRefreshQr}
-                variant="outline"
-                className="gap-2 rounded-xl border-border/60 hover:border-primary/40 hover:bg-primary/5 transition-all"
+                onClick={() => setShowDisconnectConfirm(true)}
+                variant="ghost"
+                size="sm"
+                className="gap-2 rounded-xl text-red-400 hover:bg-red-500/5 hover:text-red-400 transition-all"
               >
-                <RefreshCw className="w-4 h-4" /> Atualizar agora
+                <WifiOff className="w-4 h-4" /> Cancelar
               </Button>
-            )}
+            </div>
           </div>
         )}
 
@@ -296,6 +314,15 @@ export function ConnectionPanel({
                 <RefreshCw className="w-3.5 h-3.5" /> Gerar novo QR
               </Button>
             )}
+
+            <Button
+              onClick={() => setShowDisconnectConfirm(true)}
+              variant="ghost"
+              size="sm"
+              className="gap-2 text-xs text-red-400 hover:text-red-400 hover:bg-red-500/5"
+            >
+              <WifiOff className="w-3.5 h-3.5" /> Cancelar conexão
+            </Button>
 
             <p className="text-xs text-muted-foreground/70 text-center max-w-[280px] leading-relaxed">
               Abra o WhatsApp → Configurações → Dispositivos Conectados → Conectar Dispositivo
