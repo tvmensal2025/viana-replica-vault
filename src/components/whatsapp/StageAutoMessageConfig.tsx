@@ -19,7 +19,8 @@ interface StageAutoMessageConfigProps {
   autoMessageText: string | null;
   autoMessageType: string;
   autoMessageMediaUrl: string | null;
-  onSave: (text: string | null, type: string, mediaUrl: string | null) => void;
+  autoMessageImageUrl: string | null;
+  onSave: (text: string | null, type: string, mediaUrl: string | null, imageUrl: string | null) => void;
 }
 
 const MESSAGE_TYPES = [
