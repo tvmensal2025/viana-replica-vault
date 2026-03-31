@@ -256,7 +256,8 @@ Deno.serve(async (req) => {
     console.log("Consultant API response (truncated):", JSON.stringify(consultantData).substring(0, 500));
     
     // Try multiple possible paths for the consultant ID
-    const consultorId = consultantData.id 
+    const consultorId = consultantData.idconsultor
+      || consultantData.id 
       || consultantData.data?.id 
       || consultantData.consultant?.id 
       || consultantData.user?.id
