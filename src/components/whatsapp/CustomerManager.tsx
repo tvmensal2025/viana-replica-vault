@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   UserPlus, Trash2, Users, Search, Phone, Mail, MapPin, Zap,
   ChevronDown, ChevronUp, Pencil, CreditCard, User, Save, X,
   Loader2, Upload, FileSpreadsheet, CheckCircle2, CheckSquare, Square,
   MessageCircle, Copy, Building2, AlertTriangle, FileText, ClipboardCopy,
-  RefreshCw,
+  RefreshCw, Filter,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,7 @@ import { AddCustomerDialog } from "./AddCustomerDialog";
 import type { TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface Customer {
   id: string;
