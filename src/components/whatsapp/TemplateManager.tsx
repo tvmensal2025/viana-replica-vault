@@ -477,6 +477,60 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onDele
                 </div>
               )}
 
+              {/* Optional image attachment (for audio/document/text) */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                  <Image className="w-3.5 h-3.5 text-blue-400" /> Imagem anexa (opcional)
+                </label>
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={handleImageUpload}
+                  disabled={isSaving || isUploadingImage}
+                  className="hidden"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => imageInputRef.current?.click()}
+                  disabled={isSaving || isUploadingImage}
+                  className="gap-2 rounded-xl border-dashed border-2 border-blue-500/30 hover:border-blue-500/50 hover:bg-blue-500/5 w-full h-10"
+                >
+                  {isUploadingImage ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
+                  ) : uploadedImageName ? (
+                    <CheckCircle2 className="w-4 h-4 text-green-400" />
+                  ) : (
+                    <Image className="w-4 h-4 text-blue-400" />
+                  )}
+                  <span className="text-xs truncate">
+                    {isUploadingImage
+                      ? "Enviando imagem..."
+                      : uploadedImageName
+                      ? uploadedImageName
+                      : "Anexar imagem (opcional)"}
+                  </span>
+                </Button>
+                {isUploadingImage && (
+                  <Progress value={imageUploadProgress} className="h-1.5" />
+                )}
+                {imageUrl && !isUploadingImage && (
+                  <div className="rounded-lg border border-border/30 bg-secondary/10 p-2 overflow-hidden flex items-center gap-2">
+                    <img src={imageUrl} alt="Preview" className="rounded-lg max-h-20 object-contain" />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => { setImageUrl(""); setUploadedImageName(""); }}
+                      className="h-6 w-6 text-muted-foreground hover:text-red-400 shrink-0"
+                    >
+                      <X className="w-3 h-3" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+
               {/* Manual URL fallback */}
               <div className="space-y-1">
                 <p className="text-[10px] text-muted-foreground/60">Ou cole uma URL manualmente:</p>
