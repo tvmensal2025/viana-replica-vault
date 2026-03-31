@@ -40,6 +40,27 @@ export function StageAutoMessageConfig({
   const [text, setText] = useState(autoMessageText || "");
   const [type, setType] = useState(autoMessageType || "text");
   const [mediaUrl, setMediaUrl] = useState(autoMessageMediaUrl || "");
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setUploadProgress(0);
+    try {
+      const result = await uploadMedia(file, (pct) => setUploadProgress(pct));
+      setMediaUrl(result.url);
+      toast({ title: "Upload concluído", description: `${file.name} (${formatFileSize(file.size)})` });
+    } catch (err: unknown) {
+      toast({ title: "Erro no upload", description: err instanceof Error ? err.message : "Falha", variant: "destructive" });
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   const handleOpen = (isOpen: boolean) => {
     if (isOpen) {
