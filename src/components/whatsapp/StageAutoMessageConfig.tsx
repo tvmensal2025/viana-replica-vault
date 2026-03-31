@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,7 +10,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { MessageSquare, Image, Video, Mic, X, Check, Bold } from "lucide-react";
+import { MessageSquare, Image, Video, Mic, X, Check, Bold, Upload, Loader2 } from "lucide-react";
+import { uploadMedia, getAcceptString, formatFileSize } from "@/services/minioUpload";
+import { useToast } from "@/hooks/use-toast";
 
 interface StageAutoMessageConfigProps {
   stageLabel: string;
