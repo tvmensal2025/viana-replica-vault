@@ -1,36 +1,55 @@
 
 
-## Plano: Botão de Sincronização iGreen no Dashboard
+## Plano: Isolamento de Clientes por Consultor + Templates Compartilhados
+
+### Problema atual
+- A tabela `customers` não tem `consultant_id` — todos os consultores veem todos os clientes
+- Templates são filtrados por `consultant_id` mas deveriam ser visíveis para todos
+- Clientes de outros consultores aparecem sem ter sincronizado
 
 ### O que será feito
 
-Adicionar um botão compacto "Sincronizar iGreen" no dashboard principal (aba Dashboard do Admin). Ao clicar:
-1. Se o consultor **não tem** email/senha do portal iGreen salvos → abre um popup (Dialog) pedindo email e senha, salva na tabela `consultants`, e já inicia a sincronização.
-2. Se **já tem** credenciais salvas → executa a sincronização direto, sem popup.
+#### 1. Migração SQL
+- Adicionar coluna `consultant_id` (uuid, nullable) na tabela `customers`
+- Substituir a política RLS "Allow all for anon" por políticas que filtrem por `consultant_id = auth.uid()` (SELECT, INSERT, UPDATE, DELETE)
+- Clientes sem `consultant_id` (legados) ficam invisíveis até serem re-sincronizados — isso garante que nenhum dado aparece antes da sincronização real
+- Alterar RLS de `message_templates`: SELECT aberto para todos autenticados, INSERT/UPDATE/DELETE apenas pelo dono
 
-### Arquivos alterados
+#### 2. Edge Function `sync-igreen-customers`
+- Incluir `consultant_id` em cada registro no `buildRecord` / upsert, usando o valor recebido no body da request
+- Isso vincula cada cliente ao consultor que sincronizou
 
-**`src/pages/Admin.tsx`**
-- Importar `Dialog`, `DialogContent`, `DialogHeader`, `DialogTitle` e `RefreshCw` icon
-- Adicionar estados: `syncingDashboard`, `showCredentialsDialog`, `credForm` (email/senha)
-- Adicionar função `handleDashboardSync`:
-  - Busca credenciais do consultor no state (`form.igreen_portal_email`, `form.igreen_portal_password`)
-  - Se vazias → abre o dialog de credenciais
-  - Se preenchidas → chama `supabase.functions.invoke("sync-igreen-customers")` com as credenciais
-- Adicionar função `handleSaveCredentialsAndSync`:
-  - Salva email/senha na tabela `consultants` via update
-  - Atualiza o state `form` local com as credenciais
-  - Fecha o dialog
-  - Inicia a sincronização automaticamente
-- Renderizar um botão pequeno com ícone `RefreshCw` + "Sincronizar iGreen" ao lado dos KPIs de clientes (seção "Customer KPI Cards")
-- Renderizar o `Dialog` de credenciais com dois inputs (email e senha) e botão "Conectar e Sincronizar"
-- Após sincronização bem-sucedida, invalidar queries de analytics para atualizar os dados do dashboard
+#### 3. Frontend — Queries filtradas (4 arquivos)
+- **`src/components/whatsapp/WhatsAppTab.tsx`**: adicionar `.eq("consultant_id", userId)` no `fetchCustomers`
+- **`src/hooks/useAnalytics.ts`**: adicionar `.eq("consultant_id", consultantId)` na query de customers
+- **`src/components/whatsapp/AddCustomerDialog.tsx`**: incluir `consultant_id` no insert de novo cliente
+- **`src/components/whatsapp/CustomerManager.tsx`**: incluir `consultant_id` nos imports de Excel e edições
+
+#### 4. Templates compartilhados
+- **`src/hooks/useTemplates.ts`**: remover `.eq("consultant_id", consultantId)` do fetch para que todos vejam todos os templates
+- Manter `consultant_id` no insert (saber quem criou)
+- Delete continua restrito ao dono via RLS
 
 ### Detalhes técnicos
 
-- Reutiliza a mesma Edge Function `sync-igreen-customers` que já existe
-- Credenciais são salvas nos campos `igreen_portal_email` e `igreen_portal_password` da tabela `consultants` (já existentes)
-- Sem alterações no banco de dados — usa campos e funções já existentes
-- O botão mostra spinner durante a sincronização
-- Toast de feedback com resultado (sucesso/erro)
+```text
+customers:
+  + consultant_id uuid (nullable, sem FK para auth.users)
+  
+RLS customers (substituir "Allow all for anon"):
+  SELECT → consultant_id = auth.uid()
+  INSERT → consultant_id = auth.uid()
+  UPDATE → consultant_id = auth.uid()
+  DELETE → consultant_id = auth.uid()
+
+RLS message_templates (substituir política atual):
+  SELECT → true (todos autenticados)
+  INSERT → consultant_id = auth.uid()
+  UPDATE → consultant_id = auth.uid()
+  DELETE → consultant_id = auth.uid()
+```
+
+- Clientes legados (sem `consultant_id`) não aparecem para ninguém — forçando sincronização real
+- O upsert usa `phone_whatsapp` como conflict key (já existente), mas agora cada registro terá o `consultant_id` preenchido
+- Sem breaking changes na estrutura existente
 
