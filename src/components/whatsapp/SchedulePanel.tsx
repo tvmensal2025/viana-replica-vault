@@ -7,7 +7,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Clock, Trash2, Plus, Send } from "lucide-react";
+import { Calendar, Clock, Trash2, Plus, Send, CalendarClock, MessageSquare, Phone, CheckCircle2, XCircle, Loader2, AlertCircle } from "lucide-react";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 interface ScheduledMessage {
   id: string;
@@ -58,7 +60,7 @@ export function SchedulePanel({ consultantId, instanceName }: SchedulePanelProps
         scheduled_at: new Date(scheduledAt).toISOString(),
       });
       if (error) throw error;
-      toast({ title: "Mensagem agendada!" });
+      toast({ title: "✅ Mensagem agendada com sucesso!" });
       setPhone("");
       setText("");
       setScheduledAt("");
@@ -76,109 +78,227 @@ export function SchedulePanel({ consultantId, instanceName }: SchedulePanelProps
     fetchMessages();
   };
 
-  const statusBadge = (status: string) => {
+  const pendingCount = messages.filter((m) => m.status === "pending").length;
+  const sentCount = messages.filter((m) => m.status === "sent").length;
+  const failedCount = messages.filter((m) => m.status === "failed").length;
+
+  const statusConfig = (status: string) => {
     switch (status) {
       case "pending":
-        return <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-400 text-[10px]">Pendente</Badge>;
+        return { icon: <Clock className="w-3 h-3" />, label: "Pendente", cls: "bg-amber-500/15 text-amber-400 border-amber-500/25" };
       case "sent":
-        return <Badge variant="secondary" className="bg-green-500/20 text-green-400 text-[10px]">Enviada</Badge>;
+        return { icon: <CheckCircle2 className="w-3 h-3" />, label: "Enviada", cls: "bg-emerald-500/15 text-emerald-400 border-emerald-500/25" };
       case "failed":
-        return <Badge variant="secondary" className="bg-red-500/20 text-red-400 text-[10px]">Falhou</Badge>;
+        return { icon: <XCircle className="w-3 h-3" />, label: "Falhou", cls: "bg-red-500/15 text-red-400 border-red-500/25" };
       default:
-        return <Badge variant="secondary" className="text-[10px]">{status}</Badge>;
+        return { icon: <AlertCircle className="w-3 h-3" />, label: status, cls: "bg-secondary text-muted-foreground border-border" };
     }
   };
 
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-          <Clock className="h-4 w-4 text-primary" />
-          Mensagens Agendadas
-        </h3>
-        <Button size="sm" variant="outline" onClick={() => setShowForm(!showForm)}>
-          <Plus className="h-3.5 w-3.5 mr-1" />
-          Agendar
-        </Button>
-      </div>
+  const formatScheduleDate = (dateStr: string) => {
+    try {
+      const d = new Date(dateStr);
+      return format(d, "dd MMM yyyy 'às' HH:mm", { locale: ptBR });
+    } catch {
+      return dateStr;
+    }
+  };
 
-      {showForm && (
-        <div className="bg-card border border-border rounded-lg p-4 space-y-3">
-          <div>
-            <Label className="text-xs">Telefone</Label>
-            <Input
-              placeholder="5511999999999"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className="h-8 text-xs"
-            />
+  const isFormValid = phone.trim() && text.trim() && scheduledAt;
+
+  return (
+    <div className="relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-card via-card to-blue-950/10">
+      <div className="absolute -top-20 -right-20 w-40 h-40 bg-blue-500/3 rounded-full blur-3xl" />
+
+      <div className="relative p-5 sm:p-7">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500/20 to-cyan-600/10 flex items-center justify-center border border-blue-500/20">
+              <CalendarClock className="w-5 h-5 text-blue-400" />
+            </div>
+            <div>
+              <h3 className="font-heading font-bold text-foreground text-lg">Agendamentos</h3>
+              <p className="text-xs text-muted-foreground">Programe envios automáticos de mensagens</p>
+            </div>
           </div>
-          <div>
-            <Label className="text-xs">Mensagem</Label>
-            <Textarea
-              placeholder="Texto da mensagem..."
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              className="text-xs min-h-[60px]"
-            />
-          </div>
-          <div>
-            <Label className="text-xs">Data e hora</Label>
-            <Input
-              type="datetime-local"
-              value={scheduledAt}
-              onChange={(e) => setScheduledAt(e.target.value)}
-              className="h-8 text-xs"
-            />
-          </div>
-          <Button size="sm" onClick={handleCreate} disabled={saving}>
-            <Send className="h-3.5 w-3.5 mr-1" />
-            {saving ? "Agendando..." : "Agendar Envio"}
+          <Button
+            onClick={() => setShowForm(!showForm)}
+            className="gap-2 rounded-xl font-bold shadow-lg shadow-green-500/10"
+            style={{ background: "var(--gradient-green)" }}
+          >
+            <Plus className="w-4 h-4" />
+            {showForm ? "Fechar" : "Agendar"}
           </Button>
         </div>
-      )}
 
-      <ScrollArea className="max-h-[400px]">
-        <div className="space-y-2">
-          {messages.length === 0 && (
-            <p className="text-xs text-muted-foreground text-center py-8">
-              Nenhuma mensagem agendada
-            </p>
-          )}
-          {messages.map((msg) => (
-            <div
-              key={msg.id}
-              className="bg-card border border-border rounded-lg p-3 flex items-start justify-between gap-3"
-            >
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs font-medium text-foreground">
-                    {msg.remote_jid.split("@")[0]}
-                  </span>
-                  {statusBadge(msg.status)}
-                </div>
-                <p className="text-xs text-muted-foreground truncate">{msg.message_text}</p>
-                <div className="flex items-center gap-1 mt-1">
-                  <Calendar className="h-3 w-3 text-muted-foreground" />
-                  <span className="text-[10px] text-muted-foreground">
-                    {new Date(msg.scheduled_at).toLocaleString("pt-BR")}
-                  </span>
-                </div>
-              </div>
-              {msg.status === "pending" && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-destructive"
-                  onClick={() => handleDelete(msg.id)}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              )}
+        {/* Stats */}
+        {messages.length > 0 && (
+          <div className="grid grid-cols-3 gap-3 mb-5">
+            <div className="rounded-xl border border-amber-500/15 bg-amber-500/5 p-3 text-center">
+              <p className="text-xl font-bold text-amber-400">{pendingCount}</p>
+              <p className="text-[10px] text-amber-400/70 font-medium">Pendentes</p>
             </div>
-          ))}
-        </div>
-      </ScrollArea>
+            <div className="rounded-xl border border-emerald-500/15 bg-emerald-500/5 p-3 text-center">
+              <p className="text-xl font-bold text-emerald-400">{sentCount}</p>
+              <p className="text-[10px] text-emerald-400/70 font-medium">Enviadas</p>
+            </div>
+            <div className="rounded-xl border border-red-500/15 bg-red-500/5 p-3 text-center">
+              <p className="text-xl font-bold text-red-400">{failedCount}</p>
+              <p className="text-[10px] text-red-400/70 font-medium">Falharam</p>
+            </div>
+          </div>
+        )}
+
+        {/* Create form */}
+        {showForm && (
+          <div className="mb-5 rounded-xl border border-blue-500/15 bg-gradient-to-br from-blue-500/5 to-transparent p-5 space-y-4 animate-in slide-in-from-top-2 duration-300">
+            <p className="text-sm font-bold text-foreground flex items-center gap-2">
+              <Send className="w-4 h-4 text-blue-400" /> Nova Mensagem Agendada
+            </p>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                <Phone className="w-3.5 h-3.5 text-blue-400" /> Telefone
+              </Label>
+              <Input
+                placeholder="5511999999999"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                disabled={saving}
+                className="rounded-xl bg-secondary/50 border-border/50"
+              />
+              <p className="text-[10px] text-muted-foreground/60">Número com DDD, sem espaços ou caracteres especiais</p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                <MessageSquare className="w-3.5 h-3.5 text-blue-400" /> Mensagem
+              </Label>
+              <Textarea
+                placeholder="Digite a mensagem que será enviada..."
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                rows={3}
+                disabled={saving}
+                className="rounded-xl bg-secondary/30 border-border/40 resize-none"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-blue-400" /> Data e Hora
+              </Label>
+              <Input
+                type="datetime-local"
+                value={scheduledAt}
+                onChange={(e) => setScheduledAt(e.target.value)}
+                min={new Date().toISOString().slice(0, 16)}
+                disabled={saving}
+                className="rounded-xl bg-secondary/50 border-border/50"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <Button
+                onClick={handleCreate}
+                disabled={!isFormValid || saving}
+                className="gap-2 rounded-xl h-11 font-bold shadow-lg shadow-green-500/10"
+                style={{ background: "var(--gradient-green)" }}
+              >
+                {saving ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4" />
+                )}
+                {saving ? "Agendando..." : "Agendar Envio"}
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => setShowForm(false)}
+                disabled={saving}
+                className="rounded-xl text-muted-foreground"
+              >
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Messages list */}
+        {messages.length === 0 ? (
+          <div className="text-center py-10">
+            <div className="w-14 h-14 rounded-2xl bg-blue-500/10 border border-blue-500/15 flex items-center justify-center mx-auto mb-3">
+              <CalendarClock className="w-7 h-7 text-blue-400/50" />
+            </div>
+            <p className="text-sm text-muted-foreground font-medium">Nenhuma mensagem agendada</p>
+            <p className="text-xs text-muted-foreground/60 mt-1">Clique em "Agendar" para programar seu primeiro envio</p>
+          </div>
+        ) : (
+          <ScrollArea className="max-h-[400px]">
+            <div className="space-y-2">
+              {messages.map((msg) => {
+                const sc = statusConfig(msg.status);
+                const isPending = msg.status === "pending";
+                return (
+                  <div
+                    key={msg.id}
+                    className={`group rounded-xl border px-4 py-3 transition-all ${
+                      isPending
+                        ? "border-border/40 bg-secondary/20 hover:border-blue-500/20"
+                        : msg.status === "sent"
+                        ? "border-emerald-500/10 bg-emerald-500/5"
+                        : "border-red-500/10 bg-red-500/5"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className="text-sm font-bold text-foreground">
+                            {msg.remote_jid.split("@")[0]}
+                          </span>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md border flex items-center gap-1 ${sc.cls}`}>
+                            {sc.icon}
+                            {sc.label}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground/80 line-clamp-2 mb-2">
+                          {msg.message_text}
+                        </p>
+                        <div className="flex items-center gap-1.5">
+                          <Calendar className="w-3 h-3 text-blue-400/60" />
+                          <span className="text-[11px] text-muted-foreground/70 font-medium">
+                            {formatScheduleDate(msg.scheduled_at)}
+                          </span>
+                          {msg.sent_at && (
+                            <>
+                              <span className="text-muted-foreground/30 mx-1">•</span>
+                              <CheckCircle2 className="w-3 h-3 text-emerald-400/60" />
+                              <span className="text-[11px] text-emerald-400/60 font-medium">
+                                Enviada {formatScheduleDate(msg.sent_at)}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      {isPending && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="shrink-0 text-red-400/60 hover:text-red-400 hover:bg-red-500/10 h-8 w-8 opacity-0 group-hover:opacity-100 transition-all"
+                          onClick={() => handleDelete(msg.id)}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </ScrollArea>
+        )}
+      </div>
     </div>
   );
 }
