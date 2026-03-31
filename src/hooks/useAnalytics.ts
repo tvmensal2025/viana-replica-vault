@@ -176,12 +176,12 @@ export function useAnalytics(consultantId: string | null) {
         .map(([source, count]) => ({ source, count }))
         .sort((a, b) => b.count - a.count);
 
-      // --- Customer Metrics ---
-      const totalCustomers = customers.length;
+      // --- Customer Metrics (using ALL customers) ---
+      const totalCustomers = allCustomers.length;
 
       // Customer status distribution
       const statusMap = new Map<string, number>();
-      for (const c of customers) {
+      for (const c of allCustomers) {
         const s = c.status || "pending";
         statusMap.set(s, (statusMap.get(s) || 0) + 1);
       }
@@ -190,6 +190,9 @@ export function useAnalytics(consultantId: string | null) {
         pending: "Pendentes",
         rejected: "Rejeitados",
         lead: "Leads",
+        data_complete: "Dados Completos",
+        registered_igreen: "Cadastrado iGreen",
+        contract_sent: "Contrato Enviado",
       };
       const customersByStatus: CustomerStatusData[] = Array.from(statusMap.entries())
         .map(([status, count]) => ({
@@ -200,8 +203,8 @@ export function useAnalytics(consultantId: string | null) {
         .sort((a, b) => b.count - a.count);
 
       // Total kW (media_consumo) — used as the unified consumption metric
-      const totalKw = customers.reduce((sum, c) => sum + (Number(c.media_consumo) || 0), 0);
-      const customersWithConsumption = customers.filter((c) => Number(c.media_consumo) > 0);
+      const totalKw = allCustomers.reduce((sum, c) => sum + (Number(c.media_consumo) || 0), 0);
+      const customersWithConsumption = allCustomers.filter((c) => Number(c.media_consumo) > 0);
       const avgKw = customersWithConsumption.length > 0 ? totalKw / customersWithConsumption.length : 0;
 
       // Top licenciados by customer count (from ALL customers, not just deal-linked)
