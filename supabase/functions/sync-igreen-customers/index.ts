@@ -179,6 +179,19 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // If consultant_id not provided, try to resolve from portal email
+    if (!consultantId && portalEmail) {
+      const { data: consultant } = await supabase
+        .from("consultants")
+        .select("id")
+        .eq("igreen_portal_email", portalEmail)
+        .maybeSingle();
+      if (consultant?.id) {
+        consultantId = consultant.id;
+        console.log(`Resolved consultant_id from portal email: ${consultantId}`);
+      }
+    }
+
     // Step 1: Login to iGreen API
     console.log("Logging in to iGreen API...");
     console.log("Email used:", portalEmail);
