@@ -180,6 +180,29 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onDele
     }
   }
 
+  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 100 * 1024 * 1024) {
+      toast.error("Arquivo muito grande (máximo 100MB)");
+      return;
+    }
+    setIsUploadingImage(true);
+    setImageUploadProgress(0);
+    setUploadedImageName(file.name);
+    try {
+      const result = await uploadMedia(file, (pct) => setImageUploadProgress(pct));
+      setImageUrl(result.url);
+      toast.success(`Imagem enviada: ${formatFileSize(result.size)}`);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Erro no upload da imagem");
+      setUploadedImageName("");
+    } finally {
+      setIsUploadingImage(false);
+      if (imageInputRef.current) imageInputRef.current.value = "";
+    }
+  }
+
   async function handleCreate() {
     if (!name.trim()) return;
     if (mediaType === "text" && !content.trim()) return;
@@ -190,13 +213,16 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onDele
         name.trim(),
         content.trim(),
         mediaType,
-        mediaType !== "text" ? mediaUrl.trim() : null
+        mediaType !== "text" ? mediaUrl.trim() : null,
+        imageUrl.trim() || null
       );
       setName("");
       setContent("");
       setMediaType("text");
       setMediaUrl("");
+      setImageUrl("");
       setUploadedFileName("");
+      setUploadedImageName("");
     } finally {
       setIsSaving(false);
     }
