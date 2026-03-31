@@ -237,27 +237,8 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
       setSyncing(false);
     }
   }
-  useEffect(() => {
-    if (!instanceName) return;
-    // Only fetch profile pics when WhatsApp is actually connected (instanceName exists and we can reach the API)
-    let cancelled = false;
-    const fetchPics = async () => {
-      const pics: Record<string, string> = {};
-      for (const c of customers.slice(0, 50)) {
-        if (cancelled) break;
-        const phone = c.phone_whatsapp.replace(/\D/g, "");
-        if (phone.length < 10 || pics[c.id]) continue;
-        try {
-          const result = await getProfilePicture(instanceName, `${phone}@s.whatsapp.net`);
-          if (result && typeof result === "string") pics[c.id] = result;
-        } catch { /* skip */ }
-      }
-      if (!cancelled) setProfilePics((prev) => ({ ...prev, ...pics }));
-    };
-    // Delay to avoid hammering the API during initial connection
-    const timer = setTimeout(fetchPics, 3000);
-    return () => { cancelled = true; clearTimeout(timer); };
-  }, [instanceName, customers]);
+  // Profile pics are no longer pre-fetched in bulk.
+  // They load on-demand when a customer row is expanded (see handleExpandCustomer below).
 
   const licenciadoOptions = useMemo(() => {
     const names = new Set<string>();

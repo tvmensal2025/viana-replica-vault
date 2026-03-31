@@ -27,7 +27,6 @@ function extractLastMessage(chat: EvolutionChat): string {
 }
 
 function formatPhoneNumber(raw: string): string {
-  // Format Brazilian phone numbers: 5511999998888 → (11) 99999-8888
   if (/^55\d{10,11}$/.test(raw)) {
     const ddd = raw.slice(2, 4);
     const number = raw.slice(4);
@@ -41,18 +40,15 @@ function mapChat(chat: EvolutionChat, contactsMap: Map<string, EvolutionContact>
   const jid = chat.remoteJid || chat.id;
   const contact = contactsMap.get(jid);
 
-  // Extract the real phone number from remoteJidAlt (e.g. "5511973125846@s.whatsapp.net" → "5511973125846")
   const altJid = chat.lastMessage?.key?.remoteJidAlt || chat.lastMessage?.key?.participantAlt;
   const realPhone = altJid ? altJid.split("@")[0] : null;
 
   const rawJidNumber = jid.split("@")[0];
   const isLid = jid.endsWith("@lid");
 
-  // For @lid JIDs without a real phone or name, skip the chat entirely
   const hasName = chat.pushName || chat.lastMessage?.pushName || contact?.pushName || chat.name;
   if (isLid && !hasName && !realPhone) return null;
 
-  // Build display name: prefer real names, then formatted phone
   const nameSource = chat.pushName || chat.lastMessage?.pushName || contact?.pushName || chat.name;
   const phoneSource = realPhone || (isLid ? null : rawJidNumber);
   const displayName = nameSource || (phoneSource ? formatPhoneNumber(phoneSource) : `Contato ${rawJidNumber.slice(-4)}`);
@@ -73,12 +69,39 @@ function mapChat(chat: EvolutionChat, contactsMap: Map<string, EvolutionContact>
   };
 }
 
+// Low-concurrency queue: process items with max N concurrent tasks
+async function processWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = [];
+  let index = 0;
+
+  async function worker() {
+    while (index < items.length) {
+      const i = index++;
+      results[i] = await fn(items[i]);
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, () => worker());
+  await Promise.all(workers);
+  return results;
+}
+
+interface PicCacheEntry {
+  url: string | null;
+  fetchedAt: number;
+}
+
 export function useChats(instanceName: string | null) {
   const [chats, setChats] = useState<ChatItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const contactsMapRef = useRef<Map<string, EvolutionContact>>(new Map());
+  const profilePicCacheRef = useRef<Map<string, PicCacheEntry>>(new Map());
 
   const fetchContacts = useCallback(async () => {
     if (!instanceName) return;
@@ -100,24 +123,54 @@ export function useChats(instanceName: string | null) {
     try {
       setIsLoading((prev) => (!prev ? true : prev));
       const raw = await findChats(instanceName);
+      const cache = profilePicCacheRef.current;
+
       const mapped = (raw || [])
-        .map((c) => mapChat(c, contactsMapRef.current))
+        .map((c) => {
+          const item = mapChat(c, contactsMapRef.current);
+          if (!item) return null;
+          // Reapply cached profile pic
+          const cached = cache.get(item.remoteJid);
+          if (cached?.url && !item.profilePicUrl) {
+            item.profilePicUrl = cached.url;
+          }
+          return item;
+        })
         .filter((c): c is ChatItem => c !== null && !c.isGroup)
         .sort((a, b) => b.lastMessageTimestamp - a.lastMessageTimestamp);
       setChats(mapped);
       setError(null);
 
-      // Fetch profile pictures for chats missing them (batch, non-blocking)
-      const missingPics = mapped.filter((c) => !c.profilePicUrl).slice(0, 20);
+      // Fetch profile pictures for chats missing them — with cache and low concurrency
+      const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+      const now = Date.now();
+      const missingPics = mapped
+        .filter((c) => {
+          if (c.profilePicUrl) return false;
+          const cached = cache.get(c.remoteJid);
+          // Skip if we already fetched (success or fail) recently
+          if (cached && now - cached.fetchedAt < CACHE_TTL) return false;
+          return true;
+        })
+        .slice(0, 10); // max 10 per cycle
+
       if (missingPics.length > 0 && instanceName) {
-        Promise.all(
-          missingPics.map(async (chat) => {
-            const targetJid = chat.sendTargetJid || chat.remoteJid;
-            const picUrl = await getProfilePicture(instanceName, targetJid);
+        // Use low concurrency (2 at a time) to avoid overloading the proxy
+        processWithConcurrency(missingPics, 2, async (chat) => {
+          const targetJid = chat.sendTargetJid || chat.remoteJid;
+          try {
+            const picUrl = await getProfilePicture(instanceName!, targetJid);
+            cache.set(chat.remoteJid, { url: picUrl || null, fetchedAt: Date.now() });
             return { jid: chat.remoteJid, picUrl };
-          })
-        ).then((results) => {
-          const picMap = new Map(results.filter((r) => r.picUrl).map((r) => [r.jid, r.picUrl!]));
+          } catch {
+            // Mark as failed so we don't retry immediately
+            cache.set(chat.remoteJid, { url: null, fetchedAt: Date.now() });
+            return { jid: chat.remoteJid, picUrl: null };
+          }
+        }).then((results) => {
+          const picMap = new Map(
+            results.filter((r) => r.picUrl).map((r) => [r.jid, r.picUrl!])
+          );
           if (picMap.size > 0) {
             setChats((prev) =>
               prev.map((c) => (picMap.has(c.remoteJid) ? { ...c, profilePicUrl: picMap.get(c.remoteJid) } : c))
@@ -133,14 +186,18 @@ export function useChats(instanceName: string | null) {
   }, [instanceName]);
 
   useEffect(() => {
+    if (!instanceName) {
+      setChats([]);
+      return;
+    }
+
     const init = async () => {
       await fetchContacts();
       await fetchChats();
     };
     init();
-    if (instanceName) {
-      intervalRef.current = setInterval(fetchChats, 15000);
-    }
+
+    intervalRef.current = setInterval(fetchChats, 15000);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
