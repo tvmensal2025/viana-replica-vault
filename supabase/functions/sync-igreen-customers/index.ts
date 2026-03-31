@@ -60,7 +60,7 @@ function buildRecord(c: Record<string, unknown>): Record<string, unknown> | null
 
   if (!phone || phone.length < 12) {
     const codigo = safeStr(get(c, "codigoCliente", "codigo", "Codigo", "Código", "codigoIgreen", "id"));
-    const instalacao = safeStr(get(c, "numeroInstalacao", "numero_instalacao", "Instalação"));
+    const instalacao = safeStr(get(c, "instalacao", "numeroInstalacao", "numero_instalacao", "Instalação"));
     const fallbackId = codigo || instalacao;
     if (fallbackId) phone = `sem_celular_${fallbackId.replace(/\D/g, "")}`;
     else return null;
