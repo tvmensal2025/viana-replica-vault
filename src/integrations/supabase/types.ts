@@ -71,6 +71,13 @@ export type Database = {
             referencedRelation: "consultants"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "consultants_referred_by_fkey"
+            columns: ["referred_by"]
+            isOneToOne: false
+            referencedRelation: "consultants_public"
+            referencedColumns: ["id"]
+          },
         ]
       }
       conversations: {
@@ -482,6 +489,13 @@ export type Database = {
             referencedRelation: "consultants"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "page_events_consultant_id_fkey"
+            columns: ["consultant_id"]
+            isOneToOne: false
+            referencedRelation: "consultants_public"
+            referencedColumns: ["id"]
+          },
         ]
       }
       page_views: {
@@ -521,6 +535,13 @@ export type Database = {
             columns: ["consultant_id"]
             isOneToOne: false
             referencedRelation: "consultants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "page_views_consultant_id_fkey"
+            columns: ["consultant_id"]
+            isOneToOne: false
+            referencedRelation: "consultants_public"
             referencedColumns: ["id"]
           },
         ]
@@ -599,7 +620,66 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      consultants_public: {
+        Row: {
+          cadastro_url: string | null
+          created_at: string | null
+          facebook_pixel_id: string | null
+          google_analytics_id: string | null
+          id: string | null
+          igreen_id: string | null
+          licenciada_cadastro_url: string | null
+          license: string | null
+          name: string | null
+          phone: string | null
+          photo_url: string | null
+          referred_by: string | null
+        }
+        Insert: {
+          cadastro_url?: string | null
+          created_at?: string | null
+          facebook_pixel_id?: string | null
+          google_analytics_id?: string | null
+          id?: string | null
+          igreen_id?: string | null
+          licenciada_cadastro_url?: string | null
+          license?: string | null
+          name?: string | null
+          phone?: string | null
+          photo_url?: string | null
+          referred_by?: string | null
+        }
+        Update: {
+          cadastro_url?: string | null
+          created_at?: string | null
+          facebook_pixel_id?: string | null
+          google_analytics_id?: string | null
+          id?: string | null
+          igreen_id?: string | null
+          licenciada_cadastro_url?: string | null
+          license?: string | null
+          name?: string | null
+          phone?: string | null
+          photo_url?: string | null
+          referred_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "consultants_referred_by_fkey"
+            columns: ["referred_by"]
+            isOneToOne: false
+            referencedRelation: "consultants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consultants_referred_by_fkey"
+            columns: ["referred_by"]
+            isOneToOne: false
+            referencedRelation: "consultants_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       [_ in never]: never
