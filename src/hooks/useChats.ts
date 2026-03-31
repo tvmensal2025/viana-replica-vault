@@ -125,7 +125,7 @@ export function useChats(instanceName: string | null) {
       const raw = await findChats(instanceName);
       const cache = profilePicCacheRef.current;
 
-      const mapped = (raw || [])
+      const mapped = (Array.isArray(raw) ? raw : [])
         .map((c) => {
           const item = mapChat(c, contactsMapRef.current);
           if (!item) return null;

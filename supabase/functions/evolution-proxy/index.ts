@@ -31,6 +31,11 @@ function isLikelyMediaInfrastructureError(body: string): boolean {
     normalizedBody.includes("minio");
 }
 
+function isConnectionClosedError(body: string): boolean {
+  const lower = body.toLowerCase();
+  return lower.includes("connection closed") || lower.includes("read messages fail");
+}
+
 function normalizeEvolutionBaseUrl(rawUrl: string | undefined): string {
   const sanitized = (rawUrl || "")
     .trim()
@@ -109,6 +114,22 @@ function createGracefulTimeoutResponse(safePath: string): Response | null {
   // Avatar fetches are non-critical — return graceful null instead of 504
   if (safePath.startsWith("chat/fetchProfilePictureUrl/")) {
     return new Response(JSON.stringify({ profilePictureUrl: null, timeout: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  // Chat/message fetches — return empty arrays so frontend never crashes
+  if (safePath.startsWith("chat/findChats/") || safePath.startsWith("chat/findMessages/")) {
+    return new Response(JSON.stringify([]), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  // Mark-as-read is non-critical
+  if (safePath.startsWith("chat/markMessageAsRead/")) {
+    return new Response(JSON.stringify({ message: "Read messages", read: "skipped", timeout: true }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
@@ -342,6 +363,24 @@ Deno.serve(async (req) => {
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
+    }
+
+    // Handle "Connection Closed" and similar transient errors gracefully for chat routes
+    if (evolutionResponse.status >= 400 && isConnectionClosedError(responseBody)) {
+      if (safePath.startsWith("chat/findMessages/") || safePath.startsWith("chat/findChats/")) {
+        console.warn(`[evolution-proxy] Connection closed on ${safePath}, returning empty array`);
+        return new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (safePath.startsWith("chat/fetchProfilePictureUrl/")) {
+        console.warn(`[evolution-proxy] Connection closed on ${safePath}, returning null`);
+        return new Response(JSON.stringify({ profilePictureUrl: null, connectionClosed: true }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     return new Response(responseBody, {
