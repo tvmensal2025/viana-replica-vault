@@ -332,6 +332,7 @@ Deno.serve(async (req) => {
       const phone = String(record.phone_whatsapp);
       if (seenPhones.has(phone)) continue;
       seenPhones.add(phone);
+      if (consultantId) record.consultant_id = consultantId;
       records.push(record);
     }
 

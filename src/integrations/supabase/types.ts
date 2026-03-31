@@ -195,6 +195,7 @@ export type Database = {
           assinatura_igreen: string | null
           cashback: string | null
           cep: string | null
+          consultant_id: string | null
           conta_pdf_protegida: boolean | null
           conversation_step: string | null
           cpf: string | null
@@ -252,6 +253,7 @@ export type Database = {
           assinatura_igreen?: string | null
           cashback?: string | null
           cep?: string | null
+          consultant_id?: string | null
           conta_pdf_protegida?: boolean | null
           conversation_step?: string | null
           cpf?: string | null
@@ -309,6 +311,7 @@ export type Database = {
           assinatura_igreen?: string | null
           cashback?: string | null
           cep?: string | null
+          consultant_id?: string | null
           conta_pdf_protegida?: boolean | null
           conversation_step?: string | null
           cpf?: string | null

@@ -18,6 +18,7 @@ interface AddCustomerDialogProps {
   onOpenChange: (open: boolean) => void;
   phone: string;
   name: string | null;
+  consultantId: string;
   onAdded: () => void;
 }
 
@@ -50,6 +51,7 @@ export function AddCustomerDialog({
   onOpenChange,
   phone,
   name: initialName,
+  consultantId,
   onAdded,
 }: AddCustomerDialogProps) {
   const { toast } = useToast();
@@ -132,6 +134,7 @@ export function AddCustomerDialog({
       const rawPhone = form.phone_whatsapp.replace(/\D/g, "");
       const insertData: TablesInsert<"customers"> = {
         phone_whatsapp: rawPhone,
+        consultant_id: consultantId,
         ...(form.name && { name: form.name }),
         ...(form.cpf && { cpf: form.cpf.replace(/\D/g, "") }),
         ...(form.data_nascimento && { data_nascimento: form.data_nascimento }),

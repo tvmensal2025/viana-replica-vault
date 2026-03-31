@@ -238,6 +238,7 @@ export function ChatView({ instanceName, chat, templates, consultantId, initialM
           onOpenChange={setShowAddDialog}
           phone={phoneNumber}
           name={chat.name !== phoneNumber ? chat.name : null}
+          consultantId={consultantId}
           onAdded={handleCustomerAdded}
         />
       )}
