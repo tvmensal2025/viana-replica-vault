@@ -150,11 +150,12 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       };
     } catch (err) {
       const message = sanitize(err instanceof Error ? err.message : "Erro ao conectar");
+      const isTemporaryTimeout = /timeout|demorando para responder|alguns instantes|tente novamente/i.test(message);
       return {
         qrCode: null,
-        timedOut: false,
-        shouldCreate: shouldCreateInstanceFromError(message),
-        errorMessage: message,
+        timedOut: isTemporaryTimeout,
+        shouldCreate: !isTemporaryTimeout && shouldCreateInstanceFromError(message),
+        errorMessage: isTemporaryTimeout ? null : message,
       };
     }
   }, []);
