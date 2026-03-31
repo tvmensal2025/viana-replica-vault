@@ -100,6 +100,7 @@ const Admin = () => {
     return { totalCustomers, totalKw, avgKw, customersByStatus, weeklyNewCustomers };
   }, [analytics, selectedLicenciado]);
 
+  useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
       if (!session) navigate("/auth");
       else { setUserId(session.user.id); loadConsultant(session.user.id); }
