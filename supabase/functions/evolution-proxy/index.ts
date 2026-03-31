@@ -143,7 +143,11 @@ function createGracefulTimeoutResponse(safePath: string): Response | null {
     });
   }
 
-  return null;
+  // Default fallback — never return null, always return a graceful response
+  return new Response(JSON.stringify({ error: "Serviço temporariamente indisponível.", timeout: true }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
 async function fetchWithTimeout(
@@ -339,17 +343,9 @@ Deno.serve(async (req) => {
       evolutionResponse = await proxyToEvolution(safePath, method || "GET", targetUrl, fetchOptions);
     } catch (networkError) {
       console.error("[evolution-proxy] Network error connecting to service", networkError);
-
       const gracefulResponse = createGracefulTimeoutResponse(safePath);
-      if (gracefulResponse) {
-        console.warn(`[evolution-proxy] Falling back to graceful timeout response for ${safePath}`);
-        evolutionResponse = gracefulResponse;
-      } else {
-        return new Response(
-          JSON.stringify({ error: "Erro ao conectar com o serviço de conexão. Tente novamente." }),
-          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
-      }
+      console.warn(`[evolution-proxy] Falling back to graceful response for ${safePath}`);
+      evolutionResponse = gracefulResponse;
     }
 
     const responseBody = await evolutionResponse.text();
