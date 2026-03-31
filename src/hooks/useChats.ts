@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { findChats, findContacts, type EvolutionChat, type EvolutionContact } from "@/services/evolutionApi";
+import { findChats, findContacts, getProfilePicture, type EvolutionChat, type EvolutionContact } from "@/services/evolutionApi";
 
 export interface ChatItem {
   remoteJid: string;
