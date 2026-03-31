@@ -4,7 +4,8 @@ import {
   createInstance,
   connectInstance,
   getConnectionState,
-  deleteInstance,
+  logoutInstance,
+  fetchInstances,
 } from "@/services/evolutionApi";
 import type { ConnectionStatus } from "@/types/whatsapp";
 import { useToast } from "@/hooks/use-toast";
@@ -227,6 +228,20 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
               return;
             }
 
+            // Safety: verify instance doesn't exist before creating
+            let instanceExistsOnServer = false;
+            try {
+              const instances = await withTimeout(fetchInstances(), 10000);
+              instanceExistsOnServer = instances?.some((i) => i.instance?.instanceName === name) ?? false;
+            } catch { /* assume doesn't exist */ }
+
+            if (instanceExistsOnServer) {
+              addLog("⏳ Instância encontrada no servidor. Tentando reconectar...");
+              consecutiveFailsRef.current = 0;
+              pollRef.current = setTimeout(poll, 5000);
+              return;
+            }
+
             addLog("🔄 Instância indisponível. Criando nova sessão automaticamente...");
             markCreateAttempt();
 
@@ -434,6 +449,20 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
             return;
           }
 
+          // Safety: verify instance doesn't exist on server before creating
+          let instanceExists = false;
+          try {
+            const instances = await withTimeout(fetchInstances(), 10000);
+            instanceExists = instances?.some((i) => i.instance?.instanceName === name) ?? false;
+          } catch { /* assume doesn't exist */ }
+
+          if (instanceExists) {
+            addLog("⏳ Instância já existe no servidor. Tentando conectar...");
+            await saveInstance(name);
+            enterPendingConnection(name, "⏳ Recuperando QR Code da instância existente...");
+            return;
+          }
+
           addLog("Criando instância...");
           markCreateAttempt();
           try {
@@ -533,7 +562,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
     clearQrRecovery();
 
     try {
-      try { await withTimeout(deleteInstance(name), 15000); } catch { /* ok */ }
+      try { await withTimeout(logoutInstance(name), 15000); } catch { /* ok */ }
       await deleteInstanceDb();
       clearCreateAttempt();
 
@@ -610,17 +639,10 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
 
       if (cancelled) return;
 
-      // Auto-initiate connection: create instance and generate QR automatically
+      // Don't auto-create instance on mount — just show "Conectar" button
       setConnectionStatus("disconnected");
       setError(null);
       setIsLoading(false);
-
-      // Trigger automatic connection so QR is ready when user needs it
-      setTimeout(() => {
-        if (!cancelled && mountedRef.current) {
-          createAndConnect();
-        }
-      }, 500);
     }
 
     init();
