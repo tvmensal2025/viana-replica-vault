@@ -191,21 +191,77 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
           consecutiveFailsRef.current += 1;
 
           if (consecutiveFailsRef.current <= 3) {
-            // Retry silencioso — pode ser queda momentânea
+            if (consecutiveFailsRef.current === 1) {
+              addLog("🔄 Oscilação detectada. Tentando manter a sessão ativa...");
+            }
             pollRef.current = setTimeout(poll, 5000);
           } else {
             clearQrRecovery();
-            setConnectionStatus((prev) => {
-              if (prev === "connected") {
-                addLog("⚠️ Conexão perdida");
-                toast({ title: "Conexão WhatsApp perdida", variant: "destructive" });
-              }
-              return "disconnected";
-            });
+            setConnectionStatus("connecting");
+            setError(null);
             setQrCode(null);
             setQrGeneratedAt(null);
-            // Continua polling lento para detectar reconexão automática
-            pollRef.current = setTimeout(poll, 30000);
+            addLog("🔄 Sessão desconectada. Iniciando recuperação automática...");
+
+            const qrAttempt = await fetchQr(name);
+            if (!mountedRef.current) return;
+
+            if (qrAttempt.qrCode) {
+              consecutiveFailsRef.current = 0;
+              clearCreateAttempt();
+              await saveInstance(name);
+              setQrCode(qrAttempt.qrCode);
+              setQrGeneratedAt(Date.now());
+              setConnectionStatus("connecting");
+              setError(null);
+              addLog("📱 QR Code renovado automaticamente");
+              pollRef.current = setTimeout(poll, 5000);
+              return;
+            }
+
+            if (qrAttempt.timedOut || !qrAttempt.shouldCreate) {
+              consecutiveFailsRef.current = 0;
+              addLog("⏳ O servidor WhatsApp ainda está restabelecendo a sessão...");
+              pollRef.current = setTimeout(poll, 5000);
+              return;
+            }
+
+            addLog("🔄 Instância indisponível. Criando nova sessão automaticamente...");
+            markCreateAttempt();
+
+            try {
+              const response = await withTimeout(createInstance(name), 35000);
+              if (!mountedRef.current) return;
+
+              consecutiveFailsRef.current = 0;
+              await saveInstance(name);
+
+              const qr = response?.qrcode?.base64 || null;
+              if (qr) {
+                clearCreateAttempt();
+                setQrCode(qr);
+                setQrGeneratedAt(Date.now());
+                setConnectionStatus("connecting");
+                setError(null);
+                addLog("📱 Nova sessão criada automaticamente");
+                pollRef.current = setTimeout(poll, 5000);
+                return;
+              }
+
+              addLog(
+                response?.timeout
+                  ? "⏳ Nova sessão iniciada. Aguardando QR Code do servidor..."
+                  : "⏳ Sessão recriada. Aguardando QR Code..."
+              );
+              pollRef.current = setTimeout(poll, 5000);
+            } catch (recoveryErr) {
+              const recoveryMessage = sanitize(recoveryErr instanceof Error ? recoveryErr.message : "Erro ao recuperar conexão");
+              logger.warn("Falha ao recuperar conexão automaticamente", { name, recoveryMessage });
+              setConnectionStatus("connecting");
+              setError(null);
+              addLog(`⚠️ ${recoveryMessage} — continuando tentativa automática...`);
+              pollRef.current = setTimeout(poll, 15000);
+            }
           }
         }
       } catch {
@@ -216,7 +272,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
     };
 
     poll();
-  }, [addLog, checkState, clearPolling, clearQrRecovery, toast]);
+  }, [addLog, checkState, clearCreateAttempt, clearPolling, clearQrRecovery, fetchQr, markCreateAttempt, saveInstance, toast]);
 
   const scheduleQrRecovery = useCallback((name: string, attempt = 1) => {
     clearQrRecovery();
