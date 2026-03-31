@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/components/ui/use-toast";
-import { sendTextMessage, sendMedia, sendAudio } from "@/services/evolutionApi";
+import { sendWhatsAppMessage } from "@/services/messageSender";
 import type { MessageTemplate } from "@/types/whatsapp";
 
 export type BulkSendResult = { total: number; sent: number; failed: number };
