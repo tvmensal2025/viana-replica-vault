@@ -44,7 +44,7 @@ function mediaBadge(type: TemplateMediaType) {
 interface TemplateManagerProps {
   templates: MessageTemplate[];
   isLoading: boolean;
-  onCreateTemplate: (name: string, content: string, mediaType?: string, mediaUrl?: string | null) => Promise<void>;
+  onCreateTemplate: (name: string, content: string, mediaType?: string, mediaUrl?: string | null, imageUrl?: string | null) => Promise<void>;
   onDeleteTemplate: (id: string) => Promise<void>;
 }
 
