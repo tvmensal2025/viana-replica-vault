@@ -303,6 +303,18 @@ Deno.serve(async (req) => {
     const responseBody = await evolutionResponse.text();
     console.log("[evolution-proxy] <-", evolutionResponse.status, responseBody.substring(0, 300));
 
+    // Gracefully handle media download failures (e.g. expired WhatsApp CDN URLs)
+    if (
+      evolutionResponse.status === 400 &&
+      safePath.startsWith("chat/getBase64FromMediaMessage/")
+    ) {
+      console.warn("[evolution-proxy] Media download failed (likely expired URL), returning graceful null");
+      return new Response(
+        JSON.stringify({ base64: null, mimetype: null, mediaUnavailable: true }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     return new Response(responseBody, {
       status: evolutionResponse.status,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
