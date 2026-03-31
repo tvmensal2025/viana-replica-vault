@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { Check, CheckCheck, Clock, FileText, Image, Mic, Video, Play, Download, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ChatMessage } from "@/hooks/useMessages";
@@ -74,7 +74,7 @@ function ImageViewer({ message, onLoadMedia }: { message: ChatMessage; onLoadMed
   const [expanded, setExpanded] = useState(false);
   const [loadAttempted, setLoadAttempted] = useState(false);
 
-  // Auto-load image on mount
+  // Load on demand only (no auto-load)
   const handleLoad = useCallback(async () => {
     if (imgSrc || !onLoadMedia || loadAttempted) return;
     setLoadAttempted(true);
@@ -83,13 +83,6 @@ function ImageViewer({ message, onLoadMedia }: { message: ChatMessage; onLoadMed
     if (src) setImgSrc(src);
     setLoading(false);
   }, [imgSrc, onLoadMedia, message.id, loadAttempted]);
-
-  // Trigger auto-load
-  useEffect(() => {
-    if (!imgSrc && onLoadMedia && !loadAttempted) {
-      handleLoad();
-    }
-  }, [imgSrc, onLoadMedia, loadAttempted, handleLoad]);
 
   if (loading) {
     return (

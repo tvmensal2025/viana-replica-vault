@@ -1077,10 +1077,8 @@ const Admin = () => {
         )}
 
         {/* WhatsApp Tab — always mounted, hidden when inactive to preserve connection state */}
-        {userId && (
-          <div style={{ display: activeTab === "whatsapp" ? "block" : "none" }}>
-            <WhatsAppTab key="whatsapp-tab" userId={userId} />
-          </div>
+        {userId && activeTab === "whatsapp" && (
+          <WhatsAppTab key="whatsapp-tab" userId={userId} />
         )}
 
         {/* Preview Tab */}

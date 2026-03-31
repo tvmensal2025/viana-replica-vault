@@ -103,17 +103,38 @@ export function useMessages(
     preferredSendTargetJid
   );
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const fetchingRef = useRef(false);
+  const lastReadIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     setResolvedSendTargetJid(preferredSendTargetJid || null);
   }, [preferredSendTargetJid, remoteJid]);
 
+  // Reset lastReadId when chat changes
+  useEffect(() => {
+    lastReadIdRef.current = null;
+  }, [remoteJid]);
+
   const fetchMessages = useCallback(async () => {
     if (!instanceName || !remoteJid) return;
+    // Prevent overlapping fetches
+    if (fetchingRef.current) return;
+    fetchingRef.current = true;
+
     try {
       setIsLoading((prev) => (!prev ? true : prev));
-      const raw = await findMessages(instanceName, remoteJid, 100);
-      const mapped = (Array.isArray(raw) ? raw : [])
+      const raw = await findMessages(instanceName, remoteJid, 50);
+
+      // Deduplicate by message id
+      const seen = new Set<string>();
+      const unique = (Array.isArray(raw) ? raw : []).filter((msg) => {
+        const id = msg.key?.id;
+        if (!id || seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      });
+
+      const mapped = unique
         .map(mapMessage)
         .sort((a, b) => a.timestamp - b.timestamp);
       setMessages(mapped);
@@ -123,8 +144,10 @@ export function useMessages(
         setResolvedSendTargetJid((prev) => prev || fallbackSendTarget);
       }
 
+      // Only markAsRead if there's a NEW inbound message we haven't marked yet
       const lastIncoming = [...mapped].reverse().find((m) => !m.fromMe);
-      if (lastIncoming) {
+      if (lastIncoming && lastIncoming.id !== lastReadIdRef.current) {
+        lastReadIdRef.current = lastIncoming.id;
         try {
           await markAsRead(instanceName, remoteJid, lastIncoming.id, false);
         } catch {
@@ -134,6 +157,7 @@ export function useMessages(
     } catch {
       // ignore polling errors
     } finally {
+      fetchingRef.current = false;
       setIsLoading(false);
     }
   }, [instanceName, remoteJid]);
@@ -142,7 +166,7 @@ export function useMessages(
     setMessages([]);
     fetchMessages();
     if (instanceName && remoteJid) {
-      intervalRef.current = setInterval(fetchMessages, 5000);
+      intervalRef.current = setInterval(fetchMessages, 15000); // 15s (was 5s)
     }
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
@@ -153,19 +177,16 @@ export function useMessages(
     const initialTarget = resolvedSendTargetJid || preferredSendTargetJid || remoteJid;
     if (!initialTarget) return null;
 
-    // Already usable (real number jid or plain number)
     if (!initialTarget.endsWith("@lid")) {
       return initialTarget;
     }
 
-    // Try from already loaded messages first
     const altFromState = messages.find((m) => m.remoteJidAlt?.endsWith("@s.whatsapp.net"))?.remoteJidAlt;
     if (altFromState) {
       setResolvedSendTargetJid(altFromState);
       return altFromState;
     }
 
-    // Last fallback: query latest messages to find remoteJidAlt before sending
     if (instanceName && remoteJid) {
       try {
         const latest = await findMessages(instanceName, remoteJid, 20);
@@ -175,19 +196,21 @@ export function useMessages(
           return altFromLatest;
         }
       } catch {
-        // ignore and return initial target
+        // ignore
       }
     }
 
     return initialTarget;
   }, [instanceName, messages, preferredSendTargetJid, remoteJid, resolvedSendTargetJid]);
 
-  // Function to load media for a specific message
   const loadMedia = useCallback(
     async (messageId: string) => {
       if (!instanceName) return null;
       const msg = messages.find((m) => m.id === messageId);
       if (!msg) return null;
+      // Skip if already loaded
+      if (msg.mediaUrl?.startsWith("data:")) return msg.mediaUrl;
+
       const result = await getBase64FromMediaMessage(
         instanceName,
         messageId,
@@ -197,7 +220,6 @@ export function useMessages(
       if (result?.base64) {
         const mimetype = result.mimetype || msg.mediaMimetype || "application/octet-stream";
         const dataUrl = `data:${mimetype};base64,${result.base64}`;
-        // Update message in state
         setMessages((prev) =>
           prev.map((m) =>
             m.id === messageId
@@ -227,24 +249,13 @@ export function useMessages(
         throw new Error("Destinatário inválido para envio");
       }
 
-      // For @lid JIDs, try sending with the full JID (Evolution API may accept it)
-      // For @s.whatsapp.net, extract just the phone number
       const recipient = targetJid.endsWith("@s.whatsapp.net")
         ? targetJid.split("@")[0]
         : targetJid.endsWith("@lid")
-          ? targetJid  // send full @lid JID — Evolution API handles it
+          ? targetJid
           : targetJid;
 
-      logger.debug(
-        "sending to:",
-        recipient,
-        "targetJid:",
-        targetJid,
-        "instance:",
-        instanceName,
-        "text:",
-        text.slice(0, 50)
-      );
+      logger.debug("sending to:", recipient, "targetJid:", targetJid, "instance:", instanceName, "text:", text.slice(0, 50));
 
       try {
         await sendTextMessage(instanceName, recipient, text);
