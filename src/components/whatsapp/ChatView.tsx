@@ -5,7 +5,7 @@ import { MessageBubble } from "./MessageBubble";
 import { MessageComposer } from "./MessageComposer";
 import { AddCustomerDialog } from "./AddCustomerDialog";
 import { useMessages } from "@/hooks/useMessages";
-import { sendAudio as sendAudioApi, sendMedia as sendMediaApi } from "@/services/evolutionApi";
+import { sendWhatsAppMessage, resolveRecipient } from "@/services/messageSender";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import type { MessageTemplate } from "@/types/whatsapp";
@@ -26,7 +26,7 @@ interface ChatViewProps {
 }
 
 export function ChatView({ instanceName, chat, templates, consultantId, initialMessage }: ChatViewProps) {
-  const { messages, isLoading, sendMessage, loadMedia } = useMessages(
+  const { messages, isLoading, sendMessage, loadMedia, resolveSendTargetJid } = useMessages(
     instanceName,
     chat?.remoteJid || null,
     chat?.sendTargetJid || null
@@ -34,7 +34,6 @@ export function ChatView({ instanceName, chat, templates, consultantId, initialM
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const [isCustomer, setIsCustomer] = useState(false);
-  const [addingCustomer, setAddingCustomer] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [kanbanStages, setKanbanStages] = useState<Tables<"kanban_stages">[]>([]);
   const [sendingToCrm, setSendingToCrm] = useState(false);
@@ -55,7 +54,6 @@ export function ChatView({ instanceName, chat, templates, consultantId, initialM
     if (!chat) return;
     setSendingToCrm(true);
     try {
-      // Check if deal already exists for this remoteJid
       const { data: existing } = await supabase
         .from("crm_deals")
         .select("id")
@@ -64,21 +62,15 @@ export function ChatView({ instanceName, chat, templates, consultantId, initialM
         .maybeSingle();
 
       if (existing) {
-        // Update stage
         await supabase
           .from("crm_deals")
           .update({ stage: stageKey, updated_at: new Date().toISOString() })
           .eq("id", existing.id);
         toast({ title: "CRM atualizado", description: `Movido para ${kanbanStages.find(s => s.stage_key === stageKey)?.label || stageKey}` });
       } else {
-        // Create new deal
         await supabase
           .from("crm_deals")
-          .insert({
-            consultant_id: consultantId,
-            remote_jid: chat.remoteJid,
-            stage: stageKey,
-          });
+          .insert({ consultant_id: consultantId, remote_jid: chat.remoteJid, stage: stageKey });
         toast({ title: "Adicionado ao CRM", description: `Enviado para ${kanbanStages.find(s => s.stage_key === stageKey)?.label || stageKey}` });
       }
     } catch (err) {
@@ -112,6 +104,13 @@ export function ChatView({ instanceName, chat, templates, consultantId, initialM
     }
   }, [messages]);
 
+  // Unified helper to resolve JID for media/audio/document sends
+  const getResolvedPhone = useCallback(async (): Promise<string | null> => {
+    const targetJid = await resolveSendTargetJid();
+    if (!targetJid) return null;
+    return resolveRecipient(targetJid);
+  }, [resolveSendTargetJid]);
+
   if (!chat) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center bg-background/50 text-muted-foreground">
@@ -138,7 +137,6 @@ export function ChatView({ instanceName, chat, templates, consultantId, initialM
           <p className="text-sm font-semibold text-foreground truncate">{chat.name}</p>
           <p className="text-[10px] text-muted-foreground">{phoneNumber}</p>
         </div>
-        {/* Add as customer button */}
         {isCustomer ? (
           <div className="flex items-center gap-1.5 text-primary">
             <UserCheck className="h-4 w-4" />
@@ -155,25 +153,15 @@ export function ChatView({ instanceName, chat, templates, consultantId, initialM
             Adicionar Cliente
           </Button>
         )}
-        {/* Send to CRM */}
         {kanbanStages.length > 0 && (
-          <Select
-            onValueChange={handleSendToCrm}
-            disabled={sendingToCrm}
-          >
+          <Select onValueChange={handleSendToCrm} disabled={sendingToCrm}>
             <SelectTrigger className="h-7 w-auto gap-1 text-[10px] border-accent/30 text-accent-foreground px-2">
-              {sendingToCrm ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <KanbanSquare className="h-3.5 w-3.5" />
-              )}
+              {sendingToCrm ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <KanbanSquare className="h-3.5 w-3.5" />}
               <span>CRM</span>
             </SelectTrigger>
             <SelectContent>
               {kanbanStages.map((stage) => (
-                <SelectItem key={stage.id} value={stage.stage_key}>
-                  {stage.label}
-                </SelectItem>
+                <SelectItem key={stage.id} value={stage.stage_key}>{stage.label}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -206,34 +194,59 @@ export function ChatView({ instanceName, chat, templates, consultantId, initialM
         onSend={sendMessage}
         initialMessage={initialMessage}
         onSendAudio={async (base64) => {
-          if (!chat) return;
-          const targetJid = chat.sendTargetJid || chat.remoteJid;
-          const phone = targetJid.split("@")[0];
+          const phone = await getResolvedPhone();
+          if (!phone) return;
           try {
-            const audioDataUrl = `data:audio/ogg;base64,${base64}`;
-            await sendAudioApi(instanceName, phone, audioDataUrl);
+            // Send as base64 data URL with correct webm mimetype
+            const audioDataUrl = `data:audio/webm;base64,${base64}`;
+            const result = await sendWhatsAppMessage({
+              instanceName, phone, mediaCategory: "audio", mediaUrl: audioDataUrl,
+            });
+            if (result.status === "timeout") {
+              toast({ title: "Áudio enviado (aguardando confirmação)", description: "O servidor está processando", variant: "default" });
+            } else if (result.status === "failed") {
+              toast({ title: "Erro ao enviar áudio", description: result.error, variant: "destructive" });
+            }
           } catch (err: unknown) {
             logger.error("Erro ao enviar áudio:", err);
             toast({ title: "Erro ao enviar áudio", description: err instanceof Error ? err.message : "Falha no envio", variant: "destructive" });
           }
         }}
         onSendAudioUrl={async (audioUrl) => {
-          if (!chat) return;
-          const targetJid = chat.sendTargetJid || chat.remoteJid;
-          const phone = targetJid.split("@")[0];
+          const phone = await getResolvedPhone();
+          if (!phone) return;
           try {
-            await sendAudioApi(instanceName, phone, audioUrl);
+            const result = await sendWhatsAppMessage({
+              instanceName, phone, mediaCategory: "audio", mediaUrl: audioUrl,
+            });
+            if (result.status === "timeout") {
+              toast({ title: "Áudio enviado (aguardando confirmação)", variant: "default" });
+            } else if (result.status === "failed") {
+              toast({ title: "Erro ao enviar áudio", description: result.error, variant: "destructive" });
+            }
           } catch (err: unknown) {
             logger.error("Erro ao enviar áudio:", err);
             toast({ title: "Erro ao enviar áudio", description: err instanceof Error ? err.message : "Falha no envio", variant: "destructive" });
           }
         }}
         onSendMedia={async (mediaUrl, caption, mediaType) => {
-          if (!chat) return;
-          const targetJid = chat.sendTargetJid || chat.remoteJid;
-          const phone = targetJid.split("@")[0];
+          const phone = await getResolvedPhone();
+          if (!phone) return;
           try {
-            await sendMediaApi(instanceName, phone, mediaUrl, caption, mediaType as "image" | "video" | "document");
+            // Route documents through sendDocument for proper fileName handling
+            const category = mediaType as "image" | "video" | "document";
+            const fileName = mediaType === "document"
+              ? (mediaUrl.split("/").pop()?.split("?")[0] || "documento")
+              : undefined;
+
+            const result = await sendWhatsAppMessage({
+              instanceName, phone, mediaCategory: category, mediaUrl, text: caption, fileName,
+            });
+            if (result.status === "timeout") {
+              toast({ title: "Mídia enviada (aguardando confirmação)", description: "O servidor está processando", variant: "default" });
+            } else if (result.status === "failed") {
+              toast({ title: "Erro ao enviar mídia", description: result.error, variant: "destructive" });
+            }
           } catch (err: unknown) {
             logger.error("Erro ao enviar mídia:", err);
             toast({ title: "Erro ao enviar mídia", description: err instanceof Error ? err.message : "Falha no envio", variant: "destructive" });

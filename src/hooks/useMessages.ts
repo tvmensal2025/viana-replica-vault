@@ -268,5 +268,5 @@ export function useMessages(
     [instanceName, remoteJid, resolveSendTargetJid]
   );
 
-  return { messages, isLoading, sendMessage, loadMedia, refetch: fetchMessages };
+  return { messages, isLoading, sendMessage, loadMedia, refetch: fetchMessages, resolveSendTargetJid };
 }

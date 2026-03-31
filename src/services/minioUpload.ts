@@ -76,7 +76,7 @@ export function getAcceptString(mediaType: string): string {
     case "video":
       return "video/mp4,video/webm";
     case "document":
-      return "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+      return "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     default:
       return "*/*";
   }

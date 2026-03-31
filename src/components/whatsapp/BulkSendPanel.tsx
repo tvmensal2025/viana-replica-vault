@@ -208,7 +208,7 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
           </div>
         )}
 
-        <Button onClick={handleBulkSend} disabled={selectedIds.size === 0 || !message.trim() || isSending} className="gap-2 rounded-xl h-11 font-bold shadow-lg shadow-green-500/10 hover:shadow-green-500/20 transition-all" style={{ background: "var(--gradient-green)" }}>
+        <Button onClick={handleBulkSend} disabled={selectedIds.size === 0 || (!message.trim() && !selectedTemplate?.media_url) || isSending} className="gap-2 rounded-xl h-11 font-bold shadow-lg shadow-green-500/10 hover:shadow-green-500/20 transition-all" style={{ background: "var(--gradient-green)" }}>
           {isSending ? <><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</> : <><Send className="w-4 h-4" /> Enviar para {selectedIds.size} clientes</>}
         </Button>
       </div>
