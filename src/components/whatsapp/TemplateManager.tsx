@@ -1,5 +1,5 @@
-import { useState, useRef } from "react";
-import { FileText, Plus, Trash2, Wand2, Image, Mic, File, Type, Play, Eye, Upload, Loader2, CheckCircle2 } from "lucide-react";
+import { useState, useRef, useCallback } from "react";
+import { FileText, Plus, Trash2, Wand2, Image, Mic, File, Type, Play, Eye, Upload, Loader2, CheckCircle2, Square, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -61,6 +61,91 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onDele
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadedFileName, setUploadedFileName] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Recording state
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const formatRecordingTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m}:${sec.toString().padStart(2, "0")}`;
+  };
+
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+          ? "audio/webm;codecs=opus"
+          : "audio/webm",
+      });
+      chunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        const file = Object.assign(blob, { name: `gravacao_${Date.now()}.webm`, lastModified: Date.now() }) as unknown as File;
+
+        setIsUploading(true);
+        setUploadProgress(0);
+        setUploadedFileName(file.name);
+        try {
+          const result = await uploadMedia(file, (pct) => setUploadProgress(pct));
+          setMediaUrl(result.url);
+          toast.success(`Áudio gravado e enviado: ${formatFileSize(result.size)}`);
+        } catch (err: unknown) {
+          toast.error(err instanceof Error ? err.message : "Erro no upload do áudio");
+          setUploadedFileName("");
+        } finally {
+          setIsUploading(false);
+        }
+      };
+
+      mediaRecorderRef.current = mediaRecorder;
+      mediaRecorder.start();
+      setIsRecording(true);
+      setRecordingTime(0);
+      timerRef.current = setInterval(() => {
+        setRecordingTime((prev) => prev + 1);
+      }, 1000);
+    } catch {
+      toast.error("Não foi possível acessar o microfone");
+    }
+  }, []);
+
+  const stopRecording = useCallback(() => {
+    if (mediaRecorderRef.current?.state === "recording") {
+      mediaRecorderRef.current.stop();
+    }
+    setIsRecording(false);
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  const cancelRecording = useCallback(() => {
+    if (mediaRecorderRef.current?.state === "recording") {
+      mediaRecorderRef.current.ondataavailable = null;
+      mediaRecorderRef.current.onstop = null;
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current.stream?.getTracks().forEach((t) => t.stop());
+    }
+    chunksRef.current = [];
+    setIsRecording(false);
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -292,6 +377,50 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onDele
                   </span>
                 </Button>
               </div>
+
+              {/* Record audio button (only for audio type) */}
+              {mediaType === "audio" && (
+                <div className="space-y-2">
+                  {isRecording ? (
+                    <div className="flex items-center gap-3 rounded-xl border-2 border-red-500/40 bg-red-500/5 px-4 py-3 animate-pulse">
+                      <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
+                      <span className="text-sm font-bold text-red-400 tabular-nums">{formatRecordingTime(recordingTime)}</span>
+                      <span className="text-xs text-muted-foreground">Gravando...</span>
+                      <div className="ml-auto flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={cancelRecording}
+                          className="h-8 w-8 text-muted-foreground hover:text-red-400 hover:bg-red-500/10"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={stopRecording}
+                          className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                        >
+                          <Square className="w-4 h-4 fill-current" />
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={startRecording}
+                      disabled={isSaving || isUploading}
+                      className="gap-2 rounded-xl border-dashed border-2 border-orange-500/30 hover:border-orange-500/50 hover:bg-orange-500/5 w-full h-12"
+                    >
+                      <Mic className="w-4 h-4 text-orange-400" />
+                      <span className="text-xs text-orange-400 font-bold">Gravar áudio agora</span>
+                    </Button>
+                  )}
+                </div>
+              )}
 
               {/* Upload progress */}
               {isUploading && (
