@@ -57,7 +57,7 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
       setProgress({ total: selected.length, sent, failed });
       try {
         const msg = message.includes("{{")
-          ? applyTemplate({ id: "", consultant_id: "", name: "", content: message, media_type: "text", media_url: null, created_at: "" }, selected[i])
+          ? applyTemplate({ id: "", consultant_id: "", name: "", content: message, media_type: "text", media_url: null, image_url: null, created_at: "" }, selected[i])
           : message;
 
         if (tplMediaUrl && tplMediaType === "audio") {

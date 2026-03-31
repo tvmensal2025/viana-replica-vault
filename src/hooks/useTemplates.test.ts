@@ -10,6 +10,7 @@ function makeTemplate(content: string): MessageTemplate {
     content,
     media_type: "text",
     media_url: null,
+    image_url: null,
     created_at: new Date().toISOString(),
   };
 }
