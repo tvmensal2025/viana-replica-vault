@@ -488,6 +488,7 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
         phone_whatsapp: item.phone,
         name: item.name,
         status: item.status,
+        consultant_id: consultantId,
         ...item.data,
       })) as TablesInsert<"customers">[];
 

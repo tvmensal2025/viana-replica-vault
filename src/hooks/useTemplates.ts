@@ -29,8 +29,7 @@ export function useTemplates(consultantId: string) {
     try {
       const { data, error } = await supabase
         .from("message_templates")
-        .select("*")
-        .eq("consultant_id", consultantId);
+        .select("*");
 
       if (error) throw error;
       setTemplates((data as MessageTemplate[]) ?? []);

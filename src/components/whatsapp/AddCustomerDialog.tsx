@@ -134,6 +134,7 @@ export function AddCustomerDialog({
       const rawPhone = form.phone_whatsapp.replace(/\D/g, "");
       const insertData: TablesInsert<"customers"> = {
         phone_whatsapp: rawPhone,
+        consultant_id: consultantId,
         ...(form.name && { name: form.name }),
         ...(form.cpf && { cpf: form.cpf.replace(/\D/g, "") }),
         ...(form.data_nascimento && { data_nascimento: form.data_nascimento }),

@@ -144,6 +144,7 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
         const { data, error } = await supabase
           .from("customers")
           .select(selectFields)
+          .eq("consultant_id", consultantId)
           .range(page * pageSize, (page + 1) * pageSize - 1);
         if (error) throw error;
         if (data) allRows.push(...data);
