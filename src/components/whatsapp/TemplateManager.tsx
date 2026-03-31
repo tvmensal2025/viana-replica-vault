@@ -1,5 +1,5 @@
-import { useState, useRef } from "react";
-import { FileText, Plus, Trash2, Wand2, Image, Mic, File, Type, Play, Eye, Upload, Loader2, CheckCircle2 } from "lucide-react";
+import { useState, useRef, useCallback } from "react";
+import { FileText, Plus, Trash2, Wand2, Image, Mic, File, Type, Play, Eye, Upload, Loader2, CheckCircle2, Square, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
