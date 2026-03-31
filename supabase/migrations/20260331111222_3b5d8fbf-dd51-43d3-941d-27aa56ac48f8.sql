@@ -1,0 +1,1 @@
+ALTER TABLE public.kanban_stages ADD COLUMN auto_message_image_url text DEFAULT NULL;

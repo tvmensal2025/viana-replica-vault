@@ -362,6 +362,7 @@ export type Database = {
       kanban_stages: {
         Row: {
           auto_message_enabled: boolean
+          auto_message_image_url: string | null
           auto_message_media_url: string | null
           auto_message_text: string | null
           auto_message_type: string | null
@@ -375,6 +376,7 @@ export type Database = {
         }
         Insert: {
           auto_message_enabled?: boolean
+          auto_message_image_url?: string | null
           auto_message_media_url?: string | null
           auto_message_text?: string | null
           auto_message_type?: string | null
@@ -388,6 +390,7 @@ export type Database = {
         }
         Update: {
           auto_message_enabled?: boolean
+          auto_message_image_url?: string | null
           auto_message_media_url?: string | null
           auto_message_text?: string | null
           auto_message_type?: string | null
