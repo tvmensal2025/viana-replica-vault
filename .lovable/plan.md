@@ -1,46 +1,58 @@
 
 
-## Problema Identificado
+## Problema Critico
 
-No `useAnalytics.ts`, linha 115, os KPIs e o gráfico de "Status dos Clientes" usam apenas clientes que têm deals no CRM:
+O sistema atual tem **3 pontos perigosos** que podem deletar a instância WhatsApp no servidor Evolution:
 
-```
-const customers = allCustomers.filter((c) => customerIds.includes(c.id));
-```
+1. **`disconnect()`** (linha 536) chama `deleteInstance()` que faz `DELETE instance/delete/{name}` — isso **apaga a instância permanentemente** no Evolution API, desconectando o WhatsApp do número
+2. **Auto-recovery** (linha 230-264) pode recriar a instância via `createInstance()` quando detecta estado "close", potencialmente sobrescrevendo a sessão existente
+3. **`createInstance`** é chamado automaticamente no mount (linha 619-623) quando o estado não é "open" nem "connecting"
 
-Isso filtra a maioria dos clientes. O gráfico de "Licenciados" já usa `allCustomers` corretamente, por isso mostra dados. Os KPIs (Total de Clientes, Total kW, Status) mostram 0 porque dependem da variável `customers` filtrada.
+## Plano de Correção
 
-## Plano
+### 1. Criar função `logoutInstance` no service layer (não deleta, só desconecta)
 
-### 1. Usar `allCustomers` para TODOS os KPIs e gráficos
+**Arquivo:** `src/services/evolutionApi.ts`
 
-**Arquivo:** `src/hooks/useAnalytics.ts`
+- Adicionar função `logoutInstance(instanceName)` que chama `instance/logout/{instanceName}` (endpoint do Evolution API que desconecta sem deletar)
+- Manter `deleteInstance` mas nunca chamá-lo automaticamente
 
-- Remover a linha 115 (`const customers = allCustomers.filter(...)`) 
-- Substituir todas as referências a `customers` por `allCustomers` nas métricas de:
-  - `totalCustomers` (linha 186)
-  - `customersByStatus` (linhas 190-206)
-  - `totalKw` / `avgKw` (linhas 209-211)
-  - `weeklyNewCustomers` (linha 234)
-- Manter a variável `deals` disponível para uso futuro, mas não filtrar clientes por ela
+### 2. Substituir `deleteInstance` por `logoutInstance` no disconnect
 
-### 2. Adicionar mais status ao mapeamento de labels
+**Arquivo:** `src/hooks/useWhatsApp.ts`
 
-Atualmente só mapeia 4 status (`approved`, `pending`, `rejected`, `lead`). A tabela `customers` tem mais status possíveis: `data_complete`, `registered_igreen`, `contract_sent`. Adicionar labels em português para todos.
+- Na função `disconnect()` (linha 536): trocar `deleteInstance(name)` por `logoutInstance(name)`
+- Isso apenas desconecta a sessão sem apagar a instância no servidor
+- O registro no banco local (`whatsapp_instances`) continua sendo removido para permitir reconexão limpa
 
-### 3. Adicionar filtro por licenciado no dashboard
+### 3. Proteger contra criação duplicada de instância
 
-**Arquivo:** `src/pages/Admin.tsx`
+**Arquivo:** `src/hooks/useWhatsApp.ts`
 
-- Adicionar um dropdown/select acima da seção "Clientes iGreen" que lista os licenciados (extraídos de `registered_by_name`)
-- Opções: "Todos" (padrão) + cada licenciado
-- Quando filtrado, os KPIs, status chart e weekly chart refletem apenas clientes daquele licenciado
-- O gráfico de "Top Licenciados" sempre mostra todos (para manter o ranking visível)
+- Antes de chamar `createInstance()`, sempre verificar se a instância já existe no servidor via `fetchInstances()` ou `getConnectionState()`
+- Se a instância já existir (mesmo com estado "close"), usar apenas `connectInstance()` para gerar novo QR — **nunca recriar**
+- Só chamar `createInstance()` quando receber erro 404 confirmando que a instância realmente não existe
 
-### Detalhes Técnicos
+### 4. Remover auto-connect agressivo no mount
 
-- O filtro será client-side (os dados já estão carregados via `allCustomers`)
-- Novo state `selectedLicenciado` no Admin.tsx com valor `"all"` como padrão
-- Derivar `filteredCustomers` a partir dos dados do analytics, aplicando o filtro de licenciado
-- Recalcular KPIs localmente no componente quando filtro muda (sem nova query ao Supabase)
+**Arquivo:** `src/hooks/useWhatsApp.ts`
+
+- Remover o `setTimeout(() => createAndConnect(), 500)` no mount (linha 619-623)
+- Quando estado é "close" no init, apenas mostrar botão "Conectar" sem auto-criar instância
+- Isso evita que o sistema crie instâncias automaticamente a cada reload da página
+
+### 5. Adicionar confirmação no disconnect
+
+**Arquivo:** `src/components/whatsapp/ConnectionPanel.tsx`
+
+- Adicionar dialog de confirmação antes de desconectar: "Tem certeza que deseja desconectar o WhatsApp?"
+- Deixar claro que é apenas logout, não exclusão
+
+### Resumo das Mudanças
+
+| Arquivo | Mudança |
+|---|---|
+| `src/services/evolutionApi.ts` | Adicionar `logoutInstance()` |
+| `src/hooks/useWhatsApp.ts` | Usar logout em vez de delete; remover auto-connect no mount; proteger `createInstance` com verificação prévia |
+| `src/components/whatsapp/ConnectionPanel.tsx` | Adicionar confirmação de disconnect |
 
