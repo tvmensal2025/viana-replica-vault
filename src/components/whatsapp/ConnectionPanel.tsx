@@ -325,7 +325,7 @@ export function ConnectionPanel({
                 {phoneNumber && <p className="text-sm text-muted-foreground mt-1">{phoneNumber}</p>}
               </div>
             </div>
-            <Button onClick={onDisconnect} variant="outline" size="sm" className="gap-2 rounded-xl text-red-400 border-red-500/20 hover:bg-red-500/5 hover:border-red-500/30 hover:text-red-400 transition-all">
+            <Button onClick={() => setShowDisconnectConfirm(true)} variant="outline" size="sm" className="gap-2 rounded-xl text-red-400 border-red-500/20 hover:bg-red-500/5 hover:border-red-500/30 hover:text-red-400 transition-all">
               <WifiOff className="w-4 h-4" /> Desconectar
             </Button>
           </div>
@@ -334,6 +334,30 @@ export function ConnectionPanel({
         {/* Diagnostic panel */}
         {showDiagnostic && <DiagnosticPanel logs={connectionLog} />}
       </div>
+
+      {/* Disconnect confirmation dialog */}
+      <AlertDialog open={showDisconnectConfirm} onOpenChange={setShowDisconnectConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Desconectar WhatsApp?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Isso vai encerrar a sessão do WhatsApp neste dispositivo. Você poderá reconectar depois escaneando um novo QR Code. Seu WhatsApp no celular <strong>não será afetado</strong>.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setShowDisconnectConfirm(false);
+                onDisconnect();
+              }}
+              className="bg-red-500 hover:bg-red-600 text-white"
+            >
+              Sim, desconectar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
