@@ -623,6 +623,13 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onDele
                 </div>
               )}
 
+              {previewTemplate.image_url && (
+                <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-3">
+                  <p className="text-[10px] text-muted-foreground mb-1 font-bold">📷 Imagem anexa:</p>
+                  <img src={previewTemplate.image_url} alt="Imagem anexa" className="rounded-lg max-h-40 object-contain" />
+                </div>
+              )}
+
               {previewTemplate.content && (
                 <div className="rounded-xl bg-green-900/20 border border-green-500/10 px-4 py-3 max-w-[280px]">
                   <p className="text-sm text-foreground whitespace-pre-wrap">{previewTemplate.content}</p>
