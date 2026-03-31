@@ -1,21 +1,46 @@
 
 
-## Plano: WhatsApp Tab acessivel sem conexao
+## Problema Identificado
 
-### Problema
-Quando o WhatsApp nao esta conectado, o componente `WhatsAppTab` mostra apenas o painel de conexao (linhas 205-223), bloqueando acesso a clientes, CRM, templates, agendamentos.
+No `useAnalytics.ts`, linha 115, os KPIs e o gráfico de "Status dos Clientes" usam apenas clientes que têm deals no CRM:
 
-### Solucao
-Remover o bloqueio condicional e sempre mostrar as sub-abas. O painel de conexao vira uma sub-aba propria ou fica embutido na aba "Conversas" quando desconectado.
+```
+const customers = allCustomers.filter((c) => customerIds.includes(c.id));
+```
 
-### Alteracoes em `src/components/whatsapp/WhatsAppTab.tsx`
+Isso filtra a maioria dos clientes. O gráfico de "Licenciados" já usa `allCustomers` corretamente, por isso mostra dados. Os KPIs (Total de Clientes, Total kW, Status) mostram 0 porque dependem da variável `customers` filtrada.
 
-1. **Remover o early return** (linhas 205-223) que bloqueia tudo quando desconectado
-2. **Alterar a barra de status** no topo: se conectado mostra o indicador verde atual; se desconectado mostra um indicador vermelho com botao "Conectar" inline
-3. **Na sub-aba "Conversas"**: se desconectado, mostrar o `ConnectionPanel` em vez do chat; se conectado, mostrar o chat normalmente
-4. **Sub-abas "CRM", "Clientes", "Templates", "Agendamentos"**: sempre acessiveis independente do status
-5. **Sub-aba "Envio em Massa"**: mostrar aviso de que precisa conectar o WhatsApp se desconectado (pois depende de `instanceName` para enviar)
-6. **Sub-aba "Agendamentos"**: idem, mostrar aviso se desconectado
+## Plano
 
-Funcionalidades que dependem de `instanceName` (envio de mensagens, conversas) mostram o painel de conexao ou um aviso. Funcionalidades independentes (clientes, templates, CRM) funcionam normalmente.
+### 1. Usar `allCustomers` para TODOS os KPIs e gráficos
+
+**Arquivo:** `src/hooks/useAnalytics.ts`
+
+- Remover a linha 115 (`const customers = allCustomers.filter(...)`) 
+- Substituir todas as referências a `customers` por `allCustomers` nas métricas de:
+  - `totalCustomers` (linha 186)
+  - `customersByStatus` (linhas 190-206)
+  - `totalKw` / `avgKw` (linhas 209-211)
+  - `weeklyNewCustomers` (linha 234)
+- Manter a variável `deals` disponível para uso futuro, mas não filtrar clientes por ela
+
+### 2. Adicionar mais status ao mapeamento de labels
+
+Atualmente só mapeia 4 status (`approved`, `pending`, `rejected`, `lead`). A tabela `customers` tem mais status possíveis: `data_complete`, `registered_igreen`, `contract_sent`. Adicionar labels em português para todos.
+
+### 3. Adicionar filtro por licenciado no dashboard
+
+**Arquivo:** `src/pages/Admin.tsx`
+
+- Adicionar um dropdown/select acima da seção "Clientes iGreen" que lista os licenciados (extraídos de `registered_by_name`)
+- Opções: "Todos" (padrão) + cada licenciado
+- Quando filtrado, os KPIs, status chart e weekly chart refletem apenas clientes daquele licenciado
+- O gráfico de "Top Licenciados" sempre mostra todos (para manter o ranking visível)
+
+### Detalhes Técnicos
+
+- O filtro será client-side (os dados já estão carregados via `allCustomers`)
+- Novo state `selectedLicenciado` no Admin.tsx com valor `"all"` como padrão
+- Derivar `filteredCustomers` a partir dos dados do analytics, aplicando o filtro de licenciado
+- Recalcular KPIs localmente no componente quando filtro muda (sem nova query ao Supabase)
 
