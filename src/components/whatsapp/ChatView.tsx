@@ -155,6 +155,29 @@ export function ChatView({ instanceName, chat, templates, consultantId, initialM
             Adicionar Cliente
           </Button>
         )}
+        {/* Send to CRM */}
+        {kanbanStages.length > 0 && (
+          <Select
+            onValueChange={handleSendToCrm}
+            disabled={sendingToCrm}
+          >
+            <SelectTrigger className="h-7 w-auto gap-1 text-[10px] border-accent/30 text-accent-foreground px-2">
+              {sendingToCrm ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <KanbanSquare className="h-3.5 w-3.5" />
+              )}
+              <span>CRM</span>
+            </SelectTrigger>
+            <SelectContent>
+              {kanbanStages.map((stage) => (
+                <SelectItem key={stage.id} value={stage.stage_key}>
+                  {stage.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
       {/* Messages area */}
