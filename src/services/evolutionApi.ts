@@ -308,11 +308,11 @@ export async function sendDocument(
 
 // ─── Presence / Read ───
 
-export async function markAsRead(instanceName: string, remoteJid: string) {
+export async function markAsRead(instanceName: string, remoteJid: string, messageId: string, fromMe: boolean) {
   return request<void>(
     `chat/markMessageAsRead/${instanceName}`,
     "POST",
-    { readMessages: [{ remoteJid }] }
+    { readMessages: [{ id: messageId, remoteJid, fromMe }] }
   );
 }
 

@@ -123,10 +123,13 @@ export function useMessages(
         setResolvedSendTargetJid((prev) => prev || fallbackSendTarget);
       }
 
-      try {
-        await markAsRead(instanceName, remoteJid);
-      } catch {
-        // ignore
+      const lastIncoming = [...mapped].reverse().find((m) => !m.fromMe);
+      if (lastIncoming) {
+        try {
+          await markAsRead(instanceName, remoteJid, lastIncoming.id, false);
+        } catch {
+          // ignore
+        }
       }
     } catch {
       // ignore polling errors
