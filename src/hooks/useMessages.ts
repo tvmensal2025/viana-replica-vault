@@ -219,15 +219,21 @@ export function useMessages(
         return;
       }
 
+      logger.debug("sendMessage called", { text: text.slice(0, 50), remoteJid, preferredSendTargetJid, resolvedSendTargetJid });
+
       const targetJid = await resolveSendTargetJid();
       if (!targetJid) {
+        logger.error("resolveSendTargetJid returned null");
         throw new Error("Destinatário inválido para envio");
       }
 
-      // sendText expects number for normal chats; for @lid fallback we try raw jid
+      // For @lid JIDs, try sending with the full JID (Evolution API may accept it)
+      // For @s.whatsapp.net, extract just the phone number
       const recipient = targetJid.endsWith("@s.whatsapp.net")
         ? targetJid.split("@")[0]
-        : targetJid;
+        : targetJid.endsWith("@lid")
+          ? targetJid  // send full @lid JID — Evolution API handles it
+          : targetJid;
 
       logger.debug(
         "sending to:",
