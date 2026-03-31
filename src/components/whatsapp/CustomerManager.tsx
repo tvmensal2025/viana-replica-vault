@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   UserPlus, Trash2, Users, Search, Phone, Mail, MapPin, Zap,
   ChevronDown, ChevronUp, Pencil, CreditCard, User, Save, X,
   Loader2, Upload, FileSpreadsheet, CheckCircle2, CheckSquare, Square,
   MessageCircle, Copy, Building2, AlertTriangle, FileText, ClipboardCopy,
-  RefreshCw,
+  RefreshCw, Filter,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,7 @@ import { AddCustomerDialog } from "./AddCustomerDialog";
 import type { TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface Customer {
   id: string;
@@ -190,6 +191,7 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
   const [selectedPhones, setSelectedPhones] = useState<Set<string>>(new Set());
   const [parsing, setParsing] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [selectedLicenciado, setSelectedLicenciado] = useState("all");
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState<string | null>(null);
 
@@ -257,6 +259,14 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
     return () => { cancelled = true; clearTimeout(timer); };
   }, [instanceName, customers]);
 
+  const licenciadoOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const c of customers) {
+      if (c.registered_by_name) names.add(c.registered_by_name);
+    }
+    return Array.from(names).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [customers]);
+
   // Filter by search
   const searchFiltered = search.trim()
     ? customers.filter(
@@ -268,12 +278,16 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
       )
     : customers;
 
+  const licenciadoFiltered = selectedLicenciado === "all"
+    ? searchFiltered
+    : searchFiltered.filter((c) => (c.registered_by_name || "Sem licenciado") === selectedLicenciado);
+
   // Filter by status
   const filtered = statusFilter === "all"
-    ? searchFiltered
+    ? licenciadoFiltered
     : statusFilter === "devolutiva"
-    ? searchFiltered.filter((c) => isDevolutiva(c))
-    : searchFiltered.filter((c) => c.status === statusFilter);
+    ? licenciadoFiltered.filter((c) => isDevolutiva(c))
+    : licenciadoFiltered.filter((c) => c.status === statusFilter);
 
   // Stats
   const devolutivaCount = customers.filter((c) => isDevolutiva(c)).length;
@@ -670,9 +684,26 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
 
         {/* Search */}
         <div className="px-5 pt-4 pb-3">
-          <div className="relative">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
-            <Input placeholder="Buscar por nome, telefone, email ou CPF..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10 h-10 rounded-xl bg-secondary/30 border-border/50 focus:border-primary/40 text-sm" />
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_240px]">
+            <div className="relative">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
+              <Input placeholder="Buscar por nome, telefone, email ou CPF..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10 h-10 rounded-xl bg-secondary/30 border-border/50 focus:border-primary/40 text-sm" />
+            </div>
+            <Select value={selectedLicenciado} onValueChange={setSelectedLicenciado}>
+              <SelectTrigger className="h-10 rounded-xl bg-secondary/30 border-border/50 text-sm">
+                <div className="flex items-center gap-2 truncate">
+                  <Filter className="w-4 h-4 text-muted-foreground" />
+                  <SelectValue placeholder="Filtrar licenciado" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os licenciados</SelectItem>
+                {licenciadoOptions.map((name) => (
+                  <SelectItem key={name} value={name}>{name}</SelectItem>
+                ))}
+                {licenciadoOptions.length === 0 && <SelectItem value="empty" disabled>Sem licenciados</SelectItem>}
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
