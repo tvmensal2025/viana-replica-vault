@@ -217,6 +217,17 @@ export function ChatView({ instanceName, chat, templates, consultantId, initialM
             toast({ title: "Erro ao enviar áudio", description: err instanceof Error ? err.message : "Falha no envio", variant: "destructive" });
           }
         }}
+        onSendAudioUrl={async (audioUrl) => {
+          if (!chat) return;
+          const targetJid = chat.sendTargetJid || chat.remoteJid;
+          const phone = targetJid.split("@")[0];
+          try {
+            await sendAudioApi(instanceName, phone, audioUrl);
+          } catch (err: unknown) {
+            logger.error("Erro ao enviar áudio:", err);
+            toast({ title: "Erro ao enviar áudio", description: err instanceof Error ? err.message : "Falha no envio", variant: "destructive" });
+          }
+        }}
         onSendMedia={async (mediaUrl, caption, mediaType) => {
           if (!chat) return;
           const targetJid = chat.sendTargetJid || chat.remoteJid;

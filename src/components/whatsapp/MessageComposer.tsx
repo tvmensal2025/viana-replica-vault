@@ -15,13 +15,14 @@ type MediaType = "image" | "video" | "document";
 interface MessageComposerProps {
   onSend: (text: string) => Promise<void>;
   onSendAudio?: (audioBase64: string) => Promise<void>;
+  onSendAudioUrl?: (audioUrl: string) => Promise<void>;
   onSendMedia?: (mediaUrl: string, caption: string, mediaType: MediaType) => Promise<void>;
   templates: MessageTemplate[];
   disabled?: boolean;
   initialMessage?: string | null;
 }
 
-export function MessageComposer({ onSend, onSendAudio, onSendMedia, templates, disabled, initialMessage }: MessageComposerProps) {
+export function MessageComposer({ onSend, onSendAudio, onSendAudioUrl, onSendMedia, templates, disabled, initialMessage }: MessageComposerProps) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [showQuickReply, setShowQuickReply] = useState(false);
@@ -30,7 +31,8 @@ export function MessageComposer({ onSend, onSendAudio, onSendMedia, templates, d
   const [recordingTime, setRecordingTime] = useState(0);
 
   // File attach state
-  const [attachedFile, setAttachedFile] = useState<{ url: string; name: string; type: MediaType } | null>(null);
+  const [attachedFile, setAttachedFile] = useState<{ url: string; name: string; type: MediaType | "audio" } | null>(null);
+  const [pendingImageUrl, setPendingImageUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
 
@@ -64,12 +66,29 @@ export function MessageComposer({ onSend, onSendAudio, onSendMedia, templates, d
 
   const handleSend = useCallback(async () => {
     // If there's a file attached, send it as media
-    if (attachedFile && onSendMedia) {
+    if (attachedFile) {
       setSending(true);
       try {
-        await onSendMedia(attachedFile.url, text.trim(), attachedFile.type);
+        // Send pending image first (from template image_url)
+        if (pendingImageUrl && onSendMedia) {
+          await onSendMedia(pendingImageUrl, "", "image");
+        }
+
+        // Audio templates use sendAudioUrl (WhatsApp voice note endpoint)
+        if (attachedFile.type === "audio" && onSendAudioUrl) {
+          await onSendAudioUrl(attachedFile.url);
+          // Send text as separate message if present
+          const trimmed = text.trim();
+          if (trimmed) {
+            await onSend(trimmed);
+          }
+        } else if (onSendMedia) {
+          await onSendMedia(attachedFile.url, text.trim(), attachedFile.type as MediaType);
+        }
+
         setText("");
         setAttachedFile(null);
+        setPendingImageUrl(null);
         setShowQuickReply(false);
       } catch {
         // handled upstream
@@ -83,6 +102,11 @@ export function MessageComposer({ onSend, onSendAudio, onSendMedia, templates, d
     if (!trimmed || sending) return;
     setSending(true);
     try {
+      // Send pending image first
+      if (pendingImageUrl && onSendMedia) {
+        await onSendMedia(pendingImageUrl, "", "image");
+        setPendingImageUrl(null);
+      }
       await onSend(trimmed);
       setText("");
       setShowQuickReply(false);
@@ -91,7 +115,7 @@ export function MessageComposer({ onSend, onSendAudio, onSendMedia, templates, d
     } finally {
       setSending(false);
     }
-  }, [text, sending, onSend, onSendMedia, attachedFile]);
+  }, [text, sending, onSend, onSendMedia, onSendAudioUrl, attachedFile, pendingImageUrl]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -112,8 +136,18 @@ export function MessageComposer({ onSend, onSendAudio, onSendMedia, templates, d
     // If template has media, set it as attached file
     if (t.media_url && t.media_type && t.media_type !== "text") {
       const mediaStr = t.media_type as string;
-      const type: MediaType = mediaStr === "image" ? "image" : mediaStr === "video" ? "video" : "document";
-      setAttachedFile({ url: t.media_url, name: `${t.name}.${t.media_type}`, type });
+      if (mediaStr === "audio") {
+        setAttachedFile({ url: t.media_url, name: `${t.name}.audio`, type: "audio" });
+      } else {
+        const type: MediaType = mediaStr === "image" ? "image" : mediaStr === "video" ? "video" : "document";
+        setAttachedFile({ url: t.media_url, name: `${t.name}.${t.media_type}`, type });
+      }
+    }
+    // If template has an optional image, queue it to be sent before the main content
+    if (t.image_url) {
+      setPendingImageUrl(t.image_url);
+    } else {
+      setPendingImageUrl(null);
     }
     textareaRef.current?.focus();
   }, []);
@@ -258,10 +292,24 @@ export function MessageComposer({ onSend, onSendAudio, onSendMedia, templates, d
         />
       )}
 
+      {/* Pending image preview */}
+      {pendingImageUrl && (
+        <div className="flex items-center gap-2 mb-2 px-1 py-1.5 rounded-lg bg-secondary/30 border border-border/30">
+          <Image className="w-4 h-4 text-blue-400 shrink-0" />
+          <span className="text-xs text-foreground truncate flex-1">📷 Imagem será enviada antes</span>
+          <img src={pendingImageUrl} alt="preview" className="h-8 w-8 rounded object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+          <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => setPendingImageUrl(null)}>
+            <X className="w-3 h-3" />
+          </Button>
+        </div>
+      )}
+
       {/* Attached file preview */}
       {attachedFile && (
         <div className="flex items-center gap-2 mb-2 px-1 py-1.5 rounded-lg bg-secondary/30 border border-border/30">
-          {attachedFile.type === "image" ? (
+          {attachedFile.type === "audio" ? (
+            <Mic className="w-4 h-4 text-green-400 shrink-0" />
+          ) : attachedFile.type === "image" ? (
             <Image className="w-4 h-4 text-blue-400 shrink-0" />
           ) : attachedFile.type === "video" ? (
             <Video className="w-4 h-4 text-purple-400 shrink-0" />
@@ -269,7 +317,7 @@ export function MessageComposer({ onSend, onSendAudio, onSendMedia, templates, d
             <File className="w-4 h-4 text-red-400 shrink-0" />
           )}
           <span className="text-xs text-foreground truncate flex-1">{attachedFile.name}</span>
-          <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => setAttachedFile(null)}>
+          <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => { setAttachedFile(null); setPendingImageUrl(null); }}>
             <X className="w-3 h-3" />
           </Button>
         </div>
