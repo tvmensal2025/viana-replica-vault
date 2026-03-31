@@ -263,16 +263,17 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
 
       {/* Content area */}
       <div className="flex-1 border border-t-0 border-border rounded-b-lg overflow-hidden bg-background">
-        {activeSubTab === "conversas" && instanceName && (
-          <div className="flex h-full">
-            <div className="w-[300px] shrink-0">
-              <ChatSidebar
-                chats={chats}
-                isLoading={chatsLoading}
-                selectedJid={selectedChatJid}
-                onSelectChat={handleSelectChat}
-              />
-            </div>
+        {activeSubTab === "conversas" && (
+          isConnected && instanceName ? (
+            <div className="flex h-full">
+              <div className="w-[300px] shrink-0">
+                <ChatSidebar
+                  chats={chats}
+                  isLoading={chatsLoading}
+                  selectedJid={selectedChatJid}
+                  onSelectChat={handleSelectChat}
+                />
+              </div>
               <ChatView
                 instanceName={instanceName}
                 chat={selectedChat}
@@ -281,7 +282,25 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
                 initialMessage={pendingMessage}
                 key={`chat-${selectedChatJid}-${pendingMessageKey}`}
               />
-          </div>
+            </div>
+          ) : (
+            <div className="p-4 overflow-auto h-full">
+              <ConnectionPanel
+                connectionStatus={connectionStatus}
+                qrCode={qrCode}
+                qrGeneratedAt={qrGeneratedAt}
+                instanceName={instanceName}
+                phoneNumber={phoneNumber}
+                isLoading={isLoading}
+                error={error}
+                connectionLog={connectionLog}
+                onConnect={createAndConnect}
+                onDisconnect={disconnect}
+                onReconnect={reconnect}
+                onRefreshQr={refreshQr}
+              />
+            </div>
+          )
         )}
 
         {activeSubTab === "crm" && (
