@@ -479,13 +479,13 @@ const Admin = () => {
                   <Users className="w-4 h-4 text-primary" /> Status dos Clientes
                 </h3>
                 <p className="text-xs text-muted-foreground mb-4">Distribuição por status</p>
-                {analytics?.customersByStatus && analytics.customersByStatus.length > 0 ? (
+                {filteredMetrics?.customersByStatus && filteredMetrics.customersByStatus.length > 0 ? (
                   <>
                     <div className="h-52">
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
                           <Pie
-                            data={analytics.customersByStatus.map((s) => ({ name: s.label, value: s.count }))}
+                            data={filteredMetrics.customersByStatus.map((s) => ({ name: s.label, value: s.count }))}
                             cx="50%"
                             cy="50%"
                             innerRadius={50}
@@ -494,12 +494,15 @@ const Admin = () => {
                             dataKey="value"
                             stroke="none"
                           >
-                            {analytics.customersByStatus.map((s, i) => {
+                            {filteredMetrics.customersByStatus.map((s, i) => {
                               const statusColors: Record<string, string> = {
                                 approved: "hsl(130, 100%, 36%)",
                                 pending: "hsl(45, 100%, 50%)",
                                 rejected: "hsl(0, 80%, 55%)",
                                 lead: "hsl(200, 100%, 50%)",
+                                data_complete: "hsl(180, 70%, 45%)",
+                                registered_igreen: "hsl(260, 60%, 55%)",
+                                contract_sent: "hsl(30, 100%, 50%)",
                               };
                               return <Cell key={i} fill={statusColors[s.status] || "hsl(260, 60%, 55%)"} />;
                             })}
@@ -523,12 +526,15 @@ const Admin = () => {
                     </div>
                     {/* Status badges */}
                     <div className="flex flex-wrap gap-2 mt-3 justify-center">
-                      {analytics.customersByStatus.map((s) => {
+                      {filteredMetrics.customersByStatus.map((s) => {
                         const badgeColors: Record<string, string> = {
                           approved: "bg-green-500/20 text-green-400",
                           pending: "bg-yellow-500/20 text-yellow-400",
                           rejected: "bg-red-500/20 text-red-400",
                           lead: "bg-blue-500/20 text-blue-400",
+                          data_complete: "bg-teal-500/20 text-teal-400",
+                          registered_igreen: "bg-purple-500/20 text-purple-400",
+                          contract_sent: "bg-orange-500/20 text-orange-400",
                         };
                         return (
                           <span key={s.status} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${badgeColors[s.status] || "bg-purple-500/20 text-purple-400"}`}>
