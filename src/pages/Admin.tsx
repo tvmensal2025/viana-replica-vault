@@ -264,6 +264,21 @@ const Admin = () => {
             </div>
 
             {/* Customer KPI Cards */}
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-heading font-bold text-foreground text-sm flex items-center gap-2">
+                <Users className="w-4 h-4 text-primary" /> Clientes iGreen
+              </h3>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDashboardSync}
+                disabled={syncingDashboard}
+                className="h-8 text-xs gap-1.5"
+              >
+                {syncingDashboard ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                {syncingDashboard ? "Sincronizando..." : "Sincronizar iGreen"}
+              </Button>
+            </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
               <StatCard
                 icon={<Users className="w-5 h-5" />}
