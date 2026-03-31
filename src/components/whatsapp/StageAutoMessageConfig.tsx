@@ -150,18 +150,45 @@ export function StageAutoMessageConfig({
           })}
         </div>
 
-        {/* Media URL for non-text types */}
+        {/* Media upload for non-text types */}
         {type !== "text" && (
-          <Input
-            value={mediaUrl}
-            onChange={(e) => setMediaUrl(e.target.value)}
-            placeholder={
-              type === "image" ? "URL da imagem (https://...)" :
-              type === "video" ? "URL do vídeo (https://...)" :
-              "URL do áudio (https://...)"
-            }
-            className="h-8 text-xs"
-          />
+          <div className="space-y-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={getAcceptString(type)}
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+            <div className="flex gap-2">
+              <Input
+                value={mediaUrl}
+                onChange={(e) => setMediaUrl(e.target.value)}
+                placeholder={
+                  type === "image" ? "URL da imagem ou faça upload →" :
+                  type === "video" ? "URL do vídeo ou faça upload →" :
+                  "URL do áudio ou faça upload →"
+                }
+                className="h-8 text-xs flex-1"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs gap-1 shrink-0"
+                disabled={uploading}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                {uploading ? `${uploadProgress}%` : "Upload"}
+              </Button>
+            </div>
+            {mediaUrl && (
+              <p className="text-[10px] text-muted-foreground truncate">
+                ✅ {mediaUrl}
+              </p>
+            )}
+          </div>
         )}
 
         {/* Formatting toolbar */}
