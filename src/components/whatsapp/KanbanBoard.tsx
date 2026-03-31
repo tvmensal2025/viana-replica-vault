@@ -122,6 +122,12 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
       .replace(/\{\{telefone\}\}/g, phone);
 
     try {
+      // Send optional image first
+      const imageUrl = (stage as any).auto_message_image_url;
+      if (imageUrl) {
+        await sendMedia(instanceName, phone, imageUrl, "", "image");
+      }
+
       if (stage.auto_message_type === "text" || !stage.auto_message_type) {
         await sendTextMessage(instanceName, phone, messageText);
       } else if (stage.auto_message_type === "image" && stage.auto_message_media_url) {
@@ -130,6 +136,10 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
         await sendMedia(instanceName, phone, stage.auto_message_media_url, messageText, "video");
       } else if (stage.auto_message_type === "audio" && stage.auto_message_media_url) {
         await sendAudio(instanceName, phone, stage.auto_message_media_url);
+        // For audio, send text as separate message if present
+        if (messageText) {
+          await sendTextMessage(instanceName, phone, messageText);
+        }
       }
       toast({ title: `✅ Msg automática enviada (${stage.label})` });
     } catch {
