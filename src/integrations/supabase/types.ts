@@ -404,6 +404,7 @@ export type Database = {
           content: string
           created_at: string | null
           id: string
+          image_url: string | null
           media_type: string | null
           media_url: string | null
           name: string
@@ -413,6 +414,7 @@ export type Database = {
           content: string
           created_at?: string | null
           id?: string
+          image_url?: string | null
           media_type?: string | null
           media_url?: string | null
           name: string
@@ -422,6 +424,7 @@ export type Database = {
           content?: string
           created_at?: string | null
           id?: string
+          image_url?: string | null
           media_type?: string | null
           media_url?: string | null
           name?: string
