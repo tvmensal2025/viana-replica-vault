@@ -37,7 +37,7 @@ const ReferralSection = () => (
       <div className="mt-14 max-w-4xl mx-auto rounded-2xl overflow-hidden relative" style={{ boxShadow: 'var(--shadow-green-lg)' }}>
         <div className="absolute inset-0 rounded-2xl border border-primary/20 z-10 pointer-events-none" />
         <video controls className="w-full aspect-video relative z-0">
-          <source src="https://yolo-minio.b099mi.easypanel.host/igreen/club-de-beneficios.mp4" type="video/mp4" />
+          <source src="https://igreen-minio.b099mi.easypanel.host/igreen/club-de-beneficios.mp4" type="video/mp4" />
         </video>
       </div>
     </div>
