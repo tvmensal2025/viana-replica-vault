@@ -18,6 +18,7 @@ interface AddCustomerDialogProps {
   onOpenChange: (open: boolean) => void;
   phone: string;
   name: string | null;
+  consultantId: string;
   onAdded: () => void;
 }
 
