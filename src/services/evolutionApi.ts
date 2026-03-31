@@ -21,10 +21,13 @@ async function handleResponse<T>(response: Response): Promise<T> {
     }
   }
   if (!response.ok) {
-    // Try to extract the real error message from Evolution API JSON body
     let detail = response.statusText || "Erro desconhecido na API";
     try {
       const body = await response.json();
+      // If proxy returned a graceful timeout/fallback, return it instead of throwing
+      if (body?.timeout === true) {
+        return body as T;
+      }
       const msg =
         body?.response?.message?.[0] ||
         body?.response?.message ||

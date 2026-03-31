@@ -135,6 +135,14 @@ function createGracefulTimeoutResponse(safePath: string): Response | null {
     });
   }
 
+  // Message-sending routes — return a clear error object instead of 504 so frontend can handle it
+  if (safePath.startsWith("message/")) {
+    return new Response(JSON.stringify({ error: "Timeout ao enviar mensagem. Tente novamente.", timeout: true, sent: false }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   return null;
 }
 
