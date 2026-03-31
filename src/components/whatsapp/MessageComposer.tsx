@@ -69,21 +69,26 @@ export function MessageComposer({ onSend, onSendAudio, onSendAudioUrl, onSendMed
     if (attachedFile) {
       setSending(true);
       try {
-        // Send pending image first (from template image_url)
-        if (pendingImageUrl && onSendMedia) {
-          await onSendMedia(pendingImageUrl, "", "image");
-        }
+        const trimmed = text.trim();
 
-        // Audio templates use sendAudioUrl (WhatsApp voice note endpoint)
+        // Audio templates must follow the template order: audio -> image -> text
         if (attachedFile.type === "audio" && onSendAudioUrl) {
           await onSendAudioUrl(attachedFile.url);
-          // Send text as separate message if present
-          const trimmed = text.trim();
+
+          if (pendingImageUrl && onSendMedia) {
+            await onSendMedia(pendingImageUrl, "", "image");
+          }
+
           if (trimmed) {
             await onSend(trimmed);
           }
         } else if (onSendMedia) {
-          await onSendMedia(attachedFile.url, text.trim(), attachedFile.type as MediaType);
+          // For non-audio flows, keep the optional image before the main content
+          if (pendingImageUrl) {
+            await onSendMedia(pendingImageUrl, "", "image");
+          }
+
+          await onSendMedia(attachedFile.url, trimmed, attachedFile.type as MediaType);
         }
 
         setText("");
@@ -102,7 +107,7 @@ export function MessageComposer({ onSend, onSendAudio, onSendAudioUrl, onSendMed
     if (!trimmed || sending) return;
     setSending(true);
     try {
-      // Send pending image first
+      // Send pending image first when there's only text + image
       if (pendingImageUrl && onSendMedia) {
         await onSendMedia(pendingImageUrl, "", "image");
         setPendingImageUrl(null);
@@ -143,7 +148,7 @@ export function MessageComposer({ onSend, onSendAudio, onSendAudioUrl, onSendMed
         setAttachedFile({ url: t.media_url, name: `${t.name}.${t.media_type}`, type });
       }
     }
-    // If template has an optional image, queue it to be sent before the main content
+    // If template has an optional image, queue it for the secondary send step
     if (t.image_url) {
       setPendingImageUrl(t.image_url);
     } else {
@@ -167,11 +172,11 @@ export function MessageComposer({ onSend, onSendAudio, onSendAudioUrl, onSendMed
 
     try {
       const result = await uploadMedia(file, (pct) => setUploadProgress(pct));
-      
-      // If an audio template is already attached and user adds an image, set it as pending image
+
+      // If an audio template is already attached and user adds an image, keep template order: audio -> image
       if (attachedFile?.type === "audio" && file.type.startsWith("image/")) {
         setPendingImageUrl(result.url);
-        toast.success(`Imagem anexada: será enviada antes do áudio`);
+        toast.success("Imagem anexada: será enviada depois do áudio");
       } else {
         let fileType: MediaType = "document";
         if (file.type.startsWith("image/")) fileType = "image";
