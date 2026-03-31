@@ -51,6 +51,7 @@ export function AddCustomerDialog({
   onOpenChange,
   phone,
   name: initialName,
+  consultantId,
   onAdded,
 }: AddCustomerDialogProps) {
   const { toast } = useToast();
