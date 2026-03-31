@@ -46,7 +46,8 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
 
   async function handleBulkSend() {
     if (selectedIds.size === 0) { setWarning("Selecione pelo menos um destinatário"); return; }
-    if (!message.trim() && !(selectedTemplate?.media_url)) return;
+    const hasMedia = !!(selectedTemplate?.media_url);
+    if (!message.trim() && !hasMedia) return;
     setWarning(""); setIsSending(true); setResult(null);
     const selected = customers.filter((c) => selectedIds.has(c.id));
     let sent = 0, failed = 0;
@@ -57,28 +58,40 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
     for (let i = 0; i < selected.length; i++) {
       setProgress({ total: selected.length, sent, failed });
       try {
+        const phone = selected[i].phone_whatsapp;
         const msg = message.includes("{{")
           ? applyTemplate({ id: "", consultant_id: "", name: "", content: message, media_type: "text", media_url: null, image_url: null, created_at: "" }, selected[i])
           : message;
 
+        let allOk = true;
+
         if (tplMediaUrl && tplMediaType === "audio") {
-          await sendAudio(instanceName, selected[i].phone_whatsapp, tplMediaUrl);
+          const r = await sendWhatsAppMessage({ instanceName, phone, mediaCategory: "audio", mediaUrl: tplMediaUrl });
+          if (r.status === "failed") allOk = false;
           if (tplImageUrl) {
-            await sendMedia(instanceName, selected[i].phone_whatsapp, tplImageUrl, "", "image");
+            const r2 = await sendWhatsAppMessage({ instanceName, phone, mediaCategory: "image", mediaUrl: tplImageUrl });
+            if (r2.status === "failed") allOk = false;
           }
-          if (msg.trim()) await sendTextMessage(instanceName, selected[i].phone_whatsapp, msg);
+          if (msg.trim()) {
+            const r3 = await sendWhatsAppMessage({ instanceName, phone, mediaCategory: "text", text: msg });
+            if (r3.status === "failed") allOk = false;
+          }
         } else {
           if (tplImageUrl) {
-            await sendMedia(instanceName, selected[i].phone_whatsapp, tplImageUrl, "", "image");
+            const r = await sendWhatsAppMessage({ instanceName, phone, mediaCategory: "image", mediaUrl: tplImageUrl });
+            if (r.status === "failed") allOk = false;
           }
 
-          if (tplMediaUrl && (tplMediaType === "image" || tplMediaType === "document")) {
-            await sendMedia(instanceName, selected[i].phone_whatsapp, tplMediaUrl, msg, tplMediaType);
-          } else {
-            if (msg.trim()) await sendTextMessage(instanceName, selected[i].phone_whatsapp, msg);
+          if (tplMediaUrl && (tplMediaType === "image" || tplMediaType === "document" || tplMediaType === "video")) {
+            const category = tplMediaType as "image" | "video" | "document";
+            const r = await sendWhatsAppMessage({ instanceName, phone, mediaCategory: category, mediaUrl: tplMediaUrl, text: msg });
+            if (r.status === "failed") allOk = false;
+          } else if (msg.trim()) {
+            const r = await sendWhatsAppMessage({ instanceName, phone, mediaCategory: "text", text: msg });
+            if (r.status === "failed") allOk = false;
           }
         }
-        sent++;
+        if (allOk) sent++; else failed++;
       } catch { failed++; }
 
       // 20-second countdown between messages to protect the number
