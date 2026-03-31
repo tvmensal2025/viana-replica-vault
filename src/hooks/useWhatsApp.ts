@@ -611,17 +611,10 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
 
       if (cancelled) return;
 
-      // Auto-initiate connection: create instance and generate QR automatically
+      // Don't auto-create instance on mount — just show "Conectar" button
       setConnectionStatus("disconnected");
       setError(null);
       setIsLoading(false);
-
-      // Trigger automatic connection so QR is ready when user needs it
-      setTimeout(() => {
-        if (!cancelled && mountedRef.current) {
-          createAndConnect();
-        }
-      }, 500);
     }
 
     init();
