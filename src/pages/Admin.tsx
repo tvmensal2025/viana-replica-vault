@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,8 @@ import type { Database } from "@/integrations/supabase/types";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, AreaChart, Area, PieChart, Pie, Cell, Legend,
 } from "recharts";
-import { Eye, Users, Copy, ExternalLink, LogOut, Save, Camera, BarChart3, LinkIcon, Settings, Monitor, MousePointerClick, Clock, Smartphone, Globe, QrCode, Download, X, MessageSquare, Zap, TrendingUp, KeyRound, RefreshCw, Loader2 } from "lucide-react";
+import { Eye, Users, Copy, ExternalLink, LogOut, Save, Camera, BarChart3, LinkIcon, Settings, Monitor, MousePointerClick, Clock, Smartphone, Globe, QrCode, Download, X, MessageSquare, Zap, TrendingUp, KeyRound, RefreshCw, Loader2, Filter } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useQueryClient } from "@tanstack/react-query";
 import { WhatsAppTab } from "@/components/whatsapp/WhatsAppTab";
@@ -29,12 +30,75 @@ const Admin = () => {
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [syncingDashboard, setSyncingDashboard] = useState(false);
+  const [selectedLicenciado, setSelectedLicenciado] = useState("all");
   const [showCredentialsDialog, setShowCredentialsDialog] = useState(false);
   const [credForm, setCredForm] = useState({ email: "", password: "" });
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: analytics } = useAnalytics(userId);
+
+  // Derive unique licenciados list and filtered metrics
+  const licenciadoOptions = useMemo(() => {
+    if (!analytics?.allCustomers) return [];
+    const names = new Set<string>();
+    for (const c of analytics.allCustomers) {
+      if (c.registered_by_name) names.add(c.registered_by_name);
+    }
+    return Array.from(names).sort();
+  }, [analytics?.allCustomers]);
+
+  const filteredMetrics = useMemo(() => {
+    if (!analytics) return null;
+    const filtered = selectedLicenciado === "all"
+      ? analytics.allCustomers
+      : analytics.allCustomers.filter((c: any) => c.registered_by_name === selectedLicenciado);
+
+    const totalCustomers = filtered.length;
+    const totalKw = filtered.reduce((sum: number, c: any) => sum + (Number(c.media_consumo) || 0), 0);
+    const withConsumption = filtered.filter((c: any) => Number(c.media_consumo) > 0);
+    const avgKw = withConsumption.length > 0 ? totalKw / withConsumption.length : 0;
+
+    const statusMap = new Map<string, number>();
+    for (const c of filtered) {
+      const s = (c as any).status || "pending";
+      statusMap.set(s, (statusMap.get(s) || 0) + 1);
+    }
+    const statusLabels: Record<string, string> = {
+      approved: "Aprovados", pending: "Pendentes", rejected: "Rejeitados", lead: "Leads",
+      data_complete: "Dados Completos", registered_igreen: "Cadastrado iGreen", contract_sent: "Contrato Enviado",
+    };
+    const customersByStatus = Array.from(statusMap.entries())
+      .map(([status, count]) => ({
+        status, count,
+        label: statusLabels[status] || status.charAt(0).toUpperCase() + status.slice(1),
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    // Weekly new customers
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const weekMap = new Map<string, number>();
+    for (let i = 3; i >= 0; i--) {
+      const start = new Date(); start.setDate(start.getDate() - (i + 1) * 7);
+      const end = new Date(); end.setDate(end.getDate() - i * 7);
+      const label = `${start.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} - ${end.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}`;
+      weekMap.set(label, 0);
+    }
+    for (const c of filtered) {
+      const created = new Date((c as any).created_at);
+      if (created >= thirtyDaysAgo) {
+        const daysAgo = Math.floor((Date.now() - created.getTime()) / (1000 * 60 * 60 * 24));
+        const weekIdx = Math.min(3, Math.floor(daysAgo / 7));
+        const keys = Array.from(weekMap.keys());
+        const key = keys[3 - weekIdx];
+        if (key) weekMap.set(key, (weekMap.get(key) || 0) + 1);
+      }
+    }
+    const weeklyNewCustomers = Array.from(weekMap.entries()).map(([week, count]) => ({ week, count }));
+
+    return { totalCustomers, totalKw, avgKw, customersByStatus, weeklyNewCustomers };
+  }, [analytics, selectedLicenciado]);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
@@ -264,34 +328,48 @@ const Admin = () => {
             </div>
 
             {/* Customer KPI Cards */}
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
               <h3 className="font-heading font-bold text-foreground text-sm flex items-center gap-2">
                 <Users className="w-4 h-4 text-primary" /> Clientes iGreen
               </h3>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleDashboardSync}
-                disabled={syncingDashboard}
-                className="h-8 text-xs gap-1.5"
-              >
-                {syncingDashboard ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                {syncingDashboard ? "Sincronizando..." : "Sincronizar iGreen"}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Select value={selectedLicenciado} onValueChange={setSelectedLicenciado}>
+                  <SelectTrigger className="h-8 w-[200px] text-xs">
+                    <Filter className="w-3.5 h-3.5 mr-1.5" />
+                    <SelectValue placeholder="Filtrar licenciado" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos os Licenciados</SelectItem>
+                    {licenciadoOptions.map((name) => (
+                      <SelectItem key={name} value={name}>{name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDashboardSync}
+                  disabled={syncingDashboard}
+                  className="h-8 text-xs gap-1.5"
+                >
+                  {syncingDashboard ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                  {syncingDashboard ? "Sincronizando..." : "Sincronizar iGreen"}
+                </Button>
+              </div>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
               <StatCard
                 icon={<Users className="w-5 h-5" />}
                 label="Total de Clientes"
-                value={analytics?.totalCustomers ?? 0}
+                value={filteredMetrics?.totalCustomers ?? 0}
                 color="primary"
               />
               <StatCard
                 icon={<Zap className="w-5 h-5" />}
                 label="Total kW (Consumo)"
-                value={`${(analytics?.totalKw ?? 0).toLocaleString("pt-BR")} kW`}
+                value={`${(filteredMetrics?.totalKw ?? 0).toLocaleString("pt-BR")} kW`}
                 color="accent"
-                subtitle={`Média: ${(analytics?.avgKw ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kW`}
+                subtitle={`Média: ${(filteredMetrics?.avgKw ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kW`}
               />
               <StatCard
                 icon={<TrendingUp className="w-5 h-5" />}
@@ -401,13 +479,13 @@ const Admin = () => {
                   <Users className="w-4 h-4 text-primary" /> Status dos Clientes
                 </h3>
                 <p className="text-xs text-muted-foreground mb-4">Distribuição por status</p>
-                {analytics?.customersByStatus && analytics.customersByStatus.length > 0 ? (
+                {filteredMetrics?.customersByStatus && filteredMetrics.customersByStatus.length > 0 ? (
                   <>
                     <div className="h-52">
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
                           <Pie
-                            data={analytics.customersByStatus.map((s) => ({ name: s.label, value: s.count }))}
+                            data={filteredMetrics.customersByStatus.map((s) => ({ name: s.label, value: s.count }))}
                             cx="50%"
                             cy="50%"
                             innerRadius={50}
@@ -416,12 +494,15 @@ const Admin = () => {
                             dataKey="value"
                             stroke="none"
                           >
-                            {analytics.customersByStatus.map((s, i) => {
+                            {filteredMetrics.customersByStatus.map((s, i) => {
                               const statusColors: Record<string, string> = {
                                 approved: "hsl(130, 100%, 36%)",
                                 pending: "hsl(45, 100%, 50%)",
                                 rejected: "hsl(0, 80%, 55%)",
                                 lead: "hsl(200, 100%, 50%)",
+                                data_complete: "hsl(180, 70%, 45%)",
+                                registered_igreen: "hsl(260, 60%, 55%)",
+                                contract_sent: "hsl(30, 100%, 50%)",
                               };
                               return <Cell key={i} fill={statusColors[s.status] || "hsl(260, 60%, 55%)"} />;
                             })}
@@ -445,12 +526,15 @@ const Admin = () => {
                     </div>
                     {/* Status badges */}
                     <div className="flex flex-wrap gap-2 mt-3 justify-center">
-                      {analytics.customersByStatus.map((s) => {
+                      {filteredMetrics.customersByStatus.map((s) => {
                         const badgeColors: Record<string, string> = {
                           approved: "bg-green-500/20 text-green-400",
                           pending: "bg-yellow-500/20 text-yellow-400",
                           rejected: "bg-red-500/20 text-red-400",
                           lead: "bg-blue-500/20 text-blue-400",
+                          data_complete: "bg-teal-500/20 text-teal-400",
+                          registered_igreen: "bg-purple-500/20 text-purple-400",
+                          contract_sent: "bg-orange-500/20 text-orange-400",
                         };
                         return (
                           <span key={s.status} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${badgeColors[s.status] || "bg-purple-500/20 text-purple-400"}`}>
@@ -467,7 +551,7 @@ const Admin = () => {
             </div>
 
             {/* Weekly New Customers */}
-            {analytics?.weeklyNewCustomers && analytics.weeklyNewCustomers.some((w) => w.count > 0) && (
+            {filteredMetrics?.weeklyNewCustomers && filteredMetrics.weeklyNewCustomers.some((w) => w.count > 0) && (
               <div className="bg-card rounded-2xl border border-border p-4 sm:p-6">
                 <h3 className="font-heading font-bold text-foreground mb-1 flex items-center gap-2">
                   <TrendingUp className="w-4 h-4 text-primary" /> Novos Clientes por Semana
@@ -475,7 +559,7 @@ const Admin = () => {
                 <p className="text-xs text-muted-foreground mb-4">Últimos 30 dias</p>
                 <div className="h-52">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={analytics.weeklyNewCustomers} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                    <AreaChart data={filteredMetrics.weeklyNewCustomers} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
                       <defs>
                         <linearGradient id="colorNewCust" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="5%" stopColor="hsl(200, 100%, 50%)" stopOpacity={0.3} />
