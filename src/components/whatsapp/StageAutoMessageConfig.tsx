@@ -217,6 +217,48 @@ export function StageAutoMessageConfig({
           </div>
         )}
 
+        {/* Optional image attachment (available for all types except "image") */}
+        {type !== "image" && (
+          <div className="space-y-2">
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleImageUpload}
+              className="hidden"
+            />
+            <p className="text-[10px] text-muted-foreground font-medium">📷 Imagem opcional (enviada antes da mensagem)</p>
+            <div className="flex gap-2">
+              <Input
+                value={imageUrl}
+                onChange={(e) => setImageUrl(e.target.value)}
+                placeholder="URL da imagem ou faça upload →"
+                className="h-8 text-xs flex-1"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs gap-1 shrink-0"
+                disabled={uploadingImage}
+                onClick={() => imageInputRef.current?.click()}
+              >
+                {uploadingImage ? <Loader2 className="h-3 w-3 animate-spin" /> : <Image className="h-3 w-3" />}
+                {uploadingImage ? `${imageUploadProgress}%` : "Imagem"}
+              </Button>
+            </div>
+            {imageUrl && (
+              <div className="flex items-center gap-2">
+                <img src={imageUrl} alt="preview" className="h-10 w-10 rounded object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                <p className="text-[10px] text-muted-foreground truncate flex-1">✅ {imageUrl}</p>
+                <Button variant="ghost" size="icon" className="h-5 w-5 text-destructive" onClick={() => setImageUrl("")}>
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            )}
+          </div>
+        )
+
         {/* Formatting toolbar */}
         <div className="flex items-center gap-1 border border-border rounded-t-md px-2 py-1 bg-secondary/30 -mb-2">
           <Button variant="ghost" size="icon" className="h-6 w-6" onClick={insertBold} title="Negrito *texto*">
