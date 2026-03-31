@@ -31,6 +31,8 @@ const Admin = () => {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [syncingDashboard, setSyncingDashboard] = useState(false);
   const [selectedLicenciado, setSelectedLicenciado] = useState("all");
+  const [showCredPassword, setShowCredPassword] = useState(false);
+  const [showPortalPassword, setShowPortalPassword] = useState(false);
   const [showCredentialsDialog, setShowCredentialsDialog] = useState(false);
   const [credForm, setCredForm] = useState({ email: "", password: "" });
   const navigate = useNavigate();
