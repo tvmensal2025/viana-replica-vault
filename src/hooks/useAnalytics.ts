@@ -228,7 +228,7 @@ export function useAnalytics(consultantId: string | null) {
         const label = `${start.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} - ${end.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}`;
         weekMap.set(label, 0);
       }
-      for (const c of customers) {
+      for (const c of allCustomers) {
         const created = new Date(c.created_at);
         if (created >= thirtyDaysAgo) {
           const daysAgo = Math.floor((Date.now() - created.getTime()) / (1000 * 60 * 60 * 24));
