@@ -1,22 +1,56 @@
 
 
-## Correção: Erro de gravação dos clientes sincronizados
+## Correção: WhatsApp trava em "Conexão perdida"
 
-### Situação atual
-A sincronização com a API iGreen **já funciona**. O login, busca do ID do consultor (124170) e download dos 259 clientes estão OK. O problema é na gravação no banco: a coluna `data_nascimento` é `varchar(10)`, mas os dados do portal podem vir em formato mais longo (ex: "1993-07-20T00:00:00"), causando o erro `value too long for type character varying(10)` e falhando **todos** os 126 registros.
+### Problema
+Quando o polling detecta que o estado mudou para "close" (linha 187-198 do `useWhatsApp.ts`), ele **para de fazer polling completamente** e mostra "Conexão perdida". O consultor precisa clicar manualmente em "Reconectar". Isso acontece por quedas momentâneas de rede ou instabilidade do servidor Evolution.
 
-### Correção (2 passos)
+### Solução: Auto-reconexão com retry
 
-**1. Migração SQL** — Alterar `data_nascimento` para `text` (sem limite), igual às outras colunas de data da tabela:
-```sql
-ALTER TABLE customers ALTER COLUMN data_nascimento TYPE text;
-```
+**Arquivo: `src/hooks/useWhatsApp.ts`**
 
-**2. Edge Function** — Adicionar truncamento de segurança no `buildRecord` para garantir que mesmo que venha com horário, só os primeiros 10 caracteres (YYYY-MM-DD) sejam salvos:
+1. Quando o polling detectar estado "close" e o status anterior era "connected", em vez de parar, tentar reconexão automática:
+   - Aguardar 5 segundos e verificar novamente (pode ser queda momentânea)
+   - Se após 3 verificações consecutivas continuar "close", tentar `connectInstance` automaticamente para obter novo QR ou restaurar sessão
+   - Só mostrar "Conexão perdida" após 3 tentativas falharem (~15 segundos)
+
+2. Adicionar um contador de falhas consecutivas via `useRef` para controlar o retry:
+   - 1-3 falhas: continua polling a cada 5s silenciosamente
+   - Após 3 falhas: mostra toast + "Conexão perdida" + botão reconectar
+   - Se voltar a "open" durante o retry, restaura normalmente
+
+3. Manter o polling ativo mesmo no estado "disconnected" (a cada 30s) para detectar reconexão automática do celular ao servidor.
+
+### Mudanças específicas
+
 ```typescript
-if (nasc) record.data_nascimento = nasc.substring(0, 10);
+// Adicionar ref para contar falhas consecutivas
+const consecutiveFailsRef = useRef(0);
+
+// No poll(), quando state === "close":
+// Em vez de parar imediatamente:
+if (state !== "open" && state !== "connecting") {
+  consecutiveFailsRef.current += 1;
+  
+  if (consecutiveFailsRef.current <= 3) {
+    // Retry silencioso - pode ser queda momentânea
+    pollRef.current = setTimeout(poll, 5000);
+  } else {
+    // Realmente perdeu conexão
+    setConnectionStatus("disconnected");
+    addLog("⚠️ Conexão perdida");
+    toast({ title: "Conexão WhatsApp perdida", variant: "destructive" });
+    // Continua polling lento para detectar reconexão automática
+    pollRef.current = setTimeout(poll, 30000);
+  }
+}
+
+// Quando state === "open", resetar contador:
+consecutiveFailsRef.current = 0;
 ```
 
 ### Resultado esperado
-Os 126 clientes serão gravados com sucesso na próxima sincronização. Nenhuma outra mudança necessária — a API do iGreen está respondendo corretamente.
+- Quedas momentâneas (< 15s) são recuperadas silenciosamente
+- Polling nunca para completamente, permitindo reconexão automática
+- Só mostra "Conexão perdida" após confirmar que realmente caiu
 
