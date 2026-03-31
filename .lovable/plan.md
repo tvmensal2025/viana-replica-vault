@@ -1,56 +1,36 @@
 
 
-## Correção: WhatsApp trava em "Conexão perdida"
+## Plano: Botão de Sincronização iGreen no Dashboard
 
-### Problema
-Quando o polling detecta que o estado mudou para "close" (linha 187-198 do `useWhatsApp.ts`), ele **para de fazer polling completamente** e mostra "Conexão perdida". O consultor precisa clicar manualmente em "Reconectar". Isso acontece por quedas momentâneas de rede ou instabilidade do servidor Evolution.
+### O que será feito
 
-### Solução: Auto-reconexão com retry
+Adicionar um botão compacto "Sincronizar iGreen" no dashboard principal (aba Dashboard do Admin). Ao clicar:
+1. Se o consultor **não tem** email/senha do portal iGreen salvos → abre um popup (Dialog) pedindo email e senha, salva na tabela `consultants`, e já inicia a sincronização.
+2. Se **já tem** credenciais salvas → executa a sincronização direto, sem popup.
 
-**Arquivo: `src/hooks/useWhatsApp.ts`**
+### Arquivos alterados
 
-1. Quando o polling detectar estado "close" e o status anterior era "connected", em vez de parar, tentar reconexão automática:
-   - Aguardar 5 segundos e verificar novamente (pode ser queda momentânea)
-   - Se após 3 verificações consecutivas continuar "close", tentar `connectInstance` automaticamente para obter novo QR ou restaurar sessão
-   - Só mostrar "Conexão perdida" após 3 tentativas falharem (~15 segundos)
+**`src/pages/Admin.tsx`**
+- Importar `Dialog`, `DialogContent`, `DialogHeader`, `DialogTitle` e `RefreshCw` icon
+- Adicionar estados: `syncingDashboard`, `showCredentialsDialog`, `credForm` (email/senha)
+- Adicionar função `handleDashboardSync`:
+  - Busca credenciais do consultor no state (`form.igreen_portal_email`, `form.igreen_portal_password`)
+  - Se vazias → abre o dialog de credenciais
+  - Se preenchidas → chama `supabase.functions.invoke("sync-igreen-customers")` com as credenciais
+- Adicionar função `handleSaveCredentialsAndSync`:
+  - Salva email/senha na tabela `consultants` via update
+  - Atualiza o state `form` local com as credenciais
+  - Fecha o dialog
+  - Inicia a sincronização automaticamente
+- Renderizar um botão pequeno com ícone `RefreshCw` + "Sincronizar iGreen" ao lado dos KPIs de clientes (seção "Customer KPI Cards")
+- Renderizar o `Dialog` de credenciais com dois inputs (email e senha) e botão "Conectar e Sincronizar"
+- Após sincronização bem-sucedida, invalidar queries de analytics para atualizar os dados do dashboard
 
-2. Adicionar um contador de falhas consecutivas via `useRef` para controlar o retry:
-   - 1-3 falhas: continua polling a cada 5s silenciosamente
-   - Após 3 falhas: mostra toast + "Conexão perdida" + botão reconectar
-   - Se voltar a "open" durante o retry, restaura normalmente
+### Detalhes técnicos
 
-3. Manter o polling ativo mesmo no estado "disconnected" (a cada 30s) para detectar reconexão automática do celular ao servidor.
-
-### Mudanças específicas
-
-```typescript
-// Adicionar ref para contar falhas consecutivas
-const consecutiveFailsRef = useRef(0);
-
-// No poll(), quando state === "close":
-// Em vez de parar imediatamente:
-if (state !== "open" && state !== "connecting") {
-  consecutiveFailsRef.current += 1;
-  
-  if (consecutiveFailsRef.current <= 3) {
-    // Retry silencioso - pode ser queda momentânea
-    pollRef.current = setTimeout(poll, 5000);
-  } else {
-    // Realmente perdeu conexão
-    setConnectionStatus("disconnected");
-    addLog("⚠️ Conexão perdida");
-    toast({ title: "Conexão WhatsApp perdida", variant: "destructive" });
-    // Continua polling lento para detectar reconexão automática
-    pollRef.current = setTimeout(poll, 30000);
-  }
-}
-
-// Quando state === "open", resetar contador:
-consecutiveFailsRef.current = 0;
-```
-
-### Resultado esperado
-- Quedas momentâneas (< 15s) são recuperadas silenciosamente
-- Polling nunca para completamente, permitindo reconexão automática
-- Só mostra "Conexão perdida" após confirmar que realmente caiu
+- Reutiliza a mesma Edge Function `sync-igreen-customers` que já existe
+- Credenciais são salvas nos campos `igreen_portal_email` e `igreen_portal_password` da tabela `consultants` (já existentes)
+- Sem alterações no banco de dados — usa campos e funções já existentes
+- O botão mostra spinner durante a sincronização
+- Toast de feedback com resultado (sucesso/erro)
 
