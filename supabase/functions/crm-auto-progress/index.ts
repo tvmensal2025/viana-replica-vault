@@ -14,7 +14,7 @@ const PROGRESSION = [
   { days: 120, stage_key: "120_dias" },
 ];
 
-async function sendEvolutionMessage(
+async function sendEvolutionText(
   instanceName: string,
   phone: string,
   text: string,
@@ -23,19 +23,91 @@ async function sendEvolutionMessage(
 ) {
   const res = await fetch(`${apiUrl}/message/sendText/${instanceName}`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: apiKey,
-    },
-    body: JSON.stringify({
-      number: phone,
-      text,
-    }),
+    headers: { "Content-Type": "application/json", apikey: apiKey },
+    body: JSON.stringify({ number: phone, text }),
   });
   if (!res.ok) {
     const err = await res.text();
-    console.error("Evolution API error:", err);
+    console.error("Evolution sendText error:", err);
   }
+}
+
+async function sendEvolutionMedia(
+  instanceName: string,
+  phone: string,
+  mediaUrl: string,
+  caption: string,
+  mediatype: "image" | "video" | "document",
+  apiUrl: string,
+  apiKey: string
+) {
+  const res = await fetch(`${apiUrl}/message/sendMedia/${instanceName}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: apiKey },
+    body: JSON.stringify({ number: phone, mediatype, media: mediaUrl, caption }),
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    console.error("Evolution sendMedia error:", err);
+  }
+}
+
+async function sendEvolutionAudio(
+  instanceName: string,
+  phone: string,
+  audioUrl: string,
+  apiUrl: string,
+  apiKey: string
+) {
+  const res = await fetch(`${apiUrl}/message/sendWhatsAppAudio/${instanceName}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: apiKey },
+    body: JSON.stringify({ number: phone, audio: audioUrl }),
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    console.error("Evolution sendAudio error:", err);
+  }
+}
+
+async function sendAutoMessage(
+  instanceName: string,
+  phone: string,
+  stageData: {
+    auto_message_type: string | null;
+    auto_message_text: string | null;
+    auto_message_media_url: string | null;
+    auto_message_image_url: string | null;
+    label: string;
+  },
+  apiUrl: string,
+  apiKey: string
+) {
+  const messageText = (stageData.auto_message_text || "")
+    .replace(/\{\{nome\}\}/g, phone)
+    .replace(/\{\{telefone\}\}/g, phone);
+
+  // Send optional image first (sent before the main message)
+  if (stageData.auto_message_image_url) {
+    await sendEvolutionMedia(instanceName, phone, stageData.auto_message_image_url, "", "image", apiUrl, apiKey);
+  }
+
+  const msgType = stageData.auto_message_type || "text";
+
+  if (msgType === "audio" && stageData.auto_message_media_url) {
+    await sendEvolutionAudio(instanceName, phone, stageData.auto_message_media_url, apiUrl, apiKey);
+    if (messageText) {
+      await sendEvolutionText(instanceName, phone, messageText, apiUrl, apiKey);
+    }
+  } else if (msgType === "image" && stageData.auto_message_media_url) {
+    await sendEvolutionMedia(instanceName, phone, stageData.auto_message_media_url, messageText, "image", apiUrl, apiKey);
+  } else if (msgType === "video" && stageData.auto_message_media_url) {
+    await sendEvolutionMedia(instanceName, phone, stageData.auto_message_media_url, messageText, "video", apiUrl, apiKey);
+  } else {
+    await sendEvolutionText(instanceName, phone, messageText, apiUrl, apiKey);
+  }
+
+  console.log(`Auto-message sent to ${phone} for stage ${stageData.label} (type: ${msgType})`);
 }
 
 Deno.serve(async (req) => {
@@ -114,7 +186,7 @@ Deno.serve(async (req) => {
 
       movedCount++;
 
-      // Send auto-message if enabled
+      // Send auto-message if enabled (supports text, audio, image, video)
       if (
         stageData.auto_message_enabled &&
         stageData.auto_message_text &&
@@ -122,7 +194,6 @@ Deno.serve(async (req) => {
         evolutionUrl &&
         evolutionKey
       ) {
-        // Get the instance name for this consultant
         const { data: instance } = await supabase
           .from("whatsapp_instances")
           .select("instance_name")
@@ -132,18 +203,7 @@ Deno.serve(async (req) => {
 
         if (instance) {
           const phone = deal.remote_jid.split("@")[0];
-          const messageText = stageData.auto_message_text
-            .replace(/\{\{nome\}\}/g, phone)
-            .replace(/\{\{telefone\}\}/g, phone);
-
-          await sendEvolutionMessage(
-            instance.instance_name,
-            phone,
-            messageText,
-            evolutionUrl,
-            evolutionKey
-          );
-          console.log(`Auto-message sent to ${phone} for stage ${targetStageKey}`);
+          await sendAutoMessage(instance.instance_name, phone, stageData, evolutionUrl, evolutionKey);
         }
       }
     }
