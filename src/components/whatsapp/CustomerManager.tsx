@@ -191,6 +191,7 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
   const [selectedPhones, setSelectedPhones] = useState<Set<string>>(new Set());
   const [parsing, setParsing] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [selectedLicenciado, setSelectedLicenciado] = useState("all");
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState<string | null>(null);
 
@@ -258,6 +259,14 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
     return () => { cancelled = true; clearTimeout(timer); };
   }, [instanceName, customers]);
 
+  const licenciadoOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const c of customers) {
+      if (c.registered_by_name) names.add(c.registered_by_name);
+    }
+    return Array.from(names).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [customers]);
+
   // Filter by search
   const searchFiltered = search.trim()
     ? customers.filter(
@@ -269,12 +278,16 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
       )
     : customers;
 
+  const licenciadoFiltered = selectedLicenciado === "all"
+    ? searchFiltered
+    : searchFiltered.filter((c) => (c.registered_by_name || "Sem licenciado") === selectedLicenciado);
+
   // Filter by status
   const filtered = statusFilter === "all"
-    ? searchFiltered
+    ? licenciadoFiltered
     : statusFilter === "devolutiva"
-    ? searchFiltered.filter((c) => isDevolutiva(c))
-    : searchFiltered.filter((c) => c.status === statusFilter);
+    ? licenciadoFiltered.filter((c) => isDevolutiva(c))
+    : licenciadoFiltered.filter((c) => c.status === statusFilter);
 
   // Stats
   const devolutivaCount = customers.filter((c) => isDevolutiva(c)).length;
