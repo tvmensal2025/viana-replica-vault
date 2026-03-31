@@ -114,7 +114,8 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
 
   // Send auto-message when deal moves to a stage
   const sendAutoMessage = async (stage: KanbanStageRow, deal: CrmDealRow) => {
-    if (!stage.auto_message_enabled || !stage.auto_message_text || !instanceName || !deal.remote_jid) return;
+    const hasContent = stage.auto_message_text || stage.auto_message_media_url || (stage as any).auto_message_image_url;
+    if (!stage.auto_message_enabled || !hasContent || !instanceName || !deal.remote_jid) return;
 
     const phone = deal.remote_jid.split("@")[0];
     const messageText = stage.auto_message_text
