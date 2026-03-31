@@ -63,6 +63,12 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onDele
   const [uploadedFileName, setUploadedFileName] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Image upload state (for audio+image combo)
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [imageUploadProgress, setImageUploadProgress] = useState(0);
+  const [uploadedImageName, setUploadedImageName] = useState("");
+  const imageInputRef = useRef<HTMLInputElement>(null);
+
   // Recording state
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
