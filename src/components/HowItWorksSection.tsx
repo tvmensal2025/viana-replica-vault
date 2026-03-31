@@ -22,15 +22,11 @@ const HowItWorksSection = () => (
             </div>
           ))}
         </div>
-        <div className="relative group">
-          <div className="absolute -inset-4 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" style={{ background: 'radial-gradient(circle, hsl(130 100% 36% / 0.1), transparent 70%)' }} />
-          <img
-            src="/images/foto-12-como-funciona.jpeg"
-            alt="Como funciona a energia solar"
-            loading="lazy"
-            className="rounded-2xl w-full shadow-lg relative z-10 transition-transform duration-500 group-hover:scale-[1.02]"
-            style={{ boxShadow: 'var(--shadow-card)' }}
-          />
+        <div className="rounded-2xl overflow-hidden relative" style={{ boxShadow: 'var(--shadow-green-lg)' }}>
+          <div className="absolute inset-0 rounded-2xl border border-primary/20 z-10 pointer-events-none" />
+          <video controls className="w-full aspect-video relative z-0">
+            <source src="https://igreen-minio.b099mi.easypanel.host/igreen/casasustentavel.mp4" type="video/mp4" />
+          </video>
         </div>
       </div>
     </div>
