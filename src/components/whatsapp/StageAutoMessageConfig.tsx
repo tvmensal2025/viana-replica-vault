@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,7 +10,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { MessageSquare, Image, Video, Mic, X, Check, Bold } from "lucide-react";
+import { MessageSquare, Image, Video, Mic, X, Check, Bold, Upload, Loader2 } from "lucide-react";
+import { uploadMedia, getAcceptString, formatFileSize } from "@/services/minioUpload";
+import { useToast } from "@/hooks/use-toast";
 
 interface StageAutoMessageConfigProps {
   stageLabel: string;
@@ -38,6 +40,27 @@ export function StageAutoMessageConfig({
   const [text, setText] = useState(autoMessageText || "");
   const [type, setType] = useState(autoMessageType || "text");
   const [mediaUrl, setMediaUrl] = useState(autoMessageMediaUrl || "");
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setUploadProgress(0);
+    try {
+      const result = await uploadMedia(file, (pct) => setUploadProgress(pct));
+      setMediaUrl(result.url);
+      toast({ title: "Upload concluído", description: `${file.name} (${formatFileSize(file.size)})` });
+    } catch (err: unknown) {
+      toast({ title: "Erro no upload", description: err instanceof Error ? err.message : "Falha", variant: "destructive" });
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   const handleOpen = (isOpen: boolean) => {
     if (isOpen) {
@@ -127,18 +150,45 @@ export function StageAutoMessageConfig({
           })}
         </div>
 
-        {/* Media URL for non-text types */}
+        {/* Media upload for non-text types */}
         {type !== "text" && (
-          <Input
-            value={mediaUrl}
-            onChange={(e) => setMediaUrl(e.target.value)}
-            placeholder={
-              type === "image" ? "URL da imagem (https://...)" :
-              type === "video" ? "URL do vídeo (https://...)" :
-              "URL do áudio (https://...)"
-            }
-            className="h-8 text-xs"
-          />
+          <div className="space-y-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={getAcceptString(type)}
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+            <div className="flex gap-2">
+              <Input
+                value={mediaUrl}
+                onChange={(e) => setMediaUrl(e.target.value)}
+                placeholder={
+                  type === "image" ? "URL da imagem ou faça upload →" :
+                  type === "video" ? "URL do vídeo ou faça upload →" :
+                  "URL do áudio ou faça upload →"
+                }
+                className="h-8 text-xs flex-1"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs gap-1 shrink-0"
+                disabled={uploading}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                {uploading ? `${uploadProgress}%` : "Upload"}
+              </Button>
+            </div>
+            {mediaUrl && (
+              <p className="text-[10px] text-muted-foreground truncate">
+                ✅ {mediaUrl}
+              </p>
+            )}
+          </div>
         )}
 
         {/* Formatting toolbar */}
