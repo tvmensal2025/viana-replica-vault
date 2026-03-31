@@ -85,6 +85,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
   const qrRecoveryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lockRef = useRef(false);
   const createAttemptedAtRef = useRef<number | null>(null);
+  const consecutiveFailsRef = useRef(0);
 
   const addLog = useCallback((msg: string) => {
     setConnectionLog((prev) => [...prev.slice(-14), logEntry(sanitize(msg))]);
@@ -170,6 +171,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
         if (!mountedRef.current) return;
 
         if (state === "open") {
+          consecutiveFailsRef.current = 0;
           clearQrRecovery();
           clearCreateAttempt();
           setConnectionStatus((prev) => {
@@ -183,18 +185,28 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
           });
           pollRef.current = setTimeout(poll, 30000);
         } else if (state === "connecting") {
+          consecutiveFailsRef.current = 0;
           pollRef.current = setTimeout(poll, 5000);
         } else {
-          clearQrRecovery();
-          setConnectionStatus((prev) => {
-            if (prev === "connected") {
-              addLog("⚠️ Conexão perdida");
-              toast({ title: "Conexão WhatsApp perdida", variant: "destructive" });
-            }
-            return "disconnected";
-          });
-          setQrCode(null);
-          setQrGeneratedAt(null);
+          consecutiveFailsRef.current += 1;
+
+          if (consecutiveFailsRef.current <= 3) {
+            // Retry silencioso — pode ser queda momentânea
+            pollRef.current = setTimeout(poll, 5000);
+          } else {
+            clearQrRecovery();
+            setConnectionStatus((prev) => {
+              if (prev === "connected") {
+                addLog("⚠️ Conexão perdida");
+                toast({ title: "Conexão WhatsApp perdida", variant: "destructive" });
+              }
+              return "disconnected";
+            });
+            setQrCode(null);
+            setQrGeneratedAt(null);
+            // Continua polling lento para detectar reconexão automática
+            pollRef.current = setTimeout(poll, 30000);
+          }
         }
       } catch {
         if (mountedRef.current) {
