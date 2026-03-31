@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.100.1";
+import { createClient } from "npm:@supabase/supabase-js@2.100.1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -78,6 +78,14 @@ function createGracefulTimeoutResponse(safePath: string): Response | null {
 
   if (safePath === "instance/create") {
     return new Response(JSON.stringify({ instance: { instanceName: "" }, timeout: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  // Avatar fetches are non-critical — return graceful null instead of 504
+  if (safePath.startsWith("chat/fetchProfilePictureUrl/")) {
+    return new Response(JSON.stringify({ profilePictureUrl: null, timeout: true }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });

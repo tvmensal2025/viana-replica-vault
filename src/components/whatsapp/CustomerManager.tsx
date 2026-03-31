@@ -237,27 +237,8 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
       setSyncing(false);
     }
   }
-  useEffect(() => {
-    if (!instanceName) return;
-    // Only fetch profile pics when WhatsApp is actually connected (instanceName exists and we can reach the API)
-    let cancelled = false;
-    const fetchPics = async () => {
-      const pics: Record<string, string> = {};
-      for (const c of customers.slice(0, 50)) {
-        if (cancelled) break;
-        const phone = c.phone_whatsapp.replace(/\D/g, "");
-        if (phone.length < 10 || pics[c.id]) continue;
-        try {
-          const result = await getProfilePicture(instanceName, `${phone}@s.whatsapp.net`);
-          if (result && typeof result === "string") pics[c.id] = result;
-        } catch { /* skip */ }
-      }
-      if (!cancelled) setProfilePics((prev) => ({ ...prev, ...pics }));
-    };
-    // Delay to avoid hammering the API during initial connection
-    const timer = setTimeout(fetchPics, 3000);
-    return () => { cancelled = true; clearTimeout(timer); };
-  }, [instanceName, customers]);
+  // Profile pics are no longer pre-fetched in bulk.
+  // They load on-demand when a customer row is expanded (see handleExpandCustomer below).
 
   const licenciadoOptions = useMemo(() => {
     const names = new Set<string>();
@@ -744,7 +725,19 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
 
                 return (
                   <div key={c.id} className={`rounded-xl border transition-all duration-200 ${isExpanded ? "border-primary/20 bg-primary/[0.02] shadow-md shadow-primary/5" : hasDevolutiva ? "border-red-500/20 bg-red-500/[0.02] hover:border-red-500/30" : "border-border/40 bg-secondary/10 hover:border-border/60 hover:bg-secondary/20"}`}>
-                    <div className="flex items-center gap-3 px-4 py-3 cursor-pointer" onClick={() => setExpandedId(isExpanded ? null : c.id)}>
+                    <div className="flex items-center gap-3 px-4 py-3 cursor-pointer" onClick={() => {
+                      const willExpand = expandedId !== c.id;
+                      setExpandedId(willExpand ? c.id : null);
+                      // On-demand profile pic fetch
+                      if (willExpand && instanceName && !profilePics[c.id]) {
+                        const phone = c.phone_whatsapp.replace(/\D/g, "");
+                        if (phone.length >= 10) {
+                          getProfilePicture(instanceName, `${phone}@s.whatsapp.net`)
+                            .then((url) => { if (url && typeof url === "string") setProfilePics((prev) => ({ ...prev, [c.id]: url })); })
+                            .catch(() => { /* non-critical */ });
+                        }
+                      }
+                    }}>
                       <Avatar className="h-10 w-10 shrink-0 border border-primary/10">
                         <AvatarImage src={pic} />
                         <AvatarFallback className="bg-gradient-to-br from-primary/15 to-primary/5 text-xs font-bold text-primary">
