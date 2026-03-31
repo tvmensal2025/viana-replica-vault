@@ -21,6 +21,13 @@ const ClubSection = () => {
         <div className="badge-green mx-auto mb-6">Benefícios</div>
         <h2 className="section-heading mb-14">Acesso gratuito ao iGreen Club</h2>
 
+        <div className="max-w-4xl mx-auto rounded-2xl overflow-hidden relative mb-14" style={{ boxShadow: 'var(--shadow-green-lg)' }}>
+          <div className="absolute inset-0 rounded-2xl border border-primary/20 z-10 pointer-events-none" />
+          <video controls className="w-full aspect-video relative z-0">
+            <source src="https://igreen-minio.b099mi.easypanel.host/igreen/igreen-club1.mp4" type="video/mp4" />
+          </video>
+        </div>
+
         <div className="max-w-4xl mx-auto">
           <div className="grid sm:grid-cols-2 gap-5 mb-14">
             <div className="glass-card text-center">
