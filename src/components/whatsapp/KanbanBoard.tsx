@@ -118,9 +118,11 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
     if (!stage.auto_message_enabled || !hasContent || !instanceName || !deal.remote_jid) return;
 
     const phone = deal.remote_jid.split("@")[0];
-    const messageText = stage.auto_message_text
+    const messageText = (stage.auto_message_text || "")
       .replace(/\{\{nome\}\}/g, phone)
       .replace(/\{\{telefone\}\}/g, phone);
+    
+    console.log("[KanbanBoard] sendAutoMessage:", { stage: stage.label, type: stage.auto_message_type, hasText: !!messageText, hasMedia: !!stage.auto_message_media_url, hasImage: !!(stage as any).auto_message_image_url, phone, instanceName });
 
     try {
       // Send optional image first
