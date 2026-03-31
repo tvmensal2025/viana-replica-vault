@@ -11,7 +11,7 @@ import type { Database } from "@/integrations/supabase/types";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, AreaChart, Area, PieChart, Pie, Cell, Legend,
 } from "recharts";
-import { Eye, Users, Copy, ExternalLink, LogOut, Save, Camera, BarChart3, LinkIcon, Settings, Monitor, MousePointerClick, Clock, Smartphone, Globe, QrCode, Download, X, MessageSquare, Zap, TrendingUp, KeyRound, RefreshCw, Loader2, Filter } from "lucide-react";
+import { Eye, EyeOff, Users, Copy, ExternalLink, LogOut, Save, Camera, BarChart3, LinkIcon, Settings, Monitor, MousePointerClick, Clock, Smartphone, Globe, QrCode, Download, X, MessageSquare, Zap, TrendingUp, KeyRound, RefreshCw, Loader2, Filter } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useQueryClient } from "@tanstack/react-query";
