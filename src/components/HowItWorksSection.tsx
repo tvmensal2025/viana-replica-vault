@@ -11,22 +11,35 @@ const HowItWorksSection = () => (
     <div className="absolute inset-0 pointer-events-none opacity-[0.03]" style={{ background: 'radial-gradient(circle at 80% 50%, hsl(130, 100%, 36%), transparent 60%)' }} />
     <div className="section-container relative z-10">
       <div className="badge-green mx-auto mb-6">Entenda</div>
-      <h2 className="section-heading mb-10">Como funciona a energia solar da iGreen</h2>
+      <h2 className="section-heading mb-14">Como funciona a energia solar da iGreen</h2>
 
-      <div className="max-w-4xl mx-auto rounded-2xl overflow-hidden relative mb-12" style={{ boxShadow: 'var(--shadow-green-lg)' }}>
+      <div className="grid md:grid-cols-2 gap-12 items-center">
+        <div className="relative group">
+          <div className="absolute -inset-4 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" style={{ background: 'radial-gradient(circle, hsl(130 100% 36% / 0.1), transparent 70%)' }} />
+          <img
+            src="/images/foto-12-como-funciona.jpeg"
+            alt="Como a energia solar chega na sua casa ou empresa"
+            loading="lazy"
+            className="rounded-2xl w-full shadow-lg relative z-10 transition-transform duration-500 group-hover:scale-[1.02]"
+            style={{ boxShadow: 'var(--shadow-card)' }}
+          />
+        </div>
+
+        <div className="space-y-5">
+          {steps.map((step, i) => (
+            <div key={i} className="glass-card !p-4 !rounded-xl flex items-start gap-3">
+              <span className="text-2xl shrink-0">{step.icon}</span>
+              <span className="text-foreground/90 leading-relaxed">{step.text}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="max-w-4xl mx-auto rounded-2xl overflow-hidden relative mt-12" style={{ boxShadow: 'var(--shadow-green-lg)' }}>
         <div className="absolute inset-0 rounded-2xl border border-primary/20 z-10 pointer-events-none" />
         <video controls className="w-full aspect-video relative z-0">
           <source src="https://igreen-minio.b099mi.easypanel.host/igreen/casasustentavel.mp4" type="video/mp4" />
         </video>
-      </div>
-
-      <div className="grid md:grid-cols-2 gap-5 max-w-4xl mx-auto">
-        {steps.map((step, i) => (
-          <div key={i} className="glass-card !p-4 !rounded-xl flex items-start gap-3">
-            <span className="text-2xl shrink-0">{step.icon}</span>
-            <span className="text-foreground/90 leading-relaxed">{step.text}</span>
-          </div>
-        ))}
       </div>
     </div>
   </section>
