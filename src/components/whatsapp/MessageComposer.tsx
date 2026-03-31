@@ -15,6 +15,7 @@ type MediaType = "image" | "video" | "document";
 interface MessageComposerProps {
   onSend: (text: string) => Promise<void>;
   onSendAudio?: (audioBase64: string) => Promise<void>;
+  onSendAudioUrl?: (audioUrl: string) => Promise<void>;
   onSendMedia?: (mediaUrl: string, caption: string, mediaType: MediaType) => Promise<void>;
   templates: MessageTemplate[];
   disabled?: boolean;
