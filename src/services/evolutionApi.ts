@@ -12,6 +12,14 @@ async function handleResponse<T>(response: Response): Promise<T> {
   if (response.status === 401) {
     throw new Error("Erro de autenticação com a API do WhatsApp");
   }
+  // Handle 504 timeout gracefully — return the body as-is (it contains {timeout: true})
+  if (response.status === 504) {
+    try {
+      return await response.json();
+    } catch {
+      throw new Error("O servidor WhatsApp está demorando para responder.");
+    }
+  }
   if (!response.ok) {
     // Try to extract the real error message from Evolution API JSON body
     let detail = response.statusText || "Erro desconhecido na API";
