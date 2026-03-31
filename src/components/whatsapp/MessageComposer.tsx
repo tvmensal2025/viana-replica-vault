@@ -186,7 +186,7 @@ export function MessageComposer({ onSend, onSendAudio, onSendAudioUrl, onSendMed
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
-  }, []);
+  }, [attachedFile]);
 
   // ── Audio Recording ──
   const startRecording = useCallback(async () => {
