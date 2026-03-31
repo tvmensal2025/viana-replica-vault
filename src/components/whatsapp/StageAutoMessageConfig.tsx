@@ -35,15 +35,20 @@ export function StageAutoMessageConfig({
   autoMessageText,
   autoMessageType,
   autoMessageMediaUrl,
+  autoMessageImageUrl,
   onSave,
 }: StageAutoMessageConfigProps) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState(autoMessageText || "");
   const [type, setType] = useState(autoMessageType || "text");
   const [mediaUrl, setMediaUrl] = useState(autoMessageMediaUrl || "");
+  const [imageUrl, setImageUrl] = useState(autoMessageImageUrl || "");
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [imageUploadProgress, setImageUploadProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
