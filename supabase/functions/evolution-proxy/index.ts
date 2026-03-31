@@ -373,6 +373,22 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Gracefully handle infrastructure errors (DNS/MinIO) on message-sending routes
+    if (safePath.startsWith("message/") && evolutionResponse.status >= 400 && isLikelyMediaInfrastructureError(responseBody)) {
+      console.warn(
+        `[evolution-proxy] Infrastructure error on ${safePath} (status ${evolutionResponse.status}), returning graceful failure`,
+      );
+      return new Response(
+        JSON.stringify({
+          error: "Servidor de mídia temporariamente indisponível. Tente novamente em instantes.",
+          timeout: true,
+          sent: false,
+          storageUnavailable: true,
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     // Handle "Connection Closed" and similar transient errors gracefully for chat routes
     if (evolutionResponse.status >= 400 && isConnectionClosedError(responseBody)) {
       if (safePath.startsWith("chat/findMessages/") || safePath.startsWith("chat/findChats/")) {
