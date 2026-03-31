@@ -31,6 +31,11 @@ function isLikelyMediaInfrastructureError(body: string): boolean {
     normalizedBody.includes("minio");
 }
 
+function isConnectionClosedError(body: string): boolean {
+  const lower = body.toLowerCase();
+  return lower.includes("connection closed") || lower.includes("read messages fail");
+}
+
 function normalizeEvolutionBaseUrl(rawUrl: string | undefined): string {
   const sanitized = (rawUrl || "")
     .trim()
