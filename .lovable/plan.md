@@ -1,55 +1,21 @@
 
 
-## Plano: Isolamento de Clientes por Consultor + Templates Compartilhados
+## Plano: WhatsApp Tab acessivel sem conexao
 
-### Problema atual
-- A tabela `customers` não tem `consultant_id` — todos os consultores veem todos os clientes
-- Templates são filtrados por `consultant_id` mas deveriam ser visíveis para todos
-- Clientes de outros consultores aparecem sem ter sincronizado
+### Problema
+Quando o WhatsApp nao esta conectado, o componente `WhatsAppTab` mostra apenas o painel de conexao (linhas 205-223), bloqueando acesso a clientes, CRM, templates, agendamentos.
 
-### O que será feito
+### Solucao
+Remover o bloqueio condicional e sempre mostrar as sub-abas. O painel de conexao vira uma sub-aba propria ou fica embutido na aba "Conversas" quando desconectado.
 
-#### 1. Migração SQL
-- Adicionar coluna `consultant_id` (uuid, nullable) na tabela `customers`
-- Substituir a política RLS "Allow all for anon" por políticas que filtrem por `consultant_id = auth.uid()` (SELECT, INSERT, UPDATE, DELETE)
-- Clientes sem `consultant_id` (legados) ficam invisíveis até serem re-sincronizados — isso garante que nenhum dado aparece antes da sincronização real
-- Alterar RLS de `message_templates`: SELECT aberto para todos autenticados, INSERT/UPDATE/DELETE apenas pelo dono
+### Alteracoes em `src/components/whatsapp/WhatsAppTab.tsx`
 
-#### 2. Edge Function `sync-igreen-customers`
-- Incluir `consultant_id` em cada registro no `buildRecord` / upsert, usando o valor recebido no body da request
-- Isso vincula cada cliente ao consultor que sincronizou
+1. **Remover o early return** (linhas 205-223) que bloqueia tudo quando desconectado
+2. **Alterar a barra de status** no topo: se conectado mostra o indicador verde atual; se desconectado mostra um indicador vermelho com botao "Conectar" inline
+3. **Na sub-aba "Conversas"**: se desconectado, mostrar o `ConnectionPanel` em vez do chat; se conectado, mostrar o chat normalmente
+4. **Sub-abas "CRM", "Clientes", "Templates", "Agendamentos"**: sempre acessiveis independente do status
+5. **Sub-aba "Envio em Massa"**: mostrar aviso de que precisa conectar o WhatsApp se desconectado (pois depende de `instanceName` para enviar)
+6. **Sub-aba "Agendamentos"**: idem, mostrar aviso se desconectado
 
-#### 3. Frontend — Queries filtradas (4 arquivos)
-- **`src/components/whatsapp/WhatsAppTab.tsx`**: adicionar `.eq("consultant_id", userId)` no `fetchCustomers`
-- **`src/hooks/useAnalytics.ts`**: adicionar `.eq("consultant_id", consultantId)` na query de customers
-- **`src/components/whatsapp/AddCustomerDialog.tsx`**: incluir `consultant_id` no insert de novo cliente
-- **`src/components/whatsapp/CustomerManager.tsx`**: incluir `consultant_id` nos imports de Excel e edições
-
-#### 4. Templates compartilhados
-- **`src/hooks/useTemplates.ts`**: remover `.eq("consultant_id", consultantId)` do fetch para que todos vejam todos os templates
-- Manter `consultant_id` no insert (saber quem criou)
-- Delete continua restrito ao dono via RLS
-
-### Detalhes técnicos
-
-```text
-customers:
-  + consultant_id uuid (nullable, sem FK para auth.users)
-  
-RLS customers (substituir "Allow all for anon"):
-  SELECT → consultant_id = auth.uid()
-  INSERT → consultant_id = auth.uid()
-  UPDATE → consultant_id = auth.uid()
-  DELETE → consultant_id = auth.uid()
-
-RLS message_templates (substituir política atual):
-  SELECT → true (todos autenticados)
-  INSERT → consultant_id = auth.uid()
-  UPDATE → consultant_id = auth.uid()
-  DELETE → consultant_id = auth.uid()
-```
-
-- Clientes legados (sem `consultant_id`) não aparecem para ninguém — forçando sincronização real
-- O upsert usa `phone_whatsapp` como conflict key (já existente), mas agora cada registro terá o `consultant_id` preenchido
-- Sem breaking changes na estrutura existente
+Funcionalidades que dependem de `instanceName` (envio de mensagens, conversas) mostram o painel de conexao ou um aviso. Funcionalidades independentes (clientes, templates, CRM) funcionam normalmente.
 
