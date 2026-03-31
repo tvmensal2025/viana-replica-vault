@@ -435,6 +435,20 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
             return;
           }
 
+          // Safety: verify instance doesn't exist on server before creating
+          let instanceExists = false;
+          try {
+            const instances = await withTimeout(fetchInstances(), 10000);
+            instanceExists = instances?.some((i) => i.instance?.instanceName === name) ?? false;
+          } catch { /* assume doesn't exist */ }
+
+          if (instanceExists) {
+            addLog("⏳ Instância já existe no servidor. Tentando conectar...");
+            await saveInstance(name);
+            enterPendingConnection(name, "⏳ Recuperando QR Code da instância existente...");
+            return;
+          }
+
           addLog("Criando instância...");
           markCreateAttempt();
           try {
