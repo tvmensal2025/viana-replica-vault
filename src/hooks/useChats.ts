@@ -196,7 +196,7 @@ export function useChats(instanceName: string | null) {
     };
     init();
 
-    intervalRef.current = setInterval(fetchChats, 15000);
+    intervalRef.current = setInterval(fetchChats, 30000); // 30s (was 15s)
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
