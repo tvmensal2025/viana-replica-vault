@@ -66,12 +66,29 @@ export function MessageComposer({ onSend, onSendAudio, onSendAudioUrl, onSendMed
 
   const handleSend = useCallback(async () => {
     // If there's a file attached, send it as media
-    if (attachedFile && onSendMedia) {
+    if (attachedFile) {
       setSending(true);
       try {
-        await onSendMedia(attachedFile.url, text.trim(), attachedFile.type);
+        // Send pending image first (from template image_url)
+        if (pendingImageUrl && onSendMedia) {
+          await onSendMedia(pendingImageUrl, "", "image");
+        }
+
+        // Audio templates use sendAudioUrl (WhatsApp voice note endpoint)
+        if (attachedFile.type === "audio" && onSendAudioUrl) {
+          await onSendAudioUrl(attachedFile.url);
+          // Send text as separate message if present
+          const trimmed = text.trim();
+          if (trimmed) {
+            await onSend(trimmed);
+          }
+        } else if (onSendMedia) {
+          await onSendMedia(attachedFile.url, text.trim(), attachedFile.type as MediaType);
+        }
+
         setText("");
         setAttachedFile(null);
+        setPendingImageUrl(null);
         setShowQuickReply(false);
       } catch {
         // handled upstream
@@ -85,6 +102,11 @@ export function MessageComposer({ onSend, onSendAudio, onSendAudioUrl, onSendMed
     if (!trimmed || sending) return;
     setSending(true);
     try {
+      // Send pending image first
+      if (pendingImageUrl && onSendMedia) {
+        await onSendMedia(pendingImageUrl, "", "image");
+        setPendingImageUrl(null);
+      }
       await onSend(trimmed);
       setText("");
       setShowQuickReply(false);
@@ -93,7 +115,7 @@ export function MessageComposer({ onSend, onSendAudio, onSendAudioUrl, onSendMed
     } finally {
       setSending(false);
     }
-  }, [text, sending, onSend, onSendMedia, attachedFile]);
+  }, [text, sending, onSend, onSendMedia, onSendAudioUrl, attachedFile, pendingImageUrl]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
