@@ -143,7 +143,11 @@ function createGracefulTimeoutResponse(safePath: string): Response | null {
     });
   }
 
-  return null;
+  // Default fallback — never return null, always return a graceful response
+  return new Response(JSON.stringify({ error: "Serviço temporariamente indisponível.", timeout: true }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
 async function fetchWithTimeout(
