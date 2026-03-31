@@ -10,8 +10,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import type { MessageTemplate } from "@/types/whatsapp";
 import type { ChatItem } from "@/hooks/useChats";
-import { Loader2, MessageSquareText, UserPlus, UserCheck } from "lucide-react";
+import { Loader2, MessageSquareText, UserPlus, UserCheck, KanbanSquare } from "lucide-react";
 import { createLogger } from "@/lib/logger";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import type { Tables } from "@/integrations/supabase/types";
 
 const logger = createLogger("ChatView");
 
@@ -34,6 +36,58 @@ export function ChatView({ instanceName, chat, templates, consultantId, initialM
   const [isCustomer, setIsCustomer] = useState(false);
   const [addingCustomer, setAddingCustomer] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [kanbanStages, setKanbanStages] = useState<Tables<"kanban_stages">[]>([]);
+  const [sendingToCrm, setSendingToCrm] = useState(false);
+
+  // Fetch kanban stages
+  useEffect(() => {
+    supabase
+      .from("kanban_stages")
+      .select("*")
+      .eq("consultant_id", consultantId)
+      .order("position")
+      .then(({ data }) => {
+        if (data && data.length > 0) setKanbanStages(data);
+      });
+  }, [consultantId]);
+
+  const handleSendToCrm = useCallback(async (stageKey: string) => {
+    if (!chat) return;
+    setSendingToCrm(true);
+    try {
+      // Check if deal already exists for this remoteJid
+      const { data: existing } = await supabase
+        .from("crm_deals")
+        .select("id")
+        .eq("consultant_id", consultantId)
+        .eq("remote_jid", chat.remoteJid)
+        .maybeSingle();
+
+      if (existing) {
+        // Update stage
+        await supabase
+          .from("crm_deals")
+          .update({ stage: stageKey, updated_at: new Date().toISOString() })
+          .eq("id", existing.id);
+        toast({ title: "CRM atualizado", description: `Movido para ${kanbanStages.find(s => s.stage_key === stageKey)?.label || stageKey}` });
+      } else {
+        // Create new deal
+        await supabase
+          .from("crm_deals")
+          .insert({
+            consultant_id: consultantId,
+            remote_jid: chat.remoteJid,
+            stage: stageKey,
+          });
+        toast({ title: "Adicionado ao CRM", description: `Enviado para ${kanbanStages.find(s => s.stage_key === stageKey)?.label || stageKey}` });
+      }
+    } catch (err) {
+      logger.error("Erro ao enviar ao CRM:", err);
+      toast({ title: "Erro ao enviar ao CRM", variant: "destructive" });
+    } finally {
+      setSendingToCrm(false);
+    }
+  }, [chat, consultantId, kanbanStages, toast]);
 
   // Check if this contact is already a customer
   useEffect(() => {
@@ -100,6 +154,29 @@ export function ChatView({ instanceName, chat, templates, consultantId, initialM
             <UserPlus className="h-3.5 w-3.5" />
             Adicionar Cliente
           </Button>
+        )}
+        {/* Send to CRM */}
+        {kanbanStages.length > 0 && (
+          <Select
+            onValueChange={handleSendToCrm}
+            disabled={sendingToCrm}
+          >
+            <SelectTrigger className="h-7 w-auto gap-1 text-[10px] border-accent/30 text-accent-foreground px-2">
+              {sendingToCrm ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <KanbanSquare className="h-3.5 w-3.5" />
+              )}
+              <span>CRM</span>
+            </SelectTrigger>
+            <SelectContent>
+              {kanbanStages.map((stage) => (
+                <SelectItem key={stage.id} value={stage.stage_key}>
+                  {stage.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         )}
       </div>
 
