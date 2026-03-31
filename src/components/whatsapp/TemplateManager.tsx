@@ -284,6 +284,12 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onDele
                       )}
                     </div>
                   )}
+                  {t.image_url && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <Image className="w-3 h-3 text-blue-400 shrink-0" />
+                      <img src={t.image_url} alt="Imagem anexa" className="rounded-md max-h-16 object-contain border border-border/20" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <Button
