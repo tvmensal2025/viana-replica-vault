@@ -320,7 +320,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
         addLog(attempt === 1 ? "⏳ Aguardando QR Code do servidor..." : "⏳ Ainda aguardando QR Code...");
         scheduleQrRecovery(name, attempt + 1);
       }
-    }, Math.min(4000 * attempt, 12000));
+    }, Math.min(2000 * attempt, 10000));
   }, [addLog, checkState, clearCreateAttempt, clearQrRecovery, fetchQr, hasRecentCreateAttempt, saveInstance, startPolling]);
 
   const enterPendingConnection = useCallback((name: string, message: string) => {
