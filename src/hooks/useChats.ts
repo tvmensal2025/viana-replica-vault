@@ -26,7 +26,18 @@ function extractLastMessage(chat: EvolutionChat): string {
   );
 }
 
-function mapChat(chat: EvolutionChat, contactsMap: Map<string, EvolutionContact>): ChatItem {
+function formatPhoneNumber(raw: string): string {
+  // Format Brazilian phone numbers: 5511999998888 → (11) 99999-8888
+  if (/^55\d{10,11}$/.test(raw)) {
+    const ddd = raw.slice(2, 4);
+    const number = raw.slice(4);
+    if (number.length === 9) return `(${ddd}) ${number.slice(0, 5)}-${number.slice(5)}`;
+    if (number.length === 8) return `(${ddd}) ${number.slice(0, 4)}-${number.slice(4)}`;
+  }
+  return raw;
+}
+
+function mapChat(chat: EvolutionChat, contactsMap: Map<string, EvolutionContact>): ChatItem | null {
   const jid = chat.remoteJid || chat.id;
   const contact = contactsMap.get(jid);
 
@@ -34,19 +45,21 @@ function mapChat(chat: EvolutionChat, contactsMap: Map<string, EvolutionContact>
   const altJid = chat.lastMessage?.key?.remoteJidAlt || chat.lastMessage?.key?.participantAlt;
   const realPhone = altJid ? altJid.split("@")[0] : null;
 
-  // Priority: chat pushName > lastMessage pushName > contact pushName > chat name > real phone > lid number
   const rawJidNumber = jid.split("@")[0];
-  const displayName =
-    chat.pushName ||
-    chat.lastMessage?.pushName ||
-    contact?.pushName ||
-    chat.name ||
-    realPhone ||
-    rawJidNumber;
+  const isLid = jid.endsWith("@lid");
+
+  // For @lid JIDs without a real phone or name, skip the chat entirely
+  const hasName = chat.pushName || chat.lastMessage?.pushName || contact?.pushName || chat.name;
+  if (isLid && !hasName && !realPhone) return null;
+
+  // Build display name: prefer real names, then formatted phone
+  const nameSource = chat.pushName || chat.lastMessage?.pushName || contact?.pushName || chat.name;
+  const phoneSource = realPhone || (isLid ? null : rawJidNumber);
+  const displayName = nameSource || (phoneSource ? formatPhoneNumber(phoneSource) : `Contato ${rawJidNumber.slice(-4)}`);
 
   const sendTargetJid =
     altJid ||
-    (jid.endsWith("@lid") ? undefined : jid);
+    (isLid ? undefined : jid);
 
   return {
     remoteJid: jid,
