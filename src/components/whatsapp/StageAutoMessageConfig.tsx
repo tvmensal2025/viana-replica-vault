@@ -68,6 +68,23 @@ export function StageAutoMessageConfig({
     }
   };
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingImage(true);
+    setImageUploadProgress(0);
+    try {
+      const result = await uploadMedia(file, (pct) => setImageUploadProgress(pct));
+      setImageUrl(result.url);
+      toast({ title: "Imagem enviada", description: `${file.name} (${formatFileSize(file.size)})` });
+    } catch (err: unknown) {
+      toast({ title: "Erro no upload", description: err instanceof Error ? err.message : "Falha", variant: "destructive" });
+    } finally {
+      setUploadingImage(false);
+      if (imageInputRef.current) imageInputRef.current.value = "";
+    }
+  
+
   const handleOpen = (isOpen: boolean) => {
     if (isOpen) {
       setText(autoMessageText || "");
