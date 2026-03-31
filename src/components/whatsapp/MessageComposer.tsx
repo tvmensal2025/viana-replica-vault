@@ -71,15 +71,18 @@ export function MessageComposer({ onSend, onSendAudio, onSendAudioUrl, onSendMed
       try {
         const trimmed = text.trim();
 
-        // Audio templates must follow the template order: audio -> image -> text
+        // Audio templates must follow the template order: audio -> (delay) -> image -> (delay) -> text
         if (attachedFile.type === "audio" && onSendAudioUrl) {
           await onSendAudioUrl(attachedFile.url);
 
           if (pendingImageUrl && onSendMedia) {
+            // Small delay so Evolution API finishes processing the audio before receiving the image
+            await new Promise((r) => setTimeout(r, 2500));
             await onSendMedia(pendingImageUrl, "", "image");
           }
 
           if (trimmed) {
+            await new Promise((r) => setTimeout(r, 1500));
             await onSend(trimmed);
           }
         } else if (onSendMedia) {
