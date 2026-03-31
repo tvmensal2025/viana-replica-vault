@@ -378,6 +378,50 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onDele
                 </Button>
               </div>
 
+              {/* Record audio button (only for audio type) */}
+              {mediaType === "audio" && (
+                <div className="space-y-2">
+                  {isRecording ? (
+                    <div className="flex items-center gap-3 rounded-xl border-2 border-red-500/40 bg-red-500/5 px-4 py-3 animate-pulse">
+                      <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
+                      <span className="text-sm font-bold text-red-400 tabular-nums">{formatRecordingTime(recordingTime)}</span>
+                      <span className="text-xs text-muted-foreground">Gravando...</span>
+                      <div className="ml-auto flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={cancelRecording}
+                          className="h-8 w-8 text-muted-foreground hover:text-red-400 hover:bg-red-500/10"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={stopRecording}
+                          className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                        >
+                          <Square className="w-4 h-4 fill-current" />
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={startRecording}
+                      disabled={isSaving || isUploading}
+                      className="gap-2 rounded-xl border-dashed border-2 border-orange-500/30 hover:border-orange-500/50 hover:bg-orange-500/5 w-full h-12"
+                    >
+                      <Mic className="w-4 h-4 text-orange-400" />
+                      <span className="text-xs text-orange-400 font-bold">Gravar áudio agora</span>
+                    </Button>
+                  )}
+                </div>
+              )
+
               {/* Upload progress */}
               {isUploading && (
                 <Progress value={uploadProgress} className="h-1.5" />
