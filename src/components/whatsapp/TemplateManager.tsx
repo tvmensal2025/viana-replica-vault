@@ -92,7 +92,7 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onDele
       mediaRecorder.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
         const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        const file = new File([blob], `gravacao_${Date.now()}.webm`, { type: "audio/webm" });
+        const file = Object.assign(blob, { name: `gravacao_${Date.now()}.webm`, lastModified: Date.now() }) as unknown as File;
 
         setIsUploading(true);
         setUploadProgress(0);
