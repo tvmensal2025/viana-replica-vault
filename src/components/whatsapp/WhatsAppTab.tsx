@@ -201,45 +201,43 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
     fetchCustomers();
   }, [fetchCustomers]);
 
-  // If not connected, show only the connection panel
-  if (connectionStatus !== "connected") {
-    return (
-      <div className="flex flex-col gap-4">
-        <ConnectionPanel
-          connectionStatus={connectionStatus}
-          qrCode={qrCode}
-          qrGeneratedAt={qrGeneratedAt}
-          instanceName={instanceName}
-          phoneNumber={phoneNumber}
-          isLoading={isLoading}
-          error={error}
-          connectionLog={connectionLog}
-          onConnect={createAndConnect}
-          onDisconnect={disconnect}
-          onReconnect={reconnect}
-          onRefreshQr={refreshQr}
-        />
-      </div>
-    );
-  }
+  const isConnected = connectionStatus === "connected";
 
   return (
     <div className="flex flex-col gap-0 h-[calc(100vh-200px)] min-h-[500px]">
       {/* Compact connection status */}
       <div className="flex items-center justify-between px-3 py-1.5 bg-card border border-border rounded-t-lg">
-        <div className="flex items-center gap-2">
-          <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-          <span className="text-xs text-foreground font-medium">WhatsApp Conectado</span>
-          {instanceName && (
-            <span className="text-[10px] text-muted-foreground">({instanceName})</span>
-          )}
-        </div>
-        <button
-          onClick={disconnect}
-          className="text-[10px] text-destructive hover:underline"
-        >
-          Desconectar
-        </button>
+        {isConnected ? (
+          <>
+            <div className="flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+              <span className="text-xs text-foreground font-medium">WhatsApp Conectado</span>
+              {instanceName && (
+                <span className="text-[10px] text-muted-foreground">({instanceName})</span>
+              )}
+            </div>
+            <button
+              onClick={disconnect}
+              className="text-[10px] text-destructive hover:underline"
+            >
+              Desconectar
+            </button>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full bg-destructive" />
+              <span className="text-xs text-foreground font-medium">WhatsApp Desconectado</span>
+            </div>
+            <button
+              onClick={createAndConnect}
+              disabled={isLoading}
+              className="text-[10px] text-primary hover:underline font-medium"
+            >
+              {isLoading ? "Conectando..." : "Conectar"}
+            </button>
+          </>
+        )}
       </div>
 
       {/* Sub-tab navigation */}
