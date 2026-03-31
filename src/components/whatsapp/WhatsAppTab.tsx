@@ -337,12 +337,18 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
           </div>
         )}
 
-        {activeSubTab === "agendamentos" && instanceName && (
+        {activeSubTab === "agendamentos" && (
           <div className="p-4 overflow-auto h-full">
-            <SchedulePanel
-              consultantId={userId}
-              instanceName={instanceName}
-            />
+            {isConnected && instanceName ? (
+              <SchedulePanel
+                consultantId={userId}
+                instanceName={instanceName}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-40 text-sm text-muted-foreground">
+                Conecte o WhatsApp para gerenciar agendamentos.
+              </div>
+            )}
           </div>
         )}
 
