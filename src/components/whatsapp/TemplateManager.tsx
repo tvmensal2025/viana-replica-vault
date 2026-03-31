@@ -420,7 +420,7 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onDele
                     </Button>
                   )}
                 </div>
-              )
+              )}
 
               {/* Upload progress */}
               {isUploading && (
