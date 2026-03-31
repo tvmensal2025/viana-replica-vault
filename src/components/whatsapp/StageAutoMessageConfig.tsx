@@ -84,12 +84,14 @@ export function StageAutoMessageConfig({
       if (imageInputRef.current) imageInputRef.current.value = "";
     }
   
+  };
 
   const handleOpen = (isOpen: boolean) => {
     if (isOpen) {
       setText(autoMessageText || "");
       setType(autoMessageType || "text");
       setMediaUrl(autoMessageMediaUrl || "");
+      setImageUrl(autoMessageImageUrl || "");
     }
     setOpen(isOpen);
   };
@@ -98,13 +100,14 @@ export function StageAutoMessageConfig({
     onSave(
       text.trim() || null,
       type,
-      mediaUrl.trim() || null
+      mediaUrl.trim() || null,
+      imageUrl.trim() || null
     );
     setOpen(false);
   };
 
   const handleClear = () => {
-    onSave(null, "text", null);
+    onSave(null, "text", null, null);
     setOpen(false);
   };
 
