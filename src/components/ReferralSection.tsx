@@ -9,8 +9,14 @@ const referralItems = [
 const ReferralSection = () => (
   <section>
     <div className="section-container">
-      <div className="badge-green mx-auto mb-6">Indicação</div>
-      <h2 className="section-heading mb-14">Programa de indicações iGreen Energy</h2>
+      <h2 className="section-heading mb-10">Veja como você pode zerar sua conta de luz através de indicações</h2>
+
+      <div className="max-w-4xl mx-auto rounded-2xl overflow-hidden relative mb-14" style={{ boxShadow: 'var(--shadow-green-lg)' }}>
+        <div className="absolute inset-0 rounded-2xl border border-primary/20 z-10 pointer-events-none" />
+        <video controls className="w-full aspect-video relative z-0">
+          <source src="https://igreen-minio.b099mi.easypanel.host/igreen/indicacoes.mp4" type="video/mp4" />
+        </video>
+      </div>
 
       <div className="grid md:grid-cols-2 gap-12 items-center">
         <div className="relative group">
