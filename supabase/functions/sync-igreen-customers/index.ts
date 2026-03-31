@@ -59,7 +59,7 @@ function buildRecord(c: Record<string, unknown>): Record<string, unknown> | null
   let phone = normalizePhone(String(phoneRaw || ""));
 
   if (!phone || phone.length < 12) {
-    const codigo = safeStr(get(c, "codigo", "Codigo", "Código", "codigoIgreen", "id"));
+    const codigo = safeStr(get(c, "codigoCliente", "codigo", "Codigo", "Código", "codigoIgreen", "id"));
     const instalacao = safeStr(get(c, "numeroInstalacao", "numero_instalacao", "Instalação"));
     const fallbackId = codigo || instalacao;
     if (fallbackId) phone = `sem_celular_${fallbackId.replace(/\D/g, "")}`;
