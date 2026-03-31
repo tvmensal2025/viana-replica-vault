@@ -53,6 +53,7 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onDele
   const [content, setContent] = useState("");
   const [mediaType, setMediaType] = useState<TemplateMediaType>("text");
   const [mediaUrl, setMediaUrl] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [previewTemplate, setPreviewTemplate] = useState<MessageTemplate | null>(null);
 
