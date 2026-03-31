@@ -551,7 +551,7 @@ const Admin = () => {
             </div>
 
             {/* Weekly New Customers */}
-            {analytics?.weeklyNewCustomers && analytics.weeklyNewCustomers.some((w) => w.count > 0) && (
+            {filteredMetrics?.weeklyNewCustomers && filteredMetrics.weeklyNewCustomers.some((w) => w.count > 0) && (
               <div className="bg-card rounded-2xl border border-border p-4 sm:p-6">
                 <h3 className="font-heading font-bold text-foreground mb-1 flex items-center gap-2">
                   <TrendingUp className="w-4 h-4 text-primary" /> Novos Clientes por Semana
