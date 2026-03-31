@@ -228,6 +228,20 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
               return;
             }
 
+            // Safety: verify instance doesn't exist before creating
+            let instanceExistsOnServer = false;
+            try {
+              const instances = await withTimeout(fetchInstances(), 10000);
+              instanceExistsOnServer = instances?.some((i) => i.instance?.instanceName === name) ?? false;
+            } catch { /* assume doesn't exist */ }
+
+            if (instanceExistsOnServer) {
+              addLog("⏳ Instância encontrada no servidor. Tentando reconectar...");
+              consecutiveFailsRef.current = 0;
+              pollRef.current = setTimeout(poll, 5000);
+              return;
+            }
+
             addLog("🔄 Instância indisponível. Criando nova sessão automaticamente...");
             markCreateAttempt();
 
