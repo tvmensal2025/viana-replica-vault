@@ -128,6 +128,13 @@ export async function deleteInstance(instanceName: string) {
   );
 }
 
+export async function logoutInstance(instanceName: string) {
+  return request<void>(
+    `instance/logout/${instanceName}`,
+    "DELETE"
+  );
+}
+
 export async function fetchInstances(): Promise<{ instance: { instanceName: string; status: string } }[]> {
   return request<{ instance: { instanceName: string; status: string } }[]>(
     "instance/fetchInstances",
