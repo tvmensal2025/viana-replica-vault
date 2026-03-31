@@ -725,7 +725,19 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
 
                 return (
                   <div key={c.id} className={`rounded-xl border transition-all duration-200 ${isExpanded ? "border-primary/20 bg-primary/[0.02] shadow-md shadow-primary/5" : hasDevolutiva ? "border-red-500/20 bg-red-500/[0.02] hover:border-red-500/30" : "border-border/40 bg-secondary/10 hover:border-border/60 hover:bg-secondary/20"}`}>
-                    <div className="flex items-center gap-3 px-4 py-3 cursor-pointer" onClick={() => setExpandedId(isExpanded ? null : c.id)}>
+                    <div className="flex items-center gap-3 px-4 py-3 cursor-pointer" onClick={() => {
+                      const willExpand = expandedId !== c.id;
+                      setExpandedId(willExpand ? c.id : null);
+                      // On-demand profile pic fetch
+                      if (willExpand && instanceName && !profilePics[c.id]) {
+                        const phone = c.phone_whatsapp.replace(/\D/g, "");
+                        if (phone.length >= 10) {
+                          getProfilePicture(instanceName, `${phone}@s.whatsapp.net`)
+                            .then((url) => { if (url && typeof url === "string") setProfilePics((prev) => ({ ...prev, [c.id]: url })); })
+                            .catch(() => { /* non-critical */ });
+                        }
+                      }
+                    }}>
                       <Avatar className="h-10 w-10 shrink-0 border border-primary/10">
                         <AvatarImage src={pic} />
                         <AvatarFallback className="bg-gradient-to-br from-primary/15 to-primary/5 text-xs font-bold text-primary">
