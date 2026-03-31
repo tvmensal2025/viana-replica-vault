@@ -1,23 +1,40 @@
 
 
-## Fix: `markAsRead` Missing Required Fields
+## Diagnóstico: Sincronização iGreen falhando
 
-### Problem
-The Evolution API endpoint `chat/markMessageAsRead` requires each item in `readMessages` to have `id`, `remoteJid`, and `fromMe` properties. The current `markAsRead` function only sends `{ remoteJid }`, causing a 400 Bad Request.
+### Causa raiz
 
-### Solution
+Os logs mostram claramente o problema. A API iGreen retorna o ID do consultor no campo **`idconsultor`**, mas o código só procura por `id`, `data.id`, `consultant.id`, `user.id`, etc. — nunca `idconsultor`.
 
-**File: `src/services/evolutionApi.ts`**
-- Update `markAsRead` signature to accept `id` and `fromMe` parameters
-- Send the complete object: `{ readMessages: [{ id, remoteJid, fromMe }] }`
+Log da API:
+```
+Consultant API response keys: ["idconsultor","nome","cpf",...]
+Consultant ID: undefined
+```
 
-**File: `src/hooks/useMessages.ts`**
-- After fetching messages, find the last received message (not fromMe) and pass its `id` and `fromMe: false` to `markAsRead`
-- If no received messages exist, skip the `markAsRead` call entirely (nothing to mark as read)
+O campo correto é `consultantData.idconsultor` (valor: `124170`).
 
-### Changes
+### Correção
 
-1. **`src/services/evolutionApi.ts`** -- Change `markAsRead(instanceName, remoteJid)` to `markAsRead(instanceName, remoteJid, messageId, fromMe)` and include all fields in the request body.
+**Arquivo: `supabase/functions/sync-igreen-customers/index.ts`** (linha ~259)
 
-2. **`src/hooks/useMessages.ts`** -- In `fetchMessages`, after mapping messages, find the last incoming message and pass its ID to `markAsRead`. If there are no incoming messages, skip the call.
+Adicionar `consultantData.idconsultor` como primeira opção na cadeia de extração do ID:
+
+```typescript
+const consultorId = consultantData.idconsultor
+  || consultantData.id 
+  || consultantData.data?.id 
+  || consultantData.consultant?.id 
+  || consultantData.user?.id
+  || consultantData.consultor?.id
+  || consultantData._id
+  || consultantData.data?._id
+  || consultantData.uid
+  || consultantData.userId
+  || consultantData.user_id;
+```
+
+Depois, re-deploy da edge function.
+
+Uma linha. Isso resolve o problema.
 
