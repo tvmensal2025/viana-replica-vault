@@ -30,6 +30,7 @@ const Admin = () => {
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [syncingDashboard, setSyncingDashboard] = useState(false);
+  const [selectedLicenciado, setSelectedLicenciado] = useState("all");
   const [showCredentialsDialog, setShowCredentialsDialog] = useState(false);
   const [credForm, setCredForm] = useState({ email: "", password: "" });
   const navigate = useNavigate();
