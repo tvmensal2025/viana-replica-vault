@@ -72,6 +72,8 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
   const [newLabel, setNewLabel] = useState("");
   const [newColor, setNewColor] = useState(COLOR_OPTIONS[0].value);
   const [addingNew, setAddingNew] = useState(false);
+  const [draggedStageId, setDraggedStageId] = useState<string | null>(null);
+  const [dragOverStageId, setDragOverStageId] = useState<string | null>(null);
   const { toast } = useToast();
 
   const fetchStages = useCallback(async () => {
@@ -308,6 +310,48 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
     }
   };
 
+  const handleStageDragStart = (stageId: string) => {
+    setDraggedStageId(stageId);
+  };
+
+  const handleStageDragOver = (e: React.DragEvent, stageId: string) => {
+    e.preventDefault();
+    if (draggedStageId && draggedStageId !== stageId) {
+      setDragOverStageId(stageId);
+    }
+  };
+
+  const handleStageDrop = async (targetStageId: string) => {
+    if (!draggedStageId || draggedStageId === targetStageId) {
+      setDraggedStageId(null);
+      setDragOverStageId(null);
+      return;
+    }
+
+    const fromIndex = stages.findIndex((s) => s.id === draggedStageId);
+    const toIndex = stages.findIndex((s) => s.id === targetStageId);
+    if (fromIndex === -1 || toIndex === -1) return;
+
+    const reordered = [...stages];
+    const [moved] = reordered.splice(fromIndex, 1);
+    reordered.splice(toIndex, 0, moved);
+
+    // Update positions
+    const updated = reordered.map((s, i) => ({ ...s, position: i }));
+    setStages(updated);
+    setDraggedStageId(null);
+    setDragOverStageId(null);
+
+    // Persist to DB
+    for (const s of updated) {
+      await supabase
+        .from("kanban_stages")
+        .update({ position: s.position })
+        .eq("id", s.id);
+    }
+    toast({ title: "Ordem das colunas atualizada!" });
+  };
+
   return (
     <div className="space-y-3">
       {/* Header */}
@@ -336,7 +380,22 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
             </p>
             <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
               {stages.map((stage) => (
-                <div key={stage.id} className="flex items-center gap-2 p-2.5 rounded-lg bg-secondary/50">
+                <div
+                  key={stage.id}
+                  draggable={!editingStage}
+                  onDragStart={() => handleStageDragStart(stage.id)}
+                  onDragOver={(e) => handleStageDragOver(e, stage.id)}
+                  onDrop={() => handleStageDrop(stage.id)}
+                  onDragEnd={() => { setDraggedStageId(null); setDragOverStageId(null); }}
+                  className={`flex items-center gap-2 p-2.5 rounded-lg bg-secondary/50 transition-all ${
+                    draggedStageId === stage.id ? "opacity-50 scale-95" : ""
+                  } ${dragOverStageId === stage.id ? "border-2 border-primary/40 border-dashed" : ""} ${
+                    !editingStage ? "cursor-grab active:cursor-grabbing" : ""
+                  }`}
+                >
+                  {!editingStage && (
+                    <GripVertical className="h-4 w-4 text-muted-foreground/50 shrink-0" />
+                  )}
                   {editingStage?.id === stage.id ? (
                     <>
                       <Input
