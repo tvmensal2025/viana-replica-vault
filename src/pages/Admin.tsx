@@ -11,7 +11,7 @@ import type { Database } from "@/integrations/supabase/types";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, AreaChart, Area, PieChart, Pie, Cell, Legend,
 } from "recharts";
-import { Eye, Users, Copy, ExternalLink, LogOut, Save, Camera, BarChart3, LinkIcon, Settings, Monitor, MousePointerClick, Clock, Smartphone, Globe, QrCode, Download, X, MessageSquare, Zap, TrendingUp, KeyRound, RefreshCw, Loader2, Filter } from "lucide-react";
+import { Eye, EyeOff, Users, Copy, ExternalLink, LogOut, Save, Camera, BarChart3, LinkIcon, Settings, Monitor, MousePointerClick, Clock, Smartphone, Globe, QrCode, Download, X, MessageSquare, Zap, TrendingUp, KeyRound, RefreshCw, Loader2, Filter } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useQueryClient } from "@tanstack/react-query";
@@ -31,6 +31,8 @@ const Admin = () => {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [syncingDashboard, setSyncingDashboard] = useState(false);
   const [selectedLicenciado, setSelectedLicenciado] = useState("all");
+  const [showCredPassword, setShowCredPassword] = useState(false);
+  const [showPortalPassword, setShowPortalPassword] = useState(false);
   const [showCredentialsDialog, setShowCredentialsDialog] = useState(false);
   const [credForm, setCredForm] = useState({ email: "", password: "" });
   const navigate = useNavigate();
@@ -858,13 +860,18 @@ const Admin = () => {
               </div>
               <div>
                 <Label htmlFor="cred-password">Senha do Portal</Label>
-                <Input
-                  id="cred-password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={credForm.password}
-                  onChange={(e) => setCredForm(prev => ({ ...prev, password: e.target.value }))}
-                />
+                <div className="relative">
+                  <Input
+                    id="cred-password"
+                    type={showCredPassword ? "text" : "password"}
+                    placeholder="••••••••"
+                    value={credForm.password}
+                    onChange={(e) => setCredForm(prev => ({ ...prev, password: e.target.value }))}
+                  />
+                  <button type="button" onClick={() => setShowCredPassword(!showCredPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                    {showCredPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
               <Button
                 className="w-full"
@@ -978,7 +985,12 @@ const Admin = () => {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="igreen_portal_password" className="text-sm text-muted-foreground">Senha do Portal</Label>
-                  <Input id="igreen_portal_password" type="password" value={form.igreen_portal_password} onChange={(e) => setForm({ ...form, igreen_portal_password: e.target.value })} placeholder="••••••••" className="bg-secondary border-border" />
+                  <div className="relative">
+                    <Input id="igreen_portal_password" type={showPortalPassword ? "text" : "password"} value={form.igreen_portal_password} onChange={(e) => setForm({ ...form, igreen_portal_password: e.target.value })} placeholder="••••••••" className="bg-secondary border-border pr-10" />
+                    <button type="button" onClick={() => setShowPortalPassword(!showPortalPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                      {showPortalPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
