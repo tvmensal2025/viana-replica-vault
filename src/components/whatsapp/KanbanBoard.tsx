@@ -122,6 +122,12 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
       .replace(/\{\{telefone\}\}/g, phone);
 
     try {
+      // Send optional image first
+      const imageUrl = (stage as any).auto_message_image_url;
+      if (imageUrl) {
+        await sendMedia(instanceName, phone, imageUrl, "", "image");
+      }
+
       if (stage.auto_message_type === "text" || !stage.auto_message_type) {
         await sendTextMessage(instanceName, phone, messageText);
       } else if (stage.auto_message_type === "image" && stage.auto_message_media_url) {
@@ -130,6 +136,10 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
         await sendMedia(instanceName, phone, stage.auto_message_media_url, messageText, "video");
       } else if (stage.auto_message_type === "audio" && stage.auto_message_media_url) {
         await sendAudio(instanceName, phone, stage.auto_message_media_url);
+        // For audio, send text as separate message if present
+        if (messageText) {
+          await sendTextMessage(instanceName, phone, messageText);
+        }
       }
       toast({ title: `✅ Msg automática enviada (${stage.label})` });
     } catch {
@@ -251,7 +261,8 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
     stageId: string,
     text: string | null,
     type: string,
-    mediaUrl: string | null
+    mediaUrl: string | null,
+    imageUrl: string | null
   ) => {
     const { error } = await supabase
       .from("kanban_stages")
@@ -259,7 +270,8 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
         auto_message_text: text,
         auto_message_type: type,
         auto_message_media_url: mediaUrl,
-      })
+        auto_message_image_url: imageUrl,
+      } as any)
       .eq("id", stageId);
 
     if (error) {
@@ -268,7 +280,7 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
       setStages((prev) =>
         prev.map((s) =>
           s.id === stageId
-            ? { ...s, auto_message_text: text, auto_message_type: type, auto_message_media_url: mediaUrl }
+            ? { ...s, auto_message_text: text, auto_message_type: type, auto_message_media_url: mediaUrl, auto_message_image_url: imageUrl } as any
             : s
         )
       );
@@ -370,8 +382,9 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
                         autoMessageText={stage.auto_message_text}
                         autoMessageType={stage.auto_message_type || "text"}
                         autoMessageMediaUrl={stage.auto_message_media_url}
-                        onSave={(text, type, mediaUrl) =>
-                          handleSaveAutoMessage(stage.id, text, type, mediaUrl)
+                        autoMessageImageUrl={(stage as any).auto_message_image_url}
+                        onSave={(text, type, mediaUrl, imageUrl) =>
+                          handleSaveAutoMessage(stage.id, text, type, mediaUrl, imageUrl)
                         }
                       />
 

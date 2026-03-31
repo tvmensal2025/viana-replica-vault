@@ -19,7 +19,8 @@ interface StageAutoMessageConfigProps {
   autoMessageText: string | null;
   autoMessageType: string;
   autoMessageMediaUrl: string | null;
-  onSave: (text: string | null, type: string, mediaUrl: string | null) => void;
+  autoMessageImageUrl: string | null;
+  onSave: (text: string | null, type: string, mediaUrl: string | null, imageUrl: string | null) => void;
 }
 
 const MESSAGE_TYPES = [
@@ -34,15 +35,20 @@ export function StageAutoMessageConfig({
   autoMessageText,
   autoMessageType,
   autoMessageMediaUrl,
+  autoMessageImageUrl,
   onSave,
 }: StageAutoMessageConfigProps) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState(autoMessageText || "");
   const [type, setType] = useState(autoMessageType || "text");
   const [mediaUrl, setMediaUrl] = useState(autoMessageMediaUrl || "");
+  const [imageUrl, setImageUrl] = useState(autoMessageImageUrl || "");
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [imageUploadProgress, setImageUploadProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -62,11 +68,30 @@ export function StageAutoMessageConfig({
     }
   };
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingImage(true);
+    setImageUploadProgress(0);
+    try {
+      const result = await uploadMedia(file, (pct) => setImageUploadProgress(pct));
+      setImageUrl(result.url);
+      toast({ title: "Imagem enviada", description: `${file.name} (${formatFileSize(file.size)})` });
+    } catch (err: unknown) {
+      toast({ title: "Erro no upload", description: err instanceof Error ? err.message : "Falha", variant: "destructive" });
+    } finally {
+      setUploadingImage(false);
+      if (imageInputRef.current) imageInputRef.current.value = "";
+    }
+  
+  };
+
   const handleOpen = (isOpen: boolean) => {
     if (isOpen) {
       setText(autoMessageText || "");
       setType(autoMessageType || "text");
       setMediaUrl(autoMessageMediaUrl || "");
+      setImageUrl(autoMessageImageUrl || "");
     }
     setOpen(isOpen);
   };
@@ -75,13 +100,14 @@ export function StageAutoMessageConfig({
     onSave(
       text.trim() || null,
       type,
-      mediaUrl.trim() || null
+      mediaUrl.trim() || null,
+      imageUrl.trim() || null
     );
     setOpen(false);
   };
 
   const handleClear = () => {
-    onSave(null, "text", null);
+    onSave(null, "text", null, null);
     setOpen(false);
   };
 
@@ -191,6 +217,47 @@ export function StageAutoMessageConfig({
           </div>
         )}
 
+        {/* Optional image attachment (available for all types except "image") */}
+        {type !== "image" && (
+          <div className="space-y-2">
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleImageUpload}
+              className="hidden"
+            />
+            <p className="text-[10px] text-muted-foreground font-medium">📷 Imagem opcional (enviada antes da mensagem)</p>
+            <div className="flex gap-2">
+              <Input
+                value={imageUrl}
+                onChange={(e) => setImageUrl(e.target.value)}
+                placeholder="URL da imagem ou faça upload →"
+                className="h-8 text-xs flex-1"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs gap-1 shrink-0"
+                disabled={uploadingImage}
+                onClick={() => imageInputRef.current?.click()}
+              >
+                {uploadingImage ? <Loader2 className="h-3 w-3 animate-spin" /> : <Image className="h-3 w-3" />}
+                {uploadingImage ? `${imageUploadProgress}%` : "Imagem"}
+              </Button>
+            </div>
+            {imageUrl && (
+              <div className="flex items-center gap-2">
+                <img src={imageUrl} alt="preview" className="h-10 w-10 rounded object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                <p className="text-[10px] text-muted-foreground truncate flex-1">✅ {imageUrl}</p>
+                <Button variant="ghost" size="icon" className="h-5 w-5 text-destructive" onClick={() => setImageUrl("")}>
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
         {/* Formatting toolbar */}
         <div className="flex items-center gap-1 border border-border rounded-t-md px-2 py-1 bg-secondary/30 -mb-2">
           <Button variant="ghost" size="icon" className="h-6 w-6" onClick={insertBold} title="Negrito *texto*">
