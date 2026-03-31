@@ -133,10 +133,18 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
   const checkState = useCallback(async (name: string): Promise<"open" | "close" | "connecting"> => {
     try {
       const result = await withTimeout(getConnectionState(name), 20000);
-      return result?.state || "close";
+      const state = result?.state || "close";
+      // If the proxy returned a timeout flag but status 200, try once more with shorter timeout
+      if (state === "connecting" && result?.timeout) {
+        try {
+          const retry = await withTimeout(getConnectionState(name), 10000);
+          return retry?.state || "connecting";
+        } catch {
+          return "connecting";
+        }
+      }
+      return state;
     } catch {
-      // Transient error (timeout, network) → treat as "connecting" not "close"
-      // This prevents unnecessary QR regeneration on temporary failures
       return "connecting";
     }
   }, []);
