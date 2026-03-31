@@ -82,8 +82,8 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
             if (r.status === "failed") allOk = false;
           }
 
-          if (tplMediaUrl && (tplMediaType === "image" || tplMediaType === "document" || tplMediaType === "video")) {
-            const category = tplMediaType as "image" | "video" | "document";
+          if (tplMediaUrl && (tplMediaType === "image" || tplMediaType === "document")) {
+            const category = tplMediaType as "image" | "document";
             const r = await sendWhatsAppMessage({ instanceName, phone, mediaCategory: category, mediaUrl: tplMediaUrl, text: msg });
             if (r.status === "failed") allOk = false;
           } else if (msg.trim()) {
