@@ -237,9 +237,12 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
   }
   useEffect(() => {
     if (!instanceName) return;
+    // Only fetch profile pics when WhatsApp is actually connected (instanceName exists and we can reach the API)
+    let cancelled = false;
     const fetchPics = async () => {
       const pics: Record<string, string> = {};
       for (const c of customers.slice(0, 50)) {
+        if (cancelled) break;
         const phone = c.phone_whatsapp.replace(/\D/g, "");
         if (phone.length < 10 || pics[c.id]) continue;
         try {
@@ -247,9 +250,11 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
           if (result && typeof result === "string") pics[c.id] = result;
         } catch { /* skip */ }
       }
-      setProfilePics((prev) => ({ ...prev, ...pics }));
+      if (!cancelled) setProfilePics((prev) => ({ ...prev, ...pics }));
     };
-    fetchPics();
+    // Delay to avoid hammering the API during initial connection
+    const timer = setTimeout(fetchPics, 3000);
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [instanceName, customers]);
 
   // Filter by search

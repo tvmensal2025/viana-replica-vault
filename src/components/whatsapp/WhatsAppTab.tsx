@@ -227,14 +227,19 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
           <>
             <div className="flex items-center gap-2">
               <div className="h-2 w-2 rounded-full bg-destructive" />
-              <span className="text-xs text-foreground font-medium">WhatsApp Desconectado</span>
+              <span className="text-xs text-foreground font-medium">
+                {connectionStatus === "connecting" ? "WhatsApp Conectando..." : "WhatsApp Desconectado"}
+              </span>
             </div>
             <button
-              onClick={createAndConnect}
+              onClick={() => {
+                setActiveSubTab("conversas");
+                if (connectionStatus === "disconnected") createAndConnect();
+              }}
               disabled={isLoading}
               className="text-[10px] text-primary hover:underline font-medium"
             >
-              {isLoading ? "Conectando..." : "Conectar"}
+              {isLoading || connectionStatus === "connecting" ? "Conectando..." : "Conectar"}
             </button>
           </>
         )}
