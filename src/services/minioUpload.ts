@@ -72,11 +72,11 @@ export function getAcceptString(mediaType: string): string {
     case "image":
       return "image/jpeg,image/png,image/webp,image/gif";
     case "audio":
-      return "audio/mpeg,audio/ogg,audio/mp4,audio/wav,audio/webm";
+      return "audio/mpeg,audio/ogg,audio/mp4,audio/wav,audio/webm,audio/webm;codecs=opus";
     case "video":
       return "video/mp4,video/webm";
     case "document":
-      return "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+      return "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     default:
       return "*/*";
   }
