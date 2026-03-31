@@ -320,7 +320,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
         addLog(attempt === 1 ? "⏳ Aguardando QR Code do servidor..." : "⏳ Ainda aguardando QR Code...");
         scheduleQrRecovery(name, attempt + 1);
       }
-    }, Math.min(4000 * attempt, 12000));
+    }, Math.min(2000 * attempt, 10000));
   }, [addLog, checkState, clearCreateAttempt, clearQrRecovery, fetchQr, hasRecentCreateAttempt, saveInstance, startPolling]);
 
   const enterPendingConnection = useCallback((name: string, message: string) => {
@@ -374,7 +374,24 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
 
           if (state === "connecting") {
             await saveInstance(name);
-            enterPendingConnection(name, "⏳ Conexão em andamento. Recuperando QR Code...");
+            addLog("⏳ Recuperando QR Code...");
+
+            // Immediately try to get QR instead of just scheduling recovery
+            const qrAttempt = await fetchQr(name);
+            if (!mountedRef.current) return;
+
+            if (qrAttempt.qrCode) {
+              clearQrRecovery();
+              clearCreateAttempt();
+              setQrCode(qrAttempt.qrCode);
+              setQrGeneratedAt(Date.now());
+              setConnectionStatus("connecting");
+              addLog("📱 QR Code gerado — escaneie com seu celular");
+              startPolling(name);
+              return;
+            }
+
+            enterPendingConnection(name, "⏳ QR Code ainda não disponível. Recuperando automaticamente...");
             return;
           }
 
@@ -563,7 +580,24 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
         if (state === "connecting") {
           setConnectionStatus("connecting");
           setError(null);
-          addLog("⏳ Conexão em andamento. Recuperando QR Code...");
+          addLog("⏳ Recuperando QR Code...");
+
+          // Immediately try to fetch QR instead of waiting
+          const qrAttempt = await fetchQr(name);
+          if (cancelled) return;
+
+          if (qrAttempt.qrCode) {
+            await saveInstance(name);
+            setQrCode(qrAttempt.qrCode);
+            setQrGeneratedAt(Date.now());
+            setConnectionStatus("connecting");
+            addLog("📱 QR Code gerado — escaneie com seu celular");
+            startPolling(name);
+            setIsLoading(false);
+            return;
+          }
+
+          // QR not ready yet, start polling + recovery
           startPolling(name);
           scheduleQrRecovery(name);
           setIsLoading(false);
