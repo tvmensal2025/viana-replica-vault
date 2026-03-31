@@ -12,6 +12,25 @@ interface ProxyRequest {
   body?: unknown;
 }
 
+function isMediaFetchPath(path: string): boolean {
+  return path.startsWith("chat/getBase64FromMediaMessage/");
+}
+
+function createGracefulMediaUnavailableResponse(extra: Record<string, unknown> = {}): Response {
+  return new Response(JSON.stringify({ base64: null, mimetype: null, mediaUnavailable: true, ...extra }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+function isLikelyMediaInfrastructureError(body: string): boolean {
+  const normalizedBody = body.toLowerCase();
+  return normalizedBody.includes("getaddrinfo") ||
+    normalizedBody.includes("eai_again") ||
+    normalizedBody.includes("enotfound") ||
+    normalizedBody.includes("minio");
+}
+
 function normalizeEvolutionBaseUrl(rawUrl: string | undefined): string {
   const sanitized = (rawUrl || "")
     .trim()
@@ -81,6 +100,10 @@ function createGracefulTimeoutResponse(safePath: string): Response | null {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
+  }
+
+  if (isMediaFetchPath(safePath)) {
+    return createGracefulMediaUnavailableResponse({ timeout: true });
   }
 
   // Avatar fetches are non-critical — return graceful null instead of 504
@@ -303,14 +326,20 @@ Deno.serve(async (req) => {
     const responseBody = await evolutionResponse.text();
     console.log("[evolution-proxy] <-", evolutionResponse.status, responseBody.substring(0, 300));
 
-    // Gracefully handle media download failures (e.g. expired WhatsApp CDN URLs)
-    if (
-      evolutionResponse.status === 400 &&
-      safePath.startsWith("chat/getBase64FromMediaMessage/")
-    ) {
-      console.warn("[evolution-proxy] Media download failed (likely expired URL), returning graceful null");
+    // Gracefully handle non-critical media fetch failures so chat rendering never breaks.
+    if (isMediaFetchPath(safePath) && (evolutionResponse.status === 400 || evolutionResponse.status >= 500)) {
+      const infrastructureIssue = isLikelyMediaInfrastructureError(responseBody);
+      console.warn(
+        `[evolution-proxy] Media fetch failed with status ${evolutionResponse.status}${infrastructureIssue ? " (storage/DNS issue)" : ""}, returning graceful null`,
+      );
       return new Response(
-        JSON.stringify({ base64: null, mimetype: null, mediaUnavailable: true }),
+        JSON.stringify({
+          base64: null,
+          mimetype: null,
+          mediaUnavailable: true,
+          upstreamStatus: evolutionResponse.status,
+          storageUnavailable: infrastructureIssue || undefined,
+        }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
