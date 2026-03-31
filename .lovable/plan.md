@@ -1,40 +1,22 @@
 
 
-## Diagnóstico: Sincronização iGreen falhando
+## Correção: Erro de gravação dos clientes sincronizados
 
-### Causa raiz
+### Situação atual
+A sincronização com a API iGreen **já funciona**. O login, busca do ID do consultor (124170) e download dos 259 clientes estão OK. O problema é na gravação no banco: a coluna `data_nascimento` é `varchar(10)`, mas os dados do portal podem vir em formato mais longo (ex: "1993-07-20T00:00:00"), causando o erro `value too long for type character varying(10)` e falhando **todos** os 126 registros.
 
-Os logs mostram claramente o problema. A API iGreen retorna o ID do consultor no campo **`idconsultor`**, mas o código só procura por `id`, `data.id`, `consultant.id`, `user.id`, etc. — nunca `idconsultor`.
+### Correção (2 passos)
 
-Log da API:
+**1. Migração SQL** — Alterar `data_nascimento` para `text` (sem limite), igual às outras colunas de data da tabela:
+```sql
+ALTER TABLE customers ALTER COLUMN data_nascimento TYPE text;
 ```
-Consultant API response keys: ["idconsultor","nome","cpf",...]
-Consultant ID: undefined
-```
 
-O campo correto é `consultantData.idconsultor` (valor: `124170`).
-
-### Correção
-
-**Arquivo: `supabase/functions/sync-igreen-customers/index.ts`** (linha ~259)
-
-Adicionar `consultantData.idconsultor` como primeira opção na cadeia de extração do ID:
-
+**2. Edge Function** — Adicionar truncamento de segurança no `buildRecord` para garantir que mesmo que venha com horário, só os primeiros 10 caracteres (YYYY-MM-DD) sejam salvos:
 ```typescript
-const consultorId = consultantData.idconsultor
-  || consultantData.id 
-  || consultantData.data?.id 
-  || consultantData.consultant?.id 
-  || consultantData.user?.id
-  || consultantData.consultor?.id
-  || consultantData._id
-  || consultantData.data?._id
-  || consultantData.uid
-  || consultantData.userId
-  || consultantData.user_id;
+if (nasc) record.data_nascimento = nasc.substring(0, 10);
 ```
 
-Depois, re-deploy da edge function.
-
-Uma linha. Isso resolve o problema.
+### Resultado esperado
+Os 126 clientes serão gravados com sucesso na próxima sincronização. Nenhuma outra mudança necessária — a API do iGreen está respondendo corretamente.
 
