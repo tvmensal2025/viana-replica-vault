@@ -59,8 +59,8 @@ function buildRecord(c: Record<string, unknown>): Record<string, unknown> | null
   let phone = normalizePhone(String(phoneRaw || ""));
 
   if (!phone || phone.length < 12) {
-    const codigo = safeStr(get(c, "codigo", "Codigo", "Código", "codigoIgreen", "id"));
-    const instalacao = safeStr(get(c, "numeroInstalacao", "numero_instalacao", "Instalação"));
+    const codigo = safeStr(get(c, "codigoCliente", "codigo", "Codigo", "Código", "codigoIgreen", "id"));
+    const instalacao = safeStr(get(c, "instalacao", "numeroInstalacao", "numero_instalacao", "Instalação"));
     const fallbackId = codigo || instalacao;
     if (fallbackId) phone = `sem_celular_${fallbackId.replace(/\D/g, "")}`;
     else return null;
@@ -336,20 +336,44 @@ Deno.serve(async (req) => {
     }
 
     // Step 4: Build records and upsert
-    const seenPhones = new Set<string>();
+    // Handle duplicate phones: when multiple customers share the same celular,
+    // use igreen_code as suffix to create unique phone_whatsapp entries
+    const seenPhones = new Map<string, string>(); // phone -> first customer name
     const records: Record<string, unknown>[] = [];
+    let skippedNoPhone = 0;
 
     for (const c of allCustomers) {
       const record = buildRecord(c);
-      if (!record || !record.phone_whatsapp) continue;
+      if (!record || !record.phone_whatsapp) {
+        skippedNoPhone++;
+        const cName = safeStr(get(c, "nomeCliente", "nome", "name")) || "unknown";
+        console.log(`Skipped (no valid phone): ${cName}`);
+        continue;
+      }
+      
       const phone = String(record.phone_whatsapp);
-      if (seenPhones.has(phone)) continue;
-      seenPhones.add(phone);
+      
+      if (seenPhones.has(phone)) {
+        // Duplicate phone detected — use igreen_code or codigoCliente as suffix
+        const icode = safeStr(get(c, "codigoCliente", "codigoIgreen", "codigo"));
+        if (icode) {
+          const uniquePhone = `${phone}_${icode}`;
+          record.phone_whatsapp = uniquePhone;
+          console.log(`Duplicate phone ${phone} for "${record.name}" — using unique key: ${uniquePhone} (first was "${seenPhones.get(phone)}")`);
+          seenPhones.set(uniquePhone, String(record.name || "unknown"));
+        } else {
+          console.log(`Duplicate phone ${phone} for "${record.name}" — no igreen_code available, skipping (first was "${seenPhones.get(phone)}")`);
+          continue;
+        }
+      } else {
+        seenPhones.set(phone, String(record.name || "unknown"));
+      }
+      
       if (consultantId) record.consultant_id = consultantId;
       records.push(record);
     }
 
-    console.log(`Processing ${records.length} unique customer records...`);
+    console.log(`Processing ${records.length} records (${skippedNoPhone} skipped no phone, ${allCustomers.length - records.length - skippedNoPhone} skipped other reasons)`);
 
     let updatedCount = 0;
     let errorCount = 0;
