@@ -119,6 +119,22 @@ function createGracefulTimeoutResponse(safePath: string): Response | null {
     });
   }
 
+  // Chat/message fetches — return empty arrays so frontend never crashes
+  if (safePath.startsWith("chat/findChats/") || safePath.startsWith("chat/findMessages/")) {
+    return new Response(JSON.stringify([]), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  // Mark-as-read is non-critical
+  if (safePath.startsWith("chat/markMessageAsRead/")) {
+    return new Response(JSON.stringify({ message: "Read messages", read: "skipped", timeout: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   return null;
 }
 
