@@ -13,7 +13,7 @@ export function useConsultant(license: string) {
         .maybeSingle();
 
       if (error) throw error;
-      return data as Consultant | null;
+      return (data as unknown) as Consultant | null;
     },
     enabled: !!license,
   });
