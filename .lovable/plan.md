@@ -1,121 +1,90 @@
 
-Objetivo
+Objetivo: estabilizar o módulo WhatsApp sem depender de reiniciar container toda hora.
 
-- Deixar o envio de imagem, áudio e documento confiável no chat, templates, envio em massa e automações.
-
-Achados principais
-
-1. O upload não é o problema principal.
-   - Na sessão, o arquivo foi anexado com sucesso e o toast confirmou o upload.
-
-2. O bloqueio principal está no envio para o servidor WhatsApp.
-   - O request real foi:
-     `message/sendMedia/...`
-     com URL pública do MinIO.
-   - A resposta foi:
-     `{"error":"Timeout ao enviar mensagem. Tente novamente.","timeout":true,"sent":false}`
-   - Ou seja: o arquivo sobe, mas o Evolution/servidor WhatsApp demora ou falha ao buscar/processar a mídia remota.
-
-3. Hoje o app mascara esse problema.
-   - O proxy retorna payload “graceful” em timeout de `message/*`.
-   - O frontend não valida `sent:false`, então parte da UI pode aparentar sucesso sem garantia real.
-
-4. Existem bugs reais no código que pioram a confiabilidade:
-   - `ChatView.tsx`: áudio gravado é enviado como `data:audio/ogg;base64,...`, mas o recorder gera `audio/webm`.
-   - `ChatView.tsx`: mídia/áudio/documento não usam a mesma resolução de destinatário do texto (`resolveSendTargetJid`), então chats `@lid` podem falhar.
-   - `evolutionApi.ts`: existe `sendDocument`, mas ele nunca é usado no fluxo do chat; o documento perde `fileName`.
-   - `WhatsAppTab.tsx`: o `image_url` do template é descartado ao salvar.
-   - `BulkSendPanel.tsx`: o botão bloqueia template de mídia sem texto.
-   - `MessageComposer.tsx` e `minioUpload.ts`: tipos aceitos no frontend não batem com o backend (`audio/webm`, `xlsx` etc).
+Diagnóstico atual
+- O servidor não parece “morto” o tempo todo. Nos logs mais recentes ele voltou a responder:
+  - `instance/connectionState` retornando `200 state=open`
+  - `chat/findChats` e `chat/findMessages` retornando `200`
+  - `chat/markMessageAsRead` retornando `201`
+- O problema agora é carga desnecessária no frontend, que continua pressionando o Evolution mesmo quando ele acabou de se recuperar.
+- Os pontos mais pesados que encontrei:
+  1. `useMessages.ts` busca 100 mensagens a cada 5s.
+  2. O mesmo `markAsRead` é disparado repetidamente para a mesma mensagem.
+  3. `MessageBubble.tsx` auto-baixa mídia ao renderizar imagem (`getBase64FromMediaMessage`), e esse endpoint está levando 9–11s nos logs.
+  4. `useMessages.ts` não deduplica mensagens; a resposta da API já veio com mensagens duplicadas, então a UI pode renderizar mídia duplicada e disparar downloads duplicados.
+  5. `useWhatsApp.ts` trata erro transitório como `close`, o que pode iniciar reconexão/QR sem necessidade.
+  6. `Admin.tsx` mantém `WhatsAppTab` montada mesmo quando a aba está escondida, então polling pode continuar em segundo plano.
 
 Plano de implementação
+1. Endurecer `useMessages.ts`
+- Reduzir polling do chat aberto de 5s para algo mais seguro, como 15s.
+- Adicionar trava de requisição em andamento para evitar overlap.
+- Reduzir `limit` inicial de 100 para algo menor.
+- Deduplicar mensagens por `key.id` antes de salvar no estado.
+- Marcar como lida só quando aparecer uma nova mensagem recebida, não em todo ciclo.
 
-1. Unificar o pipeline de envio
-   - Criar uma camada única de envio com retorno tipado:
-     `sent | queued | timeout | failed`
-   - Roteamento:
-     - texto → `sendTextMessage`
-     - imagem/vídeo → `sendMedia`
-     - documento → `sendDocument`
-     - áudio → `sendWhatsAppAudio`
-   - Reusar essa camada em:
-     - `ChatView`
-     - `BulkSendPanel`
-     - `KanbanBoard`
-     - `crm-auto-progress`
+2. Parar auto-download agressivo de mídia em `MessageBubble.tsx`
+- Remover o auto-load de imagem ao montar o componente.
+- Manter carregamento sob demanda por clique.
+- Reutilizar mídia já carregada no estado para não buscar de novo.
 
-2. Corrigir bugs de payload e destinatário
-   - Fazer mídia/áudio/documento usarem a mesma lógica de resolução de JID do texto.
-   - Corrigir o formato do áudio gravado: parar de enviar WebM rotulado como OGG; padronizar um formato realmente aceito.
-   - Passar `fileName` no envio de documento.
-   - Persistir `image_url` ao criar template.
-   - Liberar envio em massa de template com mídia sem texto.
-   - Alinhar `accept` do frontend com `upload-media`.
+3. Aliviar `useChats.ts`
+- Manter polling da lista de conversas mais lento.
+- Colocar proteção de “uma busca por vez”.
+- Deixar foto de perfil como opcional/degradável: se o servidor estiver oscilando, retornar só avatar fallback sem insistir.
+- Evitar nova rodada de fotos enquanto ainda houver fetch anterior em andamento.
 
-3. Parar falsos positivos de sucesso
-   - Quando `message/*` voltar com timeout, a UI deve tratar como envio pendente/falho, não como sucesso silencioso.
-   - Adicionar estado visual de:
-     - processando
-     - reenviar
-     - falhou
+4. Corrigir lógica de estado em `useWhatsApp.ts`
+- Em erro transitório, não retornar `close` automaticamente.
+- Introduzir comportamento mais conservador: erro de rede/timeout vira “aguardando/connecting”, não “desconectado”.
+- Só entrar em fluxo de QR/recovery quando houver evidência real de sessão fechada, não apenas falha momentânea.
 
-4. Tornar mídia confiável de verdade
-   - Implementar fila para `image/audio/document`:
-     - cliente cria job
-     - edge function responde rápido com `jobId`
-     - worker processa com retry/backoff
-     - frontend acompanha status
-   - Usar essa fila em chat, bulk e automações.
-   - Esse é o passo chave para ficar “100%”, porque remove a dependência do timeout do request interativo.
+5. Pausar carga quando a aba não estiver ativa
+- Passar um sinal de aba ativa de `Admin.tsx` para `WhatsAppTab.tsx`.
+- Quando a aba WhatsApp estiver escondida:
+  - pausar polling de mensagens
+  - pausar refetch de chats
+  - manter apenas o mínimo necessário para estado de conexão
 
-5. Endurecer o armazenamento das mídias
-   - Validar se o gargalo é a URL do MinIO consumida pelo servidor WhatsApp.
-   - Se continuar instável, migrar anexos de WhatsApp para bucket público no Supabase Storage para reduzir DNS/latência externa.
+Resultado esperado
+- Queda grande nos requests repetidos.
+- Fim do `markAsRead` em loop.
+- Fim de downloads automáticos pesados ao abrir conversa.
+- Menos chance de o Evolution cair logo após se recuperar.
+- A UI deixa de ficar “presa” em estado de espera por causa de falsas desconexões.
 
-6. QA de ponta a ponta
-   - Testar:
-     - chat normal
-     - chat `@lid`
-     - imagem
-     - áudio gravado
-     - áudio de template
-     - documento PDF/DOCX/XLSX
-     - envio em massa com mídia sem texto
-     - auto-mensagem do Kanban
-   - Confirmar:
-     - upload conclui
-     - status do envio aparece corretamente
-     - mensagem chega no WhatsApp
-     - documento mantém nome
-     - timeout não vira falso sucesso
-     - reenvio funciona
+Arquivos que eu mexeria
+- `src/hooks/useMessages.ts`
+- `src/components/whatsapp/MessageBubble.tsx`
+- `src/hooks/useChats.ts`
+- `src/hooks/useWhatsApp.ts`
+- `src/components/whatsapp/WhatsAppTab.tsx`
+- `src/pages/Admin.tsx`
 
 Detalhes técnicos
+```text
+Hoje:
+chat aberto
+  -> findMessages a cada 5s
+  -> markAsRead a cada 5s
+  -> imagem renderiza
+      -> getBase64FromMediaMessage automático
+  -> erro transitório
+      -> estado vira "close"
+      -> recovery/QR desnecessário
 
-- Arquivos mais críticos:
-  - `src/components/whatsapp/ChatView.tsx`
-  - `src/components/whatsapp/MessageComposer.tsx`
-  - `src/components/whatsapp/BulkSendPanel.tsx`
-  - `src/components/whatsapp/WhatsAppTab.tsx`
-  - `src/hooks/useMessages.ts`
-  - `src/services/evolutionApi.ts`
-  - `supabase/functions/evolution-proxy/index.ts`
-  - `supabase/functions/upload-media/index.ts`
+Depois:
+chat aberto
+  -> findMessages com intervalo maior + sem overlap
+  -> dedupe de mensagens
+  -> markAsRead só quando houver nova inbound
+  -> mídia só carrega sob demanda
+  -> erro transitório mantém estado degradado, sem reset agressivo
+```
 
-- Evidência principal encontrada:
-  - upload funcionou;
-  - o envio da imagem falhou depois, no `message/sendMedia`, usando URL `https://igreen-minio...`, com `timeout:true`.
-
-Conclusão
-
-- Sim: hoje há coisas bloqueando a confiabilidade de imagem/áudio/documento.
-- Não é um único bug; é uma combinação de:
-  - timeout no envio remoto de mídia,
-  - tratamento incorreto de timeout,
-  - inconsistência de payload de áudio,
-  - fluxo errado para documento,
-  - bugs de templates e bulk send.
-- Para ficar realmente “100%”, eu seguiria este caminho:
-  1. corrigir os bugs locais,
-  2. unificar o envio,
-  3. mover mídia/áudio/documento para fila assíncrona com status.
+Validação após implementar
+- Na aba de network, confirmar que `findMessages` caiu para ~1 chamada por 15s.
+- Confirmar que `markMessageAsRead` não repete para o mesmo `id`.
+- Confirmar que abrir uma conversa com imagem não dispara `getBase64FromMediaMessage` sozinho.
+- Confirmar em EasyPanel que 502/499 caíram bastante.
+- Confirmar fluxo completo: conectar, abrir conversa, carregar imagem manualmente, enviar áudio/imagem/texto, trocar de aba e voltar.
