@@ -144,7 +144,7 @@ function buildRecord(c: Record<string, unknown>): Record<string, unknown> | null
   if (inst) record.numero_instalacao = inst;
 
   const nasc = safeStr(get(c, "dataNascimento", "data_nascimento"));
-  if (nasc) record.data_nascimento = nasc;
+  if (nasc) record.data_nascimento = nasc.substring(0, 10);
 
   return record;
 }
