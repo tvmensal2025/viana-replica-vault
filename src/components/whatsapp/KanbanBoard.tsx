@@ -251,7 +251,8 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
     stageId: string,
     text: string | null,
     type: string,
-    mediaUrl: string | null
+    mediaUrl: string | null,
+    imageUrl: string | null
   ) => {
     const { error } = await supabase
       .from("kanban_stages")
@@ -259,7 +260,8 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
         auto_message_text: text,
         auto_message_type: type,
         auto_message_media_url: mediaUrl,
-      })
+        auto_message_image_url: imageUrl,
+      } as any)
       .eq("id", stageId);
 
     if (error) {
@@ -268,7 +270,7 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
       setStages((prev) =>
         prev.map((s) =>
           s.id === stageId
-            ? { ...s, auto_message_text: text, auto_message_type: type, auto_message_media_url: mediaUrl }
+            ? { ...s, auto_message_text: text, auto_message_type: type, auto_message_media_url: mediaUrl, auto_message_image_url: imageUrl } as any
             : s
         )
       );
