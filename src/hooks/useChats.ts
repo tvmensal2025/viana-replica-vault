@@ -141,22 +141,21 @@ export function useChats(instanceName: string | null) {
       setChats(mapped);
       setError(null);
 
-      // Fetch profile pictures for chats missing them — with cache and low concurrency
-      const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+      // Fetch profile pictures ONLY for chats missing them — aggressive cache + very low throughput
+      const CACHE_TTL = 60 * 60 * 1000; // 1 hour (was 10 min — too aggressive)
       const now = Date.now();
       const missingPics = mapped
         .filter((c) => {
           if (c.profilePicUrl) return false;
           const cached = cache.get(c.remoteJid);
-          // Skip if we already fetched (success or fail) recently
           if (cached && now - cached.fetchedAt < CACHE_TTL) return false;
           return true;
         })
-        .slice(0, 10); // max 10 per cycle
+        .slice(0, 3); // max 3 per cycle (was 10)
 
       if (missingPics.length > 0 && instanceName) {
-        // Use low concurrency (2 at a time) to avoid overloading the proxy
-        processWithConcurrency(missingPics, 2, async (chat) => {
+        // Use low concurrency (1 at a time) to avoid overloading the Evolution API
+        processWithConcurrency(missingPics, 1, async (chat) => {
           const targetJid = chat.sendTargetJid || chat.remoteJid;
           try {
             const picUrl = await getProfilePicture(instanceName!, targetJid);
