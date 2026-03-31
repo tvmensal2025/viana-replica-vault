@@ -1,58 +1,58 @@
 
+Diagnóstico fechado:
 
-## Problema Critico
+- Não encontrei um erro único de sintaxe quebrando o `evolution-proxy`. Os logs mostram vários `booted` bem-sucedidos e `instance/connectionState/... -> open`, então a conexão principal com o Evolution está funcionando.
+- O erro recorrente vem principalmente de carga excessiva em chamadas opcionais de avatar:
+  1. `src/hooks/useChats.ts` faz polling a cada 15s e, após cada `findChats`, dispara até 20 `chat/fetchProfilePictureUrl` em paralelo.
+  2. Esse hook perde os avatares já buscados a cada novo `setChats(mapped)`, então refaz as mesmas buscas indefinidamente.
+  3. `src/components/whatsapp/CustomerManager.tsx` tenta buscar até 50 fotos só porque `instanceName` existe, mesmo quando o WhatsApp não está realmente conectado.
+- Quando uma dessas chamadas lentas estoura, o `evolution-proxy` devolve `504` para `chat/fetchProfilePictureUrl`, e o Lovable exibe isso como runtime error.
+- O `503 BOOT_ERROR` parece intermitente, compatível com cold start/worker churn sob carga, agravado pelo import remoto `esm.sh` no edge function.
 
-O sistema atual tem **3 pontos perigosos** que podem deletar a instância WhatsApp no servidor Evolution:
+Plano de correção:
 
-1. **`disconnect()`** (linha 536) chama `deleteInstance()` que faz `DELETE instance/delete/{name}` — isso **apaga a instância permanentemente** no Evolution API, desconectando o WhatsApp do número
-2. **Auto-recovery** (linha 230-264) pode recriar a instância via `createInstance()` quando detecta estado "close", potencialmente sobrescrevendo a sessão existente
-3. **`createInstance`** é chamado automaticamente no mount (linha 619-623) quando o estado não é "open" nem "connecting"
+1. Reduzir a tempestade de requests no frontend
+- `src/components/whatsapp/WhatsAppTab.tsx`
+- Só ativar `useChats` quando a sub-aba ativa for `conversas` e a conexão estiver `connected`
+- Passar `instanceName` para `CustomerManager` apenas quando estiver conectado, ou passar `isConnected` explicitamente
 
-## Plano de Correção
+2. Corrigir cache de fotos nas conversas
+- `src/hooks/useChats.ts`
+- Criar cache por JID (`profilePicCacheRef`)
+- Reaplicar esse cache ao reconstruir `mapped`
+- Não refazer busca para JIDs já resolvidos ou que falharam recentemente
+- Trocar `Promise.all` de 20 itens por fila com baixa concorrência (2-3 por vez)
 
-### 1. Criar função `logoutInstance` no service layer (não deleta, só desconecta)
+3. Remover prefetch agressivo na lista de clientes
+- `src/components/whatsapp/CustomerManager.tsx`
+- Parar de pré-carregar 50 fotos automaticamente
+- Carregar foto só sob demanda (item expandido / visível) com cache local
+- Se desconectado, não chamar Evolution para avatar
 
-**Arquivo:** `src/services/evolutionApi.ts`
+4. Tornar timeout de avatar não fatal no proxy
+- `supabase/functions/evolution-proxy/index.ts`
+- Adicionar `chat/fetchProfilePictureUrl/*` em `createGracefulTimeoutResponse`
+- Retornar `200` com algo como `{ profilePictureUrl: null, timeout: true }` em vez de `504`
+- Manter `504` apenas para rotas críticas
 
-- Adicionar função `logoutInstance(instanceName)` que chama `instance/logout/{instanceName}` (endpoint do Evolution API que desconecta sem deletar)
-- Manter `deleteInstance` mas nunca chamá-lo automaticamente
+5. Endurecer o boot do edge function
+- `supabase/functions/evolution-proxy/index.ts`
+- Trocar `https://esm.sh/@supabase/supabase-js...` por `npm:@supabase/supabase-js...`
+- Isso reduz fragilidade de boot e dependência externa no startup
 
-### 2. Substituir `deleteInstance` por `logoutInstance` no disconnect
+6. Validação após implementação
+- Confirmar que abrir `/admin` e navegar por WhatsApp/Clientes não gera mais cards de runtime error
+- Confirmar queda forte nas chamadas `chat/fetchProfilePictureUrl`
+- Confirmar que `instance/connectionState` continua retornando `open`
+- Confirmar que conectar, reconectar e desconectar continuam seguros sem deletar instância
 
-**Arquivo:** `src/hooks/useWhatsApp.ts`
+Arquivos principais:
+- `src/components/whatsapp/WhatsAppTab.tsx`
+- `src/hooks/useChats.ts`
+- `src/components/whatsapp/CustomerManager.tsx`
+- `supabase/functions/evolution-proxy/index.ts`
 
-- Na função `disconnect()` (linha 536): trocar `deleteInstance(name)` por `logoutInstance(name)`
-- Isso apenas desconecta a sessão sem apagar a instância no servidor
-- O registro no banco local (`whatsapp_instances`) continua sendo removido para permitir reconexão limpa
-
-### 3. Proteger contra criação duplicada de instância
-
-**Arquivo:** `src/hooks/useWhatsApp.ts`
-
-- Antes de chamar `createInstance()`, sempre verificar se a instância já existe no servidor via `fetchInstances()` ou `getConnectionState()`
-- Se a instância já existir (mesmo com estado "close"), usar apenas `connectInstance()` para gerar novo QR — **nunca recriar**
-- Só chamar `createInstance()` quando receber erro 404 confirmando que a instância realmente não existe
-
-### 4. Remover auto-connect agressivo no mount
-
-**Arquivo:** `src/hooks/useWhatsApp.ts`
-
-- Remover o `setTimeout(() => createAndConnect(), 500)` no mount (linha 619-623)
-- Quando estado é "close" no init, apenas mostrar botão "Conectar" sem auto-criar instância
-- Isso evita que o sistema crie instâncias automaticamente a cada reload da página
-
-### 5. Adicionar confirmação no disconnect
-
-**Arquivo:** `src/components/whatsapp/ConnectionPanel.tsx`
-
-- Adicionar dialog de confirmação antes de desconectar: "Tem certeza que deseja desconectar o WhatsApp?"
-- Deixar claro que é apenas logout, não exclusão
-
-### Resumo das Mudanças
-
-| Arquivo | Mudança |
-|---|---|
-| `src/services/evolutionApi.ts` | Adicionar `logoutInstance()` |
-| `src/hooks/useWhatsApp.ts` | Usar logout em vez de delete; remover auto-connect no mount; proteger `createInstance` com verificação prévia |
-| `src/components/whatsapp/ConnectionPanel.tsx` | Adicionar confirmação de disconnect |
-
+Detalhes técnicos:
+- Não há sinal de problema de segredo/configuração: `EVOLUTION_API_URL` e `EVOLUTION_API_KEY` estão configurados.
+- Não vejo necessidade de mudança em banco/RLS.
+- A evidência mais forte é que os erros se concentram em `chat/fetchProfilePictureUrl/...`, enquanto o estado da instância segue `open`.
