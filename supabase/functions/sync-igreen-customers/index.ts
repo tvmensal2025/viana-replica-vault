@@ -247,13 +247,35 @@ Deno.serve(async (req) => {
       console.error(`Consultant fetch failed: ${consultantRes.status} - ${errText}`);
       return new Response(
         JSON.stringify({ success: false, error: "Não foi possível obter dados do consultor." }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     const consultantData = await consultantRes.json();
-    const consultorId = consultantData.id || consultantData.data?.id;
+    console.log("Consultant API response keys:", JSON.stringify(Object.keys(consultantData)));
+    console.log("Consultant API response (truncated):", JSON.stringify(consultantData).substring(0, 500));
+    
+    // Try multiple possible paths for the consultant ID
+    const consultorId = consultantData.id 
+      || consultantData.data?.id 
+      || consultantData.consultant?.id 
+      || consultantData.user?.id
+      || consultantData.consultor?.id
+      || consultantData._id
+      || consultantData.data?._id
+      || consultantData.uid
+      || consultantData.userId
+      || consultantData.user_id;
+    
     console.log(`Consultant ID: ${consultorId}`);
+    
+    if (!consultorId) {
+      console.error("Could not extract consultant ID from response:", JSON.stringify(consultantData).substring(0, 1000));
+      return new Response(
+        JSON.stringify({ success: false, error: "ID do consultor não encontrado na resposta da API iGreen. Verifique suas credenciais.", debug_keys: Object.keys(consultantData) }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     // Step 3: Fetch ALL customer data (paginated)
     console.log("Fetching customer data...");
