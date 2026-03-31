@@ -102,10 +102,29 @@ export function useChats(instanceName: string | null) {
       const raw = await findChats(instanceName);
       const mapped = (raw || [])
         .map((c) => mapChat(c, contactsMapRef.current))
-        .filter((c) => !c.isGroup)
+        .filter((c): c is ChatItem => c !== null && !c.isGroup)
         .sort((a, b) => b.lastMessageTimestamp - a.lastMessageTimestamp);
       setChats(mapped);
       setError(null);
+
+      // Fetch profile pictures for chats missing them (batch, non-blocking)
+      const missingPics = mapped.filter((c) => !c.profilePicUrl).slice(0, 20);
+      if (missingPics.length > 0 && instanceName) {
+        Promise.all(
+          missingPics.map(async (chat) => {
+            const targetJid = chat.sendTargetJid || chat.remoteJid;
+            const picUrl = await getProfilePicture(instanceName, targetJid);
+            return { jid: chat.remoteJid, picUrl };
+          })
+        ).then((results) => {
+          const picMap = new Map(results.filter((r) => r.picUrl).map((r) => [r.jid, r.picUrl!]));
+          if (picMap.size > 0) {
+            setChats((prev) =>
+              prev.map((c) => (picMap.has(c.remoteJid) ? { ...c, profilePicUrl: picMap.get(c.remoteJid) } : c))
+            );
+          }
+        }).catch(() => { /* non-critical */ });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao buscar conversas");
     } finally {
