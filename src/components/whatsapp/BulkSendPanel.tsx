@@ -52,13 +52,19 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
     let sent = 0, failed = 0;
     const tplMediaType = selectedTemplate?.media_type;
     const tplMediaUrl = selectedTemplate?.media_url;
+    const tplImageUrl = selectedTemplate?.image_url;
 
     for (let i = 0; i < selected.length; i++) {
       setProgress({ total: selected.length, sent, failed });
       try {
         const msg = message.includes("{{")
-          ? applyTemplate({ id: "", consultant_id: "", name: "", content: message, media_type: "text", media_url: null, created_at: "" }, selected[i])
+          ? applyTemplate({ id: "", consultant_id: "", name: "", content: message, media_type: "text", media_url: null, image_url: null, created_at: "" }, selected[i])
           : message;
+
+        // Send image_url first if present (as separate image message)
+        if (tplImageUrl) {
+          await sendMedia(instanceName, selected[i].phone_whatsapp, tplImageUrl, "", "image");
+        }
 
         if (tplMediaUrl && tplMediaType === "audio") {
           await sendAudio(instanceName, selected[i].phone_whatsapp, tplMediaUrl);
@@ -66,7 +72,7 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
         } else if (tplMediaUrl && (tplMediaType === "image" || tplMediaType === "document")) {
           await sendMedia(instanceName, selected[i].phone_whatsapp, tplMediaUrl, msg, tplMediaType);
         } else {
-          await sendTextMessage(instanceName, selected[i].phone_whatsapp, msg);
+          if (msg.trim()) await sendTextMessage(instanceName, selected[i].phone_whatsapp, msg);
         }
         sent++;
       } catch { failed++; }

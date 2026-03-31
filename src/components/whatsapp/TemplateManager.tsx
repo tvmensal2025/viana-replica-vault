@@ -44,7 +44,7 @@ function mediaBadge(type: TemplateMediaType) {
 interface TemplateManagerProps {
   templates: MessageTemplate[];
   isLoading: boolean;
-  onCreateTemplate: (name: string, content: string, mediaType?: string, mediaUrl?: string | null) => Promise<void>;
+  onCreateTemplate: (name: string, content: string, mediaType?: string, mediaUrl?: string | null, imageUrl?: string | null) => Promise<void>;
   onDeleteTemplate: (id: string) => Promise<void>;
 }
 
@@ -53,6 +53,7 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onDele
   const [content, setContent] = useState("");
   const [mediaType, setMediaType] = useState<TemplateMediaType>("text");
   const [mediaUrl, setMediaUrl] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [previewTemplate, setPreviewTemplate] = useState<MessageTemplate | null>(null);
 
@@ -61,6 +62,12 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onDele
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadedFileName, setUploadedFileName] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Image upload state (for audio+image combo)
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [imageUploadProgress, setImageUploadProgress] = useState(0);
+  const [uploadedImageName, setUploadedImageName] = useState("");
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   // Recording state
   const [isRecording, setIsRecording] = useState(false);
@@ -173,6 +180,29 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onDele
     }
   }
 
+  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 100 * 1024 * 1024) {
+      toast.error("Arquivo muito grande (máximo 100MB)");
+      return;
+    }
+    setIsUploadingImage(true);
+    setImageUploadProgress(0);
+    setUploadedImageName(file.name);
+    try {
+      const result = await uploadMedia(file, (pct) => setImageUploadProgress(pct));
+      setImageUrl(result.url);
+      toast.success(`Imagem enviada: ${formatFileSize(result.size)}`);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Erro no upload da imagem");
+      setUploadedImageName("");
+    } finally {
+      setIsUploadingImage(false);
+      if (imageInputRef.current) imageInputRef.current.value = "";
+    }
+  }
+
   async function handleCreate() {
     if (!name.trim()) return;
     if (mediaType === "text" && !content.trim()) return;
@@ -183,13 +213,16 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onDele
         name.trim(),
         content.trim(),
         mediaType,
-        mediaType !== "text" ? mediaUrl.trim() : null
+        mediaType !== "text" ? mediaUrl.trim() : null,
+        imageUrl.trim() || null
       );
       setName("");
       setContent("");
       setMediaType("text");
       setMediaUrl("");
+      setImageUrl("");
       setUploadedFileName("");
+      setUploadedImageName("");
     } finally {
       setIsSaving(false);
     }
@@ -249,6 +282,12 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onDele
                       {!["image", "audio", "document"].includes(t.media_type || "") && (
                         <p className="text-[10px] text-muted-foreground/50 truncate font-mono">📎 {t.media_url}</p>
                       )}
+                    </div>
+                  )}
+                  {t.image_url && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <Image className="w-3 h-3 text-blue-400 shrink-0" />
+                      <img src={t.image_url} alt="Imagem anexa" className="rounded-md max-h-16 object-contain border border-border/20" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
                     </div>
                   )}
                 </div>
@@ -464,6 +503,63 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onDele
             </div>
           )}
 
+          {/* Optional image attachment (available for all types except image, since image is the main media) */}
+          {mediaType !== "image" && (
+            <div className="space-y-2 border border-border/20 rounded-xl p-3 bg-blue-500/3">
+              <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                <Image className="w-3.5 h-3.5 text-blue-400" /> Imagem anexa (opcional)
+              </label>
+              <p className="text-[10px] text-muted-foreground/60">Envie uma imagem junto com a mensagem</p>
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={handleImageUpload}
+                disabled={isSaving || isUploadingImage}
+                className="hidden"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => imageInputRef.current?.click()}
+                disabled={isSaving || isUploadingImage}
+                className="gap-2 rounded-xl border-dashed border-2 border-blue-500/30 hover:border-blue-500/50 hover:bg-blue-500/5 w-full h-10"
+              >
+                {isUploadingImage ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
+                ) : uploadedImageName ? (
+                  <CheckCircle2 className="w-4 h-4 text-green-400" />
+                ) : (
+                  <Image className="w-4 h-4 text-blue-400" />
+                )}
+                <span className="text-xs truncate">
+                  {isUploadingImage
+                    ? "Enviando imagem..."
+                    : uploadedImageName
+                    ? uploadedImageName
+                    : "Anexar imagem (opcional)"}
+                </span>
+              </Button>
+              {isUploadingImage && (
+                <Progress value={imageUploadProgress} className="h-1.5" />
+              )}
+              {imageUrl && !isUploadingImage && (
+                <div className="rounded-lg border border-border/30 bg-secondary/10 p-2 overflow-hidden flex items-center gap-2">
+                  <img src={imageUrl} alt="Preview" className="rounded-lg max-h-20 object-contain" />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => { setImageUrl(""); setUploadedImageName(""); }}
+                    className="h-6 w-6 text-muted-foreground hover:text-red-400 shrink-0"
+                  >
+                    <X className="w-3 h-3" />
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Placeholders */}
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs text-muted-foreground">Placeholders:</span>
@@ -524,6 +620,13 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onDele
                       <File className="w-3.5 h-3.5" /> Abrir documento
                     </a>
                   )}
+                </div>
+              )}
+
+              {previewTemplate.image_url && (
+                <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-3">
+                  <p className="text-[10px] text-muted-foreground mb-1 font-bold">📷 Imagem anexa:</p>
+                  <img src={previewTemplate.image_url} alt="Imagem anexa" className="rounded-lg max-h-40 object-contain" />
                 </div>
               )}
 
