@@ -7,13 +7,13 @@ export function useConsultant(license: string) {
     queryKey: ["consultant", license],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("consultants")
+        .from("consultants_public" as any)
         .select("*")
         .eq("license", license)
         .maybeSingle();
 
       if (error) throw error;
-      return data as Consultant | null;
+      return (data as unknown) as Consultant | null;
     },
     enabled: !!license,
   });
