@@ -108,12 +108,6 @@ export function useAnalytics(consultantId: string | null) {
         page++;
       }
 
-      // Get unique customer IDs from deals
-      const customerIds = [...new Set(deals.map((d) => d.customer_id).filter(Boolean))] as string[];
-
-      // Filter deal-linked customers for status/consumption metrics
-      const customers = allCustomers.filter((c) => customerIds.includes(c.id));
-
       const totalClient = views.filter((v) => v.page_type === "client").length;
       const totalLicenciada = views.filter((v) => v.page_type === "licenciada").length;
 
