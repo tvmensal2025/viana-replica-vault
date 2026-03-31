@@ -868,7 +868,7 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
       </div>
 
       {/* Add Dialog */}
-      <AddCustomerDialog open={showAddDialog} onOpenChange={setShowAddDialog} phone="" name={null} onAdded={onCustomersChange} />
+      <AddCustomerDialog open={showAddDialog} onOpenChange={setShowAddDialog} phone="" name={null} consultantId={consultantId} onAdded={onCustomersChange} />
 
       {/* Edit Dialog */}
       <Dialog open={!!editingCustomer} onOpenChange={(open) => !open && setEditingCustomer(null)}>
