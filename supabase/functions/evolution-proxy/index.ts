@@ -52,21 +52,21 @@ function normalizeEvolutionBaseUrl(rawUrl: string | undefined): string {
 }
 
 function getTimeoutMs(path: string): number {
-  if (path.startsWith("instance/connectionState/")) return 15000;
-  if (path === "instance/fetchInstances") return 15000;
-  if (path.startsWith("instance/connect/")) return 20000;
+  if (path.startsWith("instance/connectionState/")) return 8000;
+  if (path === "instance/fetchInstances") return 10000;
+  if (path.startsWith("instance/connect/")) return 15000;
   if (path === "instance/create") return 30000;
-  if (path.startsWith("chat/findChats/")) return 25000;
-  if (path.startsWith("chat/findMessages/")) return 25000;
-  if (path.startsWith("message/")) return 20000;
-  return 20000;
+  if (path.startsWith("chat/findChats/")) return 20000;
+  if (path.startsWith("chat/findMessages/")) return 20000;
+  if (path.startsWith("message/")) return 15000;
+  return 15000;
 }
 
 function getMaxAttempts(path: string): number {
-  if (path.startsWith("instance/connectionState/")) return 2;
-  if (path.startsWith("instance/connect/")) return 2;
+  if (path.startsWith("instance/connectionState/")) return 1;
+  if (path.startsWith("instance/connect/")) return 1;
   if (path === "instance/create") return 1;
-  if (path === "instance/fetchInstances") return 2;
+  if (path === "instance/fetchInstances") return 1;
   return 1;
 }
 
@@ -80,7 +80,7 @@ function isRetriableResponseStatus(status: number): boolean {
 
 function createGracefulTimeoutResponse(safePath: string): Response | null {
   if (safePath.startsWith("instance/connectionState/")) {
-    return new Response(JSON.stringify({ state: "connecting", timeout: true }), {
+    return new Response(JSON.stringify({ state: "unknown", timeout: true }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });

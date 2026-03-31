@@ -5,13 +5,9 @@ import {
   connectInstance,
   getConnectionState,
   logoutInstance,
-  fetchInstances,
 } from "@/services/evolutionApi";
 import type { ConnectionStatus } from "@/types/whatsapp";
 import { useToast } from "@/hooks/use-toast";
-import { createLogger } from "@/lib/logger";
-
-const logger = createLogger("useWhatsApp");
 
 interface UseWhatsAppReturn {
   connectionStatus: ConnectionStatus;
@@ -26,13 +22,6 @@ interface UseWhatsAppReturn {
   disconnect: () => Promise<void>;
   reconnect: () => Promise<void>;
   refreshQr: () => Promise<void>;
-}
-
-interface QrFetchResult {
-  qrCode: string | null;
-  timedOut: boolean;
-  shouldCreate: boolean;
-  errorMessage: string | null;
 }
 
 /* ── helpers ── */
@@ -55,8 +44,8 @@ function getFixedInstanceName(consultantId: string): string {
   return `igreen-${slug}`;
 }
 
-function shouldCreateInstanceFromError(message: string): boolean {
-  return /404|not found|does not exist|instance.*not|inst[âa]ncia.*n[ãa]o encontrada|instancia.*nao encontrada/i.test(message);
+function isNotFoundError(message: string): boolean {
+  return /404|not found|does not exist|instance.*not|inst[âa]ncia.*n[ãa]o/i.test(message);
 }
 
 async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
@@ -68,7 +57,7 @@ async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   });
 }
 
-/* ── hook ── */
+/* ── Core: single polling loop handles everything ── */
 
 export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("disconnected");
@@ -83,42 +72,17 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
 
   const mountedRef = useRef(true);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const qrRecoveryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lockRef = useRef(false);
-  const createAttemptedAtRef = useRef<number | null>(null);
-  const consecutiveFailsRef = useRef(0);
 
   const addLog = useCallback((msg: string) => {
     setConnectionLog((prev) => [...prev.slice(-14), logEntry(sanitize(msg))]);
   }, []);
 
-  const clearPolling = useCallback(() => {
-    if (pollRef.current) {
-      clearTimeout(pollRef.current);
-      pollRef.current = null;
-    }
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) { clearTimeout(pollRef.current); pollRef.current = null; }
   }, []);
 
-  const clearQrRecovery = useCallback(() => {
-    if (qrRecoveryRef.current) {
-      clearTimeout(qrRecoveryRef.current);
-      qrRecoveryRef.current = null;
-    }
-  }, []);
-
-  const markCreateAttempt = useCallback(() => {
-    createAttemptedAtRef.current = Date.now();
-  }, []);
-
-  const clearCreateAttempt = useCallback(() => {
-    createAttemptedAtRef.current = null;
-  }, []);
-
-  const hasRecentCreateAttempt = useCallback(() => {
-    return createAttemptedAtRef.current !== null && Date.now() - createAttemptedAtRef.current < 3 * 60 * 1000;
-  }, []);
-
-  /* ── Save/delete instance in DB ── */
+  /* ── DB helpers ── */
   const saveInstance = useCallback(async (name: string) => {
     await supabase
       .from("whatsapp_instances")
@@ -129,235 +93,99 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
     await supabase.from("whatsapp_instances").delete().eq("consultant_id", consultantId);
   }, [consultantId]);
 
-  /* ── Check if currently connected ── */
-  const checkState = useCallback(async (name: string): Promise<"open" | "close" | "connecting"> => {
+  /* ── Check state with proper error handling ── */
+  const checkState = useCallback(async (name: string): Promise<"open" | "close" | "connecting" | "unknown"> => {
     try {
-      const result = await withTimeout(getConnectionState(name), 20000);
+      const result = await withTimeout(getConnectionState(name), 10000);
       const state = result?.state || "close";
-      // If the proxy returned a timeout flag but status 200, try once more with shorter timeout
-      if (state === "connecting" && result?.timeout) {
-        try {
-          const retry = await withTimeout(getConnectionState(name), 10000);
-          return retry?.state || "connecting";
-        } catch {
-          return "connecting";
-        }
-      }
-      return state;
-    } catch {
-      return "connecting";
-    }
-  }, []);
-
-  /* ── Get QR code from instance ── */
-  const fetchQr = useCallback(async (name: string): Promise<QrFetchResult> => {
-    try {
-      const resp = await withTimeout(connectInstance(name), 25000);
-      return {
-        qrCode: resp?.base64 || null,
-        timedOut: Boolean(resp?.timeout),
-        shouldCreate: false,
-        errorMessage: null,
-      };
+      // Proxy returns "unknown" on timeout — pass it through
+      if (state === "unknown") return "unknown";
+      return state as "open" | "close" | "connecting";
     } catch (err) {
-      const message = sanitize(err instanceof Error ? err.message : "Erro ao conectar");
-      const isTemporaryTimeout = /timeout|demorando para responder|alguns instantes|tente novamente/i.test(message);
-      return {
-        qrCode: null,
-        timedOut: isTemporaryTimeout,
-        shouldCreate: !isTemporaryTimeout && shouldCreateInstanceFromError(message),
-        errorMessage: isTemporaryTimeout ? null : message,
-      };
+      const msg = err instanceof Error ? err.message : "";
+      if (isNotFoundError(msg)) return "close";
+      return "unknown";
     }
   }, []);
 
+  /* ── Try to get QR code ── */
+  const tryGetQr = useCallback(async (name: string): Promise<string | null> => {
+    try {
+      const resp = await withTimeout(connectInstance(name), 12000);
+      return resp?.base64 || null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  /* ── Single unified polling loop ── */
   const startPolling = useCallback((name: string) => {
-    clearPolling();
+    stopPolling();
 
     const poll = async () => {
       if (!mountedRef.current) return;
-
-      try {
-        const state = await checkState(name);
-
-        if (!mountedRef.current) return;
-
-        if (state === "open") {
-          consecutiveFailsRef.current = 0;
-          clearQrRecovery();
-          clearCreateAttempt();
-          setConnectionStatus((prev) => {
-            if (prev !== "connected") {
-              addLog("✅ WhatsApp conectado!");
-              setQrCode(null);
-              setQrGeneratedAt(null);
-              setError(null);
-            }
-            return "connected";
-          });
-          pollRef.current = setTimeout(poll, 30000);
-        } else if (state === "connecting") {
-          consecutiveFailsRef.current = 0;
-          pollRef.current = setTimeout(poll, 5000);
-        } else {
-          consecutiveFailsRef.current += 1;
-
-          if (consecutiveFailsRef.current <= 3) {
-            if (consecutiveFailsRef.current === 1) {
-              addLog("🔄 Oscilação detectada. Tentando manter a sessão ativa...");
-            }
-            pollRef.current = setTimeout(poll, 5000);
-          } else {
-            clearQrRecovery();
-            setConnectionStatus("connecting");
-            setError(null);
-            setQrCode(null);
-            setQrGeneratedAt(null);
-            addLog("🔄 Sessão desconectada. Iniciando recuperação automática...");
-
-            const qrAttempt = await fetchQr(name);
-            if (!mountedRef.current) return;
-
-            if (qrAttempt.qrCode) {
-              consecutiveFailsRef.current = 0;
-              clearCreateAttempt();
-              await saveInstance(name);
-              setQrCode(qrAttempt.qrCode);
-              setQrGeneratedAt(Date.now());
-              setConnectionStatus("connecting");
-              setError(null);
-              addLog("📱 QR Code renovado automaticamente");
-              pollRef.current = setTimeout(poll, 5000);
-              return;
-            }
-
-            if (qrAttempt.timedOut || !qrAttempt.shouldCreate) {
-              consecutiveFailsRef.current = 0;
-              addLog("⏳ O servidor WhatsApp ainda está restabelecendo a sessão...");
-              pollRef.current = setTimeout(poll, 5000);
-              return;
-            }
-
-            // Safety: verify instance doesn't exist before creating
-            let instanceExistsOnServer = false;
-            try {
-              const instances = await withTimeout(fetchInstances(), 10000);
-              instanceExistsOnServer = instances?.some((i) => i.instance?.instanceName === name) ?? false;
-            } catch { /* assume doesn't exist */ }
-
-            if (instanceExistsOnServer) {
-              addLog("⏳ Instância encontrada no servidor. Tentando reconectar...");
-              consecutiveFailsRef.current = 0;
-              pollRef.current = setTimeout(poll, 5000);
-              return;
-            }
-
-            addLog("🔄 Instância indisponível. Criando nova sessão automaticamente...");
-            markCreateAttempt();
-
-            try {
-              const response = await withTimeout(createInstance(name), 35000);
-              if (!mountedRef.current) return;
-
-              consecutiveFailsRef.current = 0;
-              await saveInstance(name);
-
-              const qr = response?.qrcode?.base64 || null;
-              if (qr) {
-                clearCreateAttempt();
-                setQrCode(qr);
-                setQrGeneratedAt(Date.now());
-                setConnectionStatus("connecting");
-                setError(null);
-                addLog("📱 Nova sessão criada automaticamente");
-                pollRef.current = setTimeout(poll, 5000);
-                return;
-              }
-
-              addLog(
-                response?.timeout
-                  ? "⏳ Nova sessão iniciada. Aguardando QR Code do servidor..."
-                  : "⏳ Sessão recriada. Aguardando QR Code..."
-              );
-              pollRef.current = setTimeout(poll, 5000);
-            } catch (recoveryErr) {
-              const recoveryMessage = sanitize(recoveryErr instanceof Error ? recoveryErr.message : "Erro ao recuperar conexão");
-              logger.warn("Falha ao recuperar conexão automaticamente", { name, recoveryMessage });
-              setConnectionStatus("connecting");
-              setError(null);
-              addLog(`⚠️ ${recoveryMessage} — continuando tentativa automática...`);
-              pollRef.current = setTimeout(poll, 15000);
-            }
-          }
-        }
-      } catch {
-        if (mountedRef.current) {
-          pollRef.current = setTimeout(poll, 10000);
-        }
-      }
-    };
-
-    poll();
-  }, [addLog, checkState, clearCreateAttempt, clearPolling, clearQrRecovery, fetchQr, markCreateAttempt, saveInstance, toast]);
-
-  const scheduleQrRecovery = useCallback((name: string, attempt = 1) => {
-    clearQrRecovery();
-
-    if (attempt > 6) {
-      addLog("⚠️ O QR Code ainda não ficou disponível. Você pode tentar renovar manualmente.");
-      return;
-    }
-
-    qrRecoveryRef.current = setTimeout(async () => {
-      if (!mountedRef.current) return;
-
-      const result = await fetchQr(name);
-      if (!mountedRef.current) return;
-
-      if (result.qrCode) {
-        clearQrRecovery();
-        clearCreateAttempt();
-        await saveInstance(name);
-        setQrCode(result.qrCode);
-        setQrGeneratedAt(Date.now());
-        setConnectionStatus("connecting");
-        setError(null);
-        addLog("📱 QR Code gerado — escaneie com seu celular");
-        return;
-      }
 
       const state = await checkState(name);
       if (!mountedRef.current) return;
 
       if (state === "open") {
-        clearQrRecovery();
-        clearCreateAttempt();
+        // Connected! Update UI and keep polling at slow rate
+        setConnectionStatus((prev) => {
+          if (prev !== "connected") {
+            addLog("✅ WhatsApp conectado!");
+            setQrCode(null);
+            setQrGeneratedAt(null);
+            setError(null);
+          }
+          return "connected";
+        });
         await saveInstance(name);
-        setConnectionStatus("connected");
-        setQrCode(null);
-        setQrGeneratedAt(null);
-        setError(null);
-        addLog("✅ WhatsApp conectado!");
-        startPolling(name);
+        pollRef.current = setTimeout(poll, 30000);
         return;
       }
 
-      if (state === "connecting" || result.timedOut || !result.shouldCreate || hasRecentCreateAttempt()) {
-        addLog(attempt === 1 ? "⏳ Aguardando QR Code do servidor..." : "⏳ Ainda aguardando QR Code...");
-        scheduleQrRecovery(name, attempt + 1);
+      if (state === "connecting") {
+        // Instance exists but not fully connected — try to get QR
+        setConnectionStatus("connecting");
+        const qr = await tryGetQr(name);
+        if (!mountedRef.current) return;
+
+        if (qr) {
+          setQrCode(qr);
+          setQrGeneratedAt(Date.now());
+          setError(null);
+          addLog("📱 QR Code gerado — escaneie com seu celular");
+        }
+        // Keep polling fast
+        pollRef.current = setTimeout(poll, 3000);
+        return;
       }
-    }, Math.min(2000 * attempt, 10000));
-  }, [addLog, checkState, clearCreateAttempt, clearQrRecovery, fetchQr, hasRecentCreateAttempt, saveInstance, startPolling]);
 
-  const enterPendingConnection = useCallback((name: string, message: string) => {
-    setConnectionStatus("connecting");
-    setError(null);
-    addLog(message);
-    startPolling(name);
-    scheduleQrRecovery(name);
-  }, [addLog, scheduleQrRecovery, startPolling]);
+      if (state === "unknown") {
+        // Timeout or network issue — don't change status, just retry
+        pollRef.current = setTimeout(poll, 5000);
+        return;
+      }
 
-  /* ── Main: create instance & get QR ── */
+      // state === "close" — instance exists but disconnected
+      // Try to get QR to reconnect
+      setConnectionStatus("connecting");
+      const qr = await tryGetQr(name);
+      if (!mountedRef.current) return;
+
+      if (qr) {
+        setQrCode(qr);
+        setQrGeneratedAt(Date.now());
+        setError(null);
+        addLog("📱 QR Code gerado — escaneie com seu celular");
+      }
+      pollRef.current = setTimeout(poll, 3000);
+    };
+
+    poll();
+  }, [addLog, checkState, saveInstance, stopPolling, tryGetQr]);
+
+  /* ── Create & Connect ── */
   const createAndConnect = useCallback(async () => {
     if (lockRef.current) return;
     lockRef.current = true;
@@ -367,214 +195,134 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
     setConnectionLog([]);
     setQrCode(null);
     setQrGeneratedAt(null);
-    clearQrRecovery();
+    stopPolling();
 
     const name = getFixedInstanceName(consultantId);
     setInstanceName(name);
 
-    const MAX_RETRIES = 2;
-
     try {
-      for (let retry = 0; retry <= MAX_RETRIES; retry++) {
-        try {
-          if (retry > 0) {
-            addLog(`🔄 Tentativa ${retry + 1}/${MAX_RETRIES + 1}...`);
-            await new Promise((r) => setTimeout(r, 2500 * retry));
-          }
+      // Step 1: Check current state
+      addLog("Verificando conexão...");
+      const state = await checkState(name);
+      if (!mountedRef.current) return;
 
-          if (!mountedRef.current) return;
-
-          addLog("Verificando conexão...");
-          const state = await checkState(name);
-
-          if (state === "open") {
-            clearQrRecovery();
-            clearCreateAttempt();
-            setConnectionStatus("connected");
-            setError(null);
-            addLog("✅ WhatsApp já está conectado!");
-            await saveInstance(name);
-            startPolling(name);
-            return;
-          }
-
-          if (state === "connecting") {
-            await saveInstance(name);
-            addLog("⏳ Recuperando QR Code...");
-
-            // Immediately try to get QR instead of just scheduling recovery
-            const qrAttempt = await fetchQr(name);
-            if (!mountedRef.current) return;
-
-            if (qrAttempt.qrCode) {
-              clearQrRecovery();
-              clearCreateAttempt();
-              setQrCode(qrAttempt.qrCode);
-              setQrGeneratedAt(Date.now());
-              setConnectionStatus("connecting");
-              addLog("📱 QR Code gerado — escaneie com seu celular");
-              startPolling(name);
-              return;
-            }
-
-            enterPendingConnection(name, "⏳ QR Code ainda não disponível. Recuperando automaticamente...");
-            return;
-          }
-
-          addLog("Gerando QR Code...");
-          const qrAttempt = await fetchQr(name);
-
-          if (qrAttempt.qrCode) {
-            clearQrRecovery();
-            clearCreateAttempt();
-            await saveInstance(name);
-            setQrCode(qrAttempt.qrCode);
-            setQrGeneratedAt(Date.now());
-            setConnectionStatus("connecting");
-            addLog("📱 QR Code gerado — escaneie com seu celular");
-            startPolling(name);
-            return;
-          }
-
-          if (qrAttempt.timedOut) {
-            await saveInstance(name);
-            enterPendingConnection(name, "⏳ Servidor lento. O QR Code aparecerá automaticamente quando estiver pronto.");
-            return;
-          }
-
-          if (hasRecentCreateAttempt()) {
-            await saveInstance(name);
-            enterPendingConnection(name, "⏳ A instância ainda está inicializando. Continuando recuperação automática do QR Code...");
-            return;
-          }
-
-          if (!qrAttempt.shouldCreate) {
-            if (retry < MAX_RETRIES) {
-              addLog("⏳ O serviço de conexão ainda está processando. Tentando recuperar o QR Code...");
-              continue;
-            }
-
-            await saveInstance(name);
-            enterPendingConnection(name, "⏳ A conexão foi iniciada, mas o QR ainda não chegou. Continuando recuperação automática...");
-            return;
-          }
-
-          // Safety: verify instance doesn't exist on server before creating
-          let instanceExists = false;
-          try {
-            const instances = await withTimeout(fetchInstances(), 10000);
-            instanceExists = instances?.some((i) => i.instance?.instanceName === name) ?? false;
-          } catch { /* assume doesn't exist */ }
-
-          if (instanceExists) {
-            addLog("⏳ Instância já existe no servidor. Tentando conectar...");
-            await saveInstance(name);
-            enterPendingConnection(name, "⏳ Recuperando QR Code da instância existente...");
-            return;
-          }
-
-          addLog("Criando instância...");
-          markCreateAttempt();
-          try {
-            const response = await withTimeout(createInstance(name), 35000);
-            const qr = response?.qrcode?.base64 || null;
-
-            if (qr) {
-              clearQrRecovery();
-              clearCreateAttempt();
-              await saveInstance(name);
-              setQrCode(qr);
-              setQrGeneratedAt(Date.now());
-              setConnectionStatus("connecting");
-              addLog("📱 QR Code gerado — escaneie com seu celular");
-              startPolling(name);
-              return;
-            }
-
-            await saveInstance(name);
-            enterPendingConnection(
-              name,
-              response?.timeout
-                ? "⏳ Instância em criação. Aguardando QR Code do servidor..."
-                : "⏳ Instância criada. Recuperando QR Code...",
-            );
-            return;
-          } catch (createErr) {
-            const msg = sanitize(createErr instanceof Error ? createErr.message : "Erro ao criar instância");
-
-            if (msg.includes("already") || msg.includes("403")) {
-              markCreateAttempt();
-              await saveInstance(name);
-              enterPendingConnection(name, "⏳ Instância já existente. Recuperando QR Code...");
-              return;
-            }
-
-            if (retry < MAX_RETRIES) {
-              addLog("⏳ " + msg + " — tentando novamente...");
-              continue;
-            }
-
-            setConnectionStatus("disconnected");
-            setError(msg);
-            addLog("❌ " + msg);
-            return;
-          }
-        } catch (err) {
-          const msg = sanitize(err instanceof Error ? err.message : "Erro ao conectar");
-
-          if (retry < MAX_RETRIES) {
-            addLog("⏳ " + msg + " — tentando novamente...");
-            continue;
-          }
-
-          setConnectionStatus("disconnected");
-          setError(msg);
-          addLog("❌ " + msg);
-          break;
-        }
+      if (state === "open") {
+        setConnectionStatus("connected");
+        setError(null);
+        addLog("✅ WhatsApp já está conectado!");
+        await saveInstance(name);
+        startPolling(name);
+        return;
       }
+
+      // Step 2: If instance exists (connecting or close), try to get QR
+      if (state === "connecting" || state === "close") {
+        addLog("⏳ Recuperando QR Code...");
+        const qr = await tryGetQr(name);
+        if (!mountedRef.current) return;
+
+        if (qr) {
+          await saveInstance(name);
+          setQrCode(qr);
+          setQrGeneratedAt(Date.now());
+          setConnectionStatus("connecting");
+          addLog("📱 QR Code gerado — escaneie com seu celular");
+          startPolling(name);
+          return;
+        }
+
+        // QR not available yet — start polling, it will keep trying
+        await saveInstance(name);
+        setConnectionStatus("connecting");
+        addLog("⏳ Aguardando QR Code...");
+        startPolling(name);
+        return;
+      }
+
+      // Step 3: Instance doesn't exist or unknown — create it
+      addLog("Criando instância...");
+      try {
+        const response = await withTimeout(createInstance(name), 35000);
+        if (!mountedRef.current) return;
+
+        await saveInstance(name);
+        const qr = response?.qrcode?.base64 || null;
+
+        if (qr) {
+          setQrCode(qr);
+          setQrGeneratedAt(Date.now());
+          setConnectionStatus("connecting");
+          addLog("📱 QR Code gerado — escaneie com seu celular");
+        } else {
+          setConnectionStatus("connecting");
+          addLog("⏳ Instância criada. Aguardando QR Code...");
+        }
+        startPolling(name);
+      } catch (createErr) {
+        const msg = sanitize(createErr instanceof Error ? createErr.message : "Erro");
+
+        // Instance already exists (403/conflict) — just start polling
+        if (msg.includes("already") || msg.includes("403")) {
+          await saveInstance(name);
+          setConnectionStatus("connecting");
+          addLog("⏳ Instância já existe. Conectando...");
+          startPolling(name);
+          return;
+        }
+
+        setConnectionStatus("disconnected");
+        setError(msg);
+        addLog("❌ " + msg);
+      }
+    } catch (err) {
+      const msg = sanitize(err instanceof Error ? err.message : "Erro ao conectar");
+      setConnectionStatus("disconnected");
+      setError(msg);
+      addLog("❌ " + msg);
     } finally {
       lockRef.current = false;
       setIsLoading(false);
     }
-  }, [consultantId, addLog, checkState, clearCreateAttempt, clearQrRecovery, enterPendingConnection, fetchQr, hasRecentCreateAttempt, markCreateAttempt, saveInstance, startPolling]);
+  }, [consultantId, addLog, checkState, saveInstance, startPolling, stopPolling, tryGetQr]);
 
   /* ── Refresh QR ── */
   const refreshQr = useCallback(async () => {
     const name = instanceName || getFixedInstanceName(consultantId);
     addLog("📱 Renovando QR Code...");
 
-    const result = await fetchQr(name);
+    // First check if already connected
+    const state = await checkState(name);
+    if (state === "open") {
+      setConnectionStatus("connected");
+      setQrCode(null);
+      setQrGeneratedAt(null);
+      setError(null);
+      addLog("✅ WhatsApp já está conectado!");
+      startPolling(name);
+      return;
+    }
 
-    if (result.qrCode) {
-      clearQrRecovery();
-      setQrCode(result.qrCode);
+    const qr = await tryGetQr(name);
+    if (qr) {
+      setQrCode(qr);
       setQrGeneratedAt(Date.now());
       setConnectionStatus("connecting");
       setError(null);
       addLog("📱 Novo QR Code gerado");
-      return;
+    } else {
+      addLog("⏳ QR Code ainda não disponível. Tentando novamente...");
     }
-
-    if (result.timedOut || !result.shouldCreate) {
-      enterPendingConnection(name, "⏳ O servidor está lento. Continuando recuperação automática do QR Code...");
-      return;
-    }
-
-    addLog("⚠️ Não foi possível renovar o QR Code");
-  }, [instanceName, consultantId, addLog, clearQrRecovery, enterPendingConnection, fetchQr]);
+  }, [instanceName, consultantId, addLog, checkState, startPolling, tryGetQr]);
 
   /* ── Disconnect ── */
   const disconnect = useCallback(async () => {
     const name = instanceName || getFixedInstanceName(consultantId);
     setIsLoading(true);
-    clearPolling();
-    clearQrRecovery();
+    stopPolling();
 
     try {
       try { await withTimeout(logoutInstance(name), 15000); } catch { /* ok */ }
       await deleteInstanceDb();
-      clearCreateAttempt();
 
       setConnectionStatus("disconnected");
       setInstanceName(null);
@@ -589,11 +337,11 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       setIsLoading(false);
       lockRef.current = false;
     }
-  }, [instanceName, consultantId, clearCreateAttempt, clearPolling, clearQrRecovery, addLog, deleteInstanceDb]);
+  }, [instanceName, consultantId, stopPolling, addLog, deleteInstanceDb]);
 
   const reconnect = useCallback(() => createAndConnect(), [createAndConnect]);
 
-  /* ── On mount: silently check if already connected ── */
+  /* ── On mount: check if already connected ── */
   useEffect(() => {
     mountedRef.current = true;
     let cancelled = false;
@@ -607,7 +355,6 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
         if (cancelled) return;
 
         if (state === "open") {
-          clearCreateAttempt();
           setConnectionStatus("connected");
           setError(null);
           addLog("✅ WhatsApp conectado!");
@@ -619,37 +366,25 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
 
         if (state === "connecting") {
           setConnectionStatus("connecting");
-          setError(null);
-          addLog("⏳ Recuperando QR Code...");
-
-          // Immediately try to fetch QR instead of waiting
-          const qrAttempt = await fetchQr(name);
-          if (cancelled) return;
-
-          if (qrAttempt.qrCode) {
-            await saveInstance(name);
-            setQrCode(qrAttempt.qrCode);
-            setQrGeneratedAt(Date.now());
-            setConnectionStatus("connecting");
-            addLog("📱 QR Code gerado — escaneie com seu celular");
-            startPolling(name);
-            setIsLoading(false);
-            return;
-          }
-
-          // QR not ready yet, start polling + recovery
+          addLog("⏳ Recuperando conexão...");
           startPolling(name);
-          scheduleQrRecovery(name);
           setIsLoading(false);
           return;
         }
-      } catch (err) {
-        logger.warn("Falha ao verificar estado inicial", err);
+
+        // "close" or "unknown" — check DB for saved instance
+        if (state === "close") {
+          // Instance exists on server but disconnected — show connect button
+          setConnectionStatus("disconnected");
+          setError(null);
+          setIsLoading(false);
+          return;
+        }
+      } catch {
+        // ignore init errors
       }
 
       if (cancelled) return;
-
-      // Don't auto-create instance on mount — just show "Conectar" button
       setConnectionStatus("disconnected");
       setError(null);
       setIsLoading(false);
@@ -660,8 +395,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
     return () => {
       cancelled = true;
       mountedRef.current = false;
-      clearPolling();
-      clearQrRecovery();
+      stopPolling();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [consultantId]);
