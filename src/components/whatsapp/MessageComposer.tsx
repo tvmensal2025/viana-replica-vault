@@ -167,11 +167,18 @@ export function MessageComposer({ onSend, onSendAudio, onSendAudioUrl, onSendMed
 
     try {
       const result = await uploadMedia(file, (pct) => setUploadProgress(pct));
-      let fileType: MediaType = "document";
-      if (file.type.startsWith("image/")) fileType = "image";
-      else if (file.type.startsWith("video/")) fileType = "video";
-      setAttachedFile({ url: result.url, name: file.name, type: fileType });
-      toast.success(`Arquivo anexado: ${formatFileSize(result.size)}`);
+      
+      // If an audio template is already attached and user adds an image, set it as pending image
+      if (attachedFile?.type === "audio" && file.type.startsWith("image/")) {
+        setPendingImageUrl(result.url);
+        toast.success(`Imagem anexada: será enviada antes do áudio`);
+      } else {
+        let fileType: MediaType = "document";
+        if (file.type.startsWith("image/")) fileType = "image";
+        else if (file.type.startsWith("video/")) fileType = "video";
+        setAttachedFile({ url: result.url, name: file.name, type: fileType });
+        toast.success(`Arquivo anexado: ${formatFileSize(result.size)}`);
+      }
     } catch (err: unknown) {
       logger.error("Erro no upload:", err);
       toast.error(`Erro no upload: ${err instanceof Error ? err.message : "Falha desconhecida"}`, { duration: 8000 });
@@ -179,7 +186,7 @@ export function MessageComposer({ onSend, onSendAudio, onSendAudioUrl, onSendMed
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
-  }, []);
+  }, [attachedFile]);
 
   // ── Audio Recording ──
   const startRecording = useCallback(async () => {
