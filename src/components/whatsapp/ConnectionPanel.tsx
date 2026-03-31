@@ -126,6 +126,7 @@ export function ConnectionPanel({
   onRefreshQr,
 }: ConnectionPanelProps) {
   const [qrExpired, setQrExpired] = useState(false);
+  const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
   const showDiagnostic = connectionLog.length > 0 && (isLoading || error || connectionStatus === "connecting");
   const isAutoReconnecting = isLoading && connectionLog.some((l) => l.includes("🔄"));
 
