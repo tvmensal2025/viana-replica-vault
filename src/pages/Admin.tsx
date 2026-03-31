@@ -860,13 +860,18 @@ const Admin = () => {
               </div>
               <div>
                 <Label htmlFor="cred-password">Senha do Portal</Label>
-                <Input
-                  id="cred-password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={credForm.password}
-                  onChange={(e) => setCredForm(prev => ({ ...prev, password: e.target.value }))}
-                />
+                <div className="relative">
+                  <Input
+                    id="cred-password"
+                    type={showCredPassword ? "text" : "password"}
+                    placeholder="••••••••"
+                    value={credForm.password}
+                    onChange={(e) => setCredForm(prev => ({ ...prev, password: e.target.value }))}
+                  />
+                  <button type="button" onClick={() => setShowCredPassword(!showCredPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                    {showCredPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
               <Button
                 className="w-full"
