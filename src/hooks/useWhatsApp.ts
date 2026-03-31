@@ -85,6 +85,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
   const qrRecoveryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lockRef = useRef(false);
   const createAttemptedAtRef = useRef<number | null>(null);
+  const consecutiveFailsRef = useRef(0);
 
   const addLog = useCallback((msg: string) => {
     setConnectionLog((prev) => [...prev.slice(-14), logEntry(sanitize(msg))]);
