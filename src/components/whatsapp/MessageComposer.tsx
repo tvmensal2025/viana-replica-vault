@@ -136,8 +136,18 @@ export function MessageComposer({ onSend, onSendAudio, onSendAudioUrl, onSendMed
     // If template has media, set it as attached file
     if (t.media_url && t.media_type && t.media_type !== "text") {
       const mediaStr = t.media_type as string;
-      const type: MediaType = mediaStr === "image" ? "image" : mediaStr === "video" ? "video" : "document";
-      setAttachedFile({ url: t.media_url, name: `${t.name}.${t.media_type}`, type });
+      if (mediaStr === "audio") {
+        setAttachedFile({ url: t.media_url, name: `${t.name}.audio`, type: "audio" });
+      } else {
+        const type: MediaType = mediaStr === "image" ? "image" : mediaStr === "video" ? "video" : "document";
+        setAttachedFile({ url: t.media_url, name: `${t.name}.${t.media_type}`, type });
+      }
+    }
+    // If template has an optional image, queue it to be sent before the main content
+    if (t.image_url) {
+      setPendingImageUrl(t.image_url);
+    } else {
+      setPendingImageUrl(null);
     }
     textareaRef.current?.focus();
   }, []);
