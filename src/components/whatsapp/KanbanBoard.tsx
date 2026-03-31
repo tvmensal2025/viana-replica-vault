@@ -372,8 +372,9 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
                         autoMessageText={stage.auto_message_text}
                         autoMessageType={stage.auto_message_type || "text"}
                         autoMessageMediaUrl={stage.auto_message_media_url}
-                        onSave={(text, type, mediaUrl) =>
-                          handleSaveAutoMessage(stage.id, text, type, mediaUrl)
+                        autoMessageImageUrl={(stage as any).auto_message_image_url}
+                        onSave={(text, type, mediaUrl, imageUrl) =>
+                          handleSaveAutoMessage(stage.id, text, type, mediaUrl, imageUrl)
                         }
                       />
 

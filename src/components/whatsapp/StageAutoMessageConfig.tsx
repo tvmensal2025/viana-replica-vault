@@ -257,8 +257,7 @@ export function StageAutoMessageConfig({
               </div>
             )}
           </div>
-        )
-
+        )}
         {/* Formatting toolbar */}
         <div className="flex items-center gap-1 border border-border rounded-t-md px-2 py-1 bg-secondary/30 -mb-2">
           <Button variant="ghost" size="icon" className="h-6 w-6" onClick={insertBold} title="Negrito *texto*">
