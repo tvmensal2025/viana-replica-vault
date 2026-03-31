@@ -1,0 +1,1 @@
+ALTER TABLE customers ALTER COLUMN data_nascimento TYPE text;
