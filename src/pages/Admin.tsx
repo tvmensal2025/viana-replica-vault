@@ -749,6 +749,51 @@ const Admin = () => {
           </div>
         )}
 
+        {/* Credentials Dialog */}
+        <Dialog open={showCredentialsDialog} onOpenChange={setShowCredentialsDialog}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <KeyRound className="w-5 h-5 text-primary" />
+                Conectar ao Portal iGreen
+              </DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">
+              Informe suas credenciais do portal iGreen para sincronizar seus clientes automaticamente.
+            </p>
+            <div className="space-y-4 mt-2">
+              <div>
+                <Label htmlFor="cred-email">Email do Portal</Label>
+                <Input
+                  id="cred-email"
+                  type="email"
+                  placeholder="seu@email.com"
+                  value={credForm.email}
+                  onChange={(e) => setCredForm(prev => ({ ...prev, email: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label htmlFor="cred-password">Senha do Portal</Label>
+                <Input
+                  id="cred-password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={credForm.password}
+                  onChange={(e) => setCredForm(prev => ({ ...prev, password: e.target.value }))}
+                />
+              </div>
+              <Button
+                className="w-full"
+                onClick={handleSaveCredentialsAndSync}
+                disabled={!credForm.email || !credForm.password}
+              >
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Conectar e Sincronizar
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
         {/* Dados Tab */}
         {activeTab === "dados" && (
           <form onSubmit={handleSave} className="space-y-6">
