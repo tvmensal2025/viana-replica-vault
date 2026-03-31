@@ -374,7 +374,24 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
 
           if (state === "connecting") {
             await saveInstance(name);
-            enterPendingConnection(name, "⏳ Conexão em andamento. Recuperando QR Code...");
+            addLog("⏳ Recuperando QR Code...");
+
+            // Immediately try to get QR instead of just scheduling recovery
+            const qrAttempt = await fetchQr(name);
+            if (!mountedRef.current) return;
+
+            if (qrAttempt.qrCode) {
+              clearQrRecovery();
+              clearCreateAttempt();
+              setQrCode(qrAttempt.qrCode);
+              setQrGeneratedAt(Date.now());
+              setConnectionStatus("connecting");
+              addLog("📱 QR Code gerado — escaneie com seu celular");
+              startPolling(name);
+              return;
+            }
+
+            enterPendingConnection(name, "⏳ QR Code ainda não disponível. Recuperando automaticamente...");
             return;
           }
 
