@@ -309,14 +309,20 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
           </div>
         )}
 
-        {activeSubTab === "envio_massa" && instanceName && (
+        {activeSubTab === "envio_massa" && (
           <div className="p-4 overflow-auto h-full">
-            <BulkSendPanel
-              instanceName={instanceName}
-              customers={customers}
-              templates={templates}
-              applyTemplate={applyTemplate}
-            />
+            {isConnected && instanceName ? (
+              <BulkSendPanel
+                instanceName={instanceName}
+                customers={customers}
+                templates={templates}
+                applyTemplate={applyTemplate}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-40 text-sm text-muted-foreground">
+                Conecte o WhatsApp para enviar mensagens em massa.
+              </div>
+            )}
           </div>
         )}
 
