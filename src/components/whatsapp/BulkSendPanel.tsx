@@ -1,5 +1,5 @@
-import { useState, useRef } from "react";
-import { Users, Send, CheckSquare, Loader2, Sparkles, Megaphone, Timer, Shield } from "lucide-react";
+import { useState, useRef, useMemo } from "react";
+import { Users, Send, CheckSquare, Loader2, Sparkles, Megaphone, Timer, Shield, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,13 +10,38 @@ import { sendWhatsAppMessage } from "@/services/messageSender";
 import type { MessageTemplate } from "@/types/whatsapp";
 
 export type BulkSendResult = { total: number; sent: number; failed: number };
-interface Customer { id: string; name: string; phone_whatsapp: string; electricity_bill_value?: number; }
+interface Customer {
+  id: string; name: string; phone_whatsapp: string; electricity_bill_value?: number;
+  status?: string; devolutiva?: string | null;
+}
 interface BulkSendPanelProps {
   instanceName: string; customers: Customer[]; templates: MessageTemplate[];
   applyTemplate: (t: MessageTemplate, c: { name: string; electricity_bill_value?: number }) => string;
 }
-const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const SEND_INTERVAL_MS = 20000; // 20 seconds between each message
+const SEND_INTERVAL_MS = 20000;
+
+type StatusFilter = "all" | "approved" | "rejected" | "pending" | "devolutiva";
+
+const DEVOLUTIVA_CATEGORIES = [
+  { key: "fatura_ilegivel", label: "Fatura Ilegível", match: ["fatura ilegível", "fatura ilegivel"] },
+  { key: "sem_fatura", label: "Sem Fatura de Energia", match: ["sem anexo de fatura", "fatura de energia não anexada", "fatura não anexada"] },
+  { key: "distribuidora_diferente", label: "Distribuidora Diferente", match: ["distribuidora da fatura diferente"] },
+  { key: "sem_documento", label: "Sem Documento Pessoal", match: ["sem anexo de documento pessoal"] },
+  { key: "documento_ilegivel", label: "Documento Ilegível", match: ["ilegível no anexo de rg", "ilegível no anexo de cnh", "número no rg diferente", "nome no rg diferente", "cpf na cnh diferente", "nome na cnh diferente"] },
+  { key: "debito_aberto", label: "Débito em Aberto", match: ["débito em aberto", "débitos em aberto", "debito em aberto"] },
+  { key: "fatura_desatualizada", label: "Fatura Desatualizada", match: ["fatura desatualizada"] },
+  { key: "cancelado", label: "Cancelado", match: ["cancelado"] },
+  { key: "excluido", label: "Excluído", match: ["excluido", "excluído"] },
+  { key: "consumo_inferior", label: "Consumo Inferior", match: ["consumo inferior"] },
+];
+
+function matchDevolutiva(devolutiva: string | null | undefined, categoryKey: string): boolean {
+  if (!devolutiva) return false;
+  const lower = devolutiva.toLowerCase();
+  const cat = DEVOLUTIVA_CATEGORIES.find(c => c.key === categoryKey);
+  if (!cat) return false;
+  return cat.match.some(m => lower.includes(m));
+}
 
 export function BulkSendPanel({ instanceName, customers, templates, applyTemplate }: BulkSendPanelProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -26,22 +51,59 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
   const [progress, setProgress] = useState<BulkSendResult | null>(null);
   const [result, setResult] = useState<BulkSendResult | null>(null);
   const [warning, setWarning] = useState("");
-  const [countdown, setCountdown] = useState(0); // countdown in seconds
+  const [countdown, setCountdown] = useState(0);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [devolutivaFilter, setDevolutivaFilter] = useState<string>("all");
   const { toast } = useToast();
-  const allSelected = customers.length > 0 && selectedIds.size === customers.length;
+
+  const filteredCustomers = useMemo(() => {
+    let list = customers;
+    if (statusFilter === "approved") list = list.filter(c => c.status === "approved");
+    else if (statusFilter === "rejected") list = list.filter(c => c.status === "rejected");
+    else if (statusFilter === "pending") list = list.filter(c => c.status === "pending");
+    else if (statusFilter === "devolutiva") list = list.filter(c => c.devolutiva && c.devolutiva.trim() !== "");
+
+    if (statusFilter === "devolutiva" && devolutivaFilter !== "all") {
+      list = list.filter(c => matchDevolutiva(c.devolutiva, devolutivaFilter));
+    }
+    return list;
+  }, [customers, statusFilter, devolutivaFilter]);
+
+  const allSelected = filteredCustomers.length > 0 && filteredCustomers.every(c => selectedIds.has(c.id));
 
   function toggleCustomer(id: string) {
     setSelectedIds((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
     setWarning("");
   }
-  function toggleAll() { setSelectedIds(allSelected ? new Set() : new Set(customers.map((c) => c.id))); setWarning(""); }
+  function toggleAll() {
+    if (allSelected) {
+      setSelectedIds(prev => {
+        const n = new Set(prev);
+        filteredCustomers.forEach(c => n.delete(c.id));
+        return n;
+      });
+    } else {
+      setSelectedIds(prev => {
+        const n = new Set(prev);
+        filteredCustomers.forEach(c => n.add(c.id));
+        return n;
+      });
+    }
+    setWarning("");
+  }
   function handleTemplateChange(tid: string) {
     const t = templates.find((t) => t.id === tid);
     if (t) {
       setMessage(t.content);
       setSelectedTemplate(t);
     }
+  }
+
+  function handleStatusFilter(val: string) {
+    setStatusFilter(val as StatusFilter);
+    setDevolutivaFilter("all");
+    setSelectedIds(new Set());
   }
 
   async function handleBulkSend() {
@@ -94,7 +156,6 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
         if (allOk) sent++; else failed++;
       } catch { failed++; }
 
-      // 20-second countdown between messages to protect the number
       if (i < selected.length - 1) {
         setCountdown(SEND_INTERVAL_MS / 1000);
         await new Promise<void>((resolve) => {
@@ -118,6 +179,8 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
   }
   const pct = progress && progress.total > 0 ? ((progress.sent + progress.failed) / progress.total) * 100 : 0;
 
+  const selectedFromFiltered = filteredCustomers.filter(c => selectedIds.has(c.id)).length;
+
   return (
     <div className="relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-card via-card to-orange-950/10">
       <div className="absolute -top-20 -right-20 w-40 h-40 bg-orange-500/3 rounded-full blur-3xl" />
@@ -132,25 +195,82 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
           </div>
         </div>
 
+        {/* Status filters */}
+        <div className="flex flex-wrap gap-2 mb-3">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground mr-1">
+            <Filter className="w-3.5 h-3.5" /> Filtrar:
+          </div>
+          {[
+            { key: "all", label: "Todos" },
+            { key: "approved", label: "Aprovados" },
+            { key: "rejected", label: "Reprovados" },
+            { key: "pending", label: "Pendentes" },
+            { key: "devolutiva", label: "Com Devolutiva" },
+          ].map(f => (
+            <button
+              key={f.key}
+              onClick={() => handleStatusFilter(f.key)}
+              disabled={isSending}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-all border ${
+                statusFilter === f.key
+                  ? "bg-primary/20 border-primary/40 text-primary"
+                  : "bg-secondary/40 border-border/50 text-muted-foreground hover:bg-secondary/60"
+              } ${isSending ? "opacity-50 pointer-events-none" : ""}`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Devolutiva sub-filter */}
+        {statusFilter === "devolutiva" && (
+          <div className="mb-3">
+            <Select value={devolutivaFilter} onValueChange={setDevolutivaFilter} disabled={isSending}>
+              <SelectTrigger className="rounded-xl bg-secondary/50 border-border/50 text-sm">
+                <SelectValue placeholder="Tipo de devolutiva..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as devolutivas</SelectItem>
+                {DEVOLUTIVA_CATEGORIES.map(cat => (
+                  <SelectItem key={cat.key} value={cat.key}>{cat.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
         {/* Select all */}
         <div className="flex items-center justify-between mb-3 px-1">
           <label className="flex items-center gap-2.5 cursor-pointer">
-            <Checkbox checked={allSelected} onCheckedChange={toggleAll} disabled={isSending || customers.length === 0} />
+            <Checkbox checked={allSelected} onCheckedChange={toggleAll} disabled={isSending || filteredCustomers.length === 0} />
             <span className="text-sm text-foreground font-medium flex items-center gap-1.5">
               <CheckSquare className="w-3.5 h-3.5 text-muted-foreground" /> Selecionar Todos
             </span>
           </label>
-          <span className="text-xs font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-full">{selectedIds.size} selecionados</span>
+          <span className="text-xs font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-full">
+            {selectedIds.size} selecionados • {filteredCustomers.length} filtrados
+          </span>
         </div>
 
         {/* Customer list */}
         <div className="max-h-52 overflow-y-auto rounded-xl border border-border/50 mb-4 divide-y divide-border/30">
-          {customers.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">Nenhum cliente</p>
-          ) : customers.map((c) => (
+          {filteredCustomers.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">
+              {customers.length === 0 ? "Nenhum cliente" : "Nenhum cliente com este filtro"}
+            </p>
+          ) : filteredCustomers.map((c) => (
             <label key={c.id} className={`w-full flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-all hover:bg-secondary/40 ${selectedIds.has(c.id) ? "bg-orange-500/5" : ""} ${isSending ? "pointer-events-none opacity-50" : ""}`}>
               <Checkbox checked={selectedIds.has(c.id)} onCheckedChange={() => toggleCustomer(c.id)} disabled={isSending} />
-              <div className="min-w-0"><p className="text-sm text-foreground truncate">{c.name}</p><p className="text-xs text-muted-foreground/70">{c.phone_whatsapp}</p></div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-foreground truncate">{c.name}</p>
+                <p className="text-xs text-muted-foreground/70">{c.phone_whatsapp}</p>
+              </div>
+              <div className="flex items-center gap-1.5">
+                {c.status === "approved" && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/15 text-green-400 font-medium">Aprovado</span>}
+                {c.status === "rejected" && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/15 text-red-400 font-medium">Reprovado</span>}
+                {c.status === "pending" && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-yellow-500/15 text-yellow-400 font-medium">Pendente</span>}
+                {c.devolutiva && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-orange-500/15 text-orange-400 font-medium">Dev.</span>}
+              </div>
             </label>
           ))}
         </div>
