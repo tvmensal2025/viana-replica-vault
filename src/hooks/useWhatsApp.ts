@@ -73,6 +73,8 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
   const mountedRef = useRef(true);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lockRef = useRef(false);
+  const graceCountRef = useRef(0);
+  const instanceSavedRef = useRef(false);
 
   const addLog = useCallback((msg: string) => {
     setConnectionLog((prev) => [...prev.slice(-14), logEntry(sanitize(msg))]);
