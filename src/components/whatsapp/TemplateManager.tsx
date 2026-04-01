@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from "react";
-import { FileText, Plus, Trash2, Wand2, Image, Mic, File, Type, Play, Eye, Upload, Loader2, CheckCircle2, Square, X } from "lucide-react";
+import { FileText, Plus, Trash2, Wand2, Image, Mic, File, Type, Play, Eye, Upload, Loader2, CheckCircle2, Square, X, Pencil, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -45,7 +45,7 @@ interface TemplateManagerProps {
   templates: MessageTemplate[];
   isLoading: boolean;
   onCreateTemplate: (name: string, content: string, mediaType?: string, mediaUrl?: string | null, imageUrl?: string | null) => Promise<void>;
-  onUpdateTemplate: (id: string, updates: { image_url?: string | null }) => Promise<void>;
+  onUpdateTemplate: (id: string, updates: { name?: string; image_url?: string | null; content?: string; media_url?: string | null; media_type?: string }) => Promise<void>;
   onDeleteTemplate: (id: string) => Promise<void>;
 }
 
@@ -94,6 +94,19 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onUpda
   const [imageUrl, setImageUrl] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [previewTemplate, setPreviewTemplate] = useState<MessageTemplate | null>(null);
+
+  // Edit state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editContent, setEditContent] = useState("");
+  const [editMediaUrl, setEditMediaUrl] = useState("");
+  const [editImageUrl, setEditImageUrl] = useState("");
+  const [editMediaType, setEditMediaType] = useState<TemplateMediaType>("text");
+  const [isEditSaving, setIsEditSaving] = useState(false);
+  const [isEditUploading, setIsEditUploading] = useState(false);
+  const [editUploadProgress, setEditUploadProgress] = useState(0);
+  const editFileRef = useRef<HTMLInputElement>(null);
+  const editImageRef = useRef<HTMLInputElement>(null);
 
   // Upload state
   const [isUploading, setIsUploading] = useState(false);
@@ -241,6 +254,63 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onUpda
     }
   }
 
+  function startEditing(t: MessageTemplate) {
+    setEditingId(t.id);
+    setEditName(t.name);
+    setEditContent(t.content || "");
+    setEditMediaUrl(t.media_url || "");
+    setEditImageUrl(t.image_url || "");
+    setEditMediaType((t.media_type as TemplateMediaType) || "text");
+  }
+
+  function cancelEditing() {
+    setEditingId(null);
+    setEditName("");
+    setEditContent("");
+    setEditMediaUrl("");
+    setEditImageUrl("");
+    setEditMediaType("text");
+  }
+
+  async function handleEditFileUpload(e: React.ChangeEvent<HTMLInputElement>, target: "media" | "image") {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsEditUploading(true);
+    setEditUploadProgress(0);
+    try {
+      const result = await uploadMedia(file, (pct) => setEditUploadProgress(pct));
+      if (target === "media") setEditMediaUrl(result.url);
+      else setEditImageUrl(result.url);
+      toast.success(`Arquivo enviado: ${formatFileSize(result.size)}`);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Erro no upload");
+    } finally {
+      setIsEditUploading(false);
+      if (editFileRef.current) editFileRef.current.value = "";
+      if (editImageRef.current) editImageRef.current.value = "";
+    }
+  }
+
+  async function handleSaveEdit() {
+    if (!editingId || !editName.trim()) return;
+    setIsEditSaving(true);
+    try {
+      await onUpdateTemplate(editingId, {
+        name: editName.trim(),
+        content: editContent.trim(),
+        media_type: editMediaType,
+        media_url: editMediaType !== "text" ? editMediaUrl.trim() || null : null,
+        image_url: editImageUrl.trim() || null,
+      });
+      cancelEditing();
+      toast.success("Template atualizado!");
+    } catch {
+      toast.error("Erro ao atualizar template");
+    } finally {
+      setIsEditSaving(false);
+    }
+  }
+
   async function handleCreate() {
     if (!name.trim()) return;
     if (mediaType === "text" && !content.trim()) return;
@@ -293,7 +363,83 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onUpda
           <p className="text-sm text-muted-foreground text-center py-6">Nenhum template salvo</p>
         ) : (
           <div className="space-y-2 mb-5">
-            {templates.map((t) => (
+            {templates.map((t) => editingId === t.id ? (
+              /* ---- EDIT MODE ---- */
+              <div key={t.id} className="rounded-xl border-2 border-purple-500/40 bg-purple-500/5 px-4 py-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-purple-400 flex items-center gap-1.5"><Pencil className="w-3.5 h-3.5" /> Editando template</p>
+                  <Button variant="ghost" size="icon" onClick={cancelEditing} className="h-7 w-7 text-muted-foreground hover:text-foreground"><X className="w-3.5 h-3.5" /></Button>
+                </div>
+                <Input value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Nome" className="rounded-xl bg-secondary/50 border-border/50" />
+                <Textarea value={editContent} onChange={(e) => setEditContent(e.target.value)} placeholder="Conteúdo / legenda..." rows={3} className="rounded-xl bg-secondary/30 border-border/40 resize-none" />
+
+                {/* Media type selector for edit */}
+                <div className="grid grid-cols-4 gap-1.5">
+                  {MEDIA_TYPES.map((mt) => {
+                    const Icon = mt.icon;
+                    const isActive = editMediaType === mt.value;
+                    return (
+                      <button key={mt.value} onClick={() => setEditMediaType(mt.value)}
+                        className={`flex items-center justify-center gap-1 rounded-lg border p-2 transition-all text-center ${isActive ? "border-purple-500/50 bg-purple-500/10" : "border-border/40 bg-secondary/10 hover:border-border/60"}`}>
+                        <Icon className={`w-3.5 h-3.5 ${isActive ? "text-purple-400" : "text-muted-foreground"}`} />
+                        <span className={`text-[10px] font-bold ${isActive ? "text-purple-400" : "text-muted-foreground"}`}>{mt.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Media URL for edit */}
+                {editMediaType !== "text" && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <input ref={editFileRef} type="file" accept={getAcceptString(editMediaType)} onChange={(e) => handleEditFileUpload(e, "media")} className="hidden" />
+                      <Button type="button" variant="outline" size="sm" onClick={() => editFileRef.current?.click()} disabled={isEditUploading}
+                        className="gap-1.5 rounded-lg border-dashed text-xs h-9 flex-1">
+                        {isEditUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                        {editMediaUrl ? "Trocar mídia" : "Upload mídia"}
+                      </Button>
+                    </div>
+                    {editMediaUrl && (
+                      <div className="rounded-lg border border-border/30 bg-secondary/10 p-2">
+                        {editMediaType === "audio" && <audio controls src={editMediaUrl} className="w-full h-8" />}
+                        {editMediaType === "image" && <img src={editMediaUrl} alt="" className="rounded max-h-20 object-contain" />}
+                        {editMediaType === "document" && <p className="text-xs text-muted-foreground truncate font-mono">📎 {editMediaUrl}</p>}
+                      </div>
+                    )}
+                    <Input value={editMediaUrl} onChange={(e) => setEditMediaUrl(e.target.value)} placeholder="URL da mídia..." className="rounded-xl bg-secondary/50 border-border/50 font-mono text-xs" />
+                  </div>
+                )}
+
+                {/* Image URL for edit */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input ref={editImageRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => handleEditFileUpload(e, "image")} className="hidden" />
+                    <Button type="button" variant="outline" size="sm" onClick={() => editImageRef.current?.click()} disabled={isEditUploading}
+                      className="gap-1.5 rounded-lg border-dashed border-blue-500/30 text-blue-400 text-xs h-9 flex-1">
+                      {isEditUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Image className="w-3.5 h-3.5" />}
+                      {editImageUrl ? "Trocar imagem" : "Anexar imagem"}
+                    </Button>
+                    {editImageUrl && (
+                      <Button type="button" variant="ghost" size="icon" onClick={() => setEditImageUrl("")} className="h-7 w-7 text-muted-foreground hover:text-red-400">
+                        <X className="w-3 h-3" />
+                      </Button>
+                    )}
+                  </div>
+                  {editImageUrl && <img src={editImageUrl} alt="" className="rounded max-h-16 object-contain border border-border/20" />}
+                </div>
+
+                {isEditUploading && <Progress value={editUploadProgress} className="h-1.5" />}
+
+                <div className="flex items-center gap-2 pt-1">
+                  <Button onClick={handleSaveEdit} disabled={isEditSaving || !editName.trim()} size="sm" className="gap-1.5 rounded-lg font-bold">
+                    {isEditSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                    Salvar
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={cancelEditing} className="text-muted-foreground">Cancelar</Button>
+                </div>
+              </div>
+            ) : (
+              /* ---- VIEW MODE ---- */
               <div key={t.id} className="flex items-start justify-between gap-3 rounded-xl border border-border/40 bg-secondary/20 px-4 py-3 group hover:border-purple-500/20 transition-all">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
@@ -317,27 +463,22 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onUpda
                           <File className="w-3 h-3" /> Abrir documento
                         </a>
                       )}
-                      {!["image", "audio", "document"].includes(t.media_type || "") && (
-                        <p className="text-[10px] text-muted-foreground/50 truncate font-mono">📎 {t.media_url}</p>
-                      )}
                     </div>
                   )}
-                  {t.image_url ? (
+                  {t.image_url && (
                     <div className="mt-2 flex items-center gap-2">
                       <Image className="w-3 h-3 text-blue-400 shrink-0" />
                       <img src={t.image_url} alt="Imagem anexa" className="rounded-md max-h-16 object-contain border border-border/20" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
                     </div>
-                  ) : t.media_type !== "image" && (
-                    <AddImageToTemplate templateId={t.id} onUpdateTemplate={onUpdateTemplate} />
                   )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setPreviewTemplate(t)}
-                    className="text-muted-foreground hover:text-foreground h-8 w-8 opacity-0 group-hover:opacity-100 transition-all"
-                  >
+                  <Button variant="ghost" size="icon" onClick={() => startEditing(t)}
+                    className="text-muted-foreground hover:text-purple-400 h-8 w-8 opacity-0 group-hover:opacity-100 transition-all">
+                    <Pencil className="w-3.5 h-3.5" />
+                  </Button>
+                  <Button variant="ghost" size="icon" onClick={() => setPreviewTemplate(t)}
+                    className="text-muted-foreground hover:text-foreground h-8 w-8 opacity-0 group-hover:opacity-100 transition-all">
                     <Eye className="w-3.5 h-3.5" />
                   </Button>
                   <AlertDialog>
