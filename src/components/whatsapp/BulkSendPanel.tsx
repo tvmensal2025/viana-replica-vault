@@ -25,7 +25,7 @@ interface BulkSendPanelProps {
 }
 const SEND_INTERVAL_MS = 20000;
 
-type StatusFilter = "all" | "approved" | "rejected" | "pending" | "devolutiva";
+type StatusFilter = "all" | "approved" | "rejected" | "pending" | "devolutiva" | "approved_devolutiva";
 
 const DEVOLUTIVA_CATEGORIES = [
   { key: "fatura_ilegivel", label: "Fatura Ilegível", match: ["fatura ilegível", "fatura ilegivel"] },
@@ -76,8 +76,9 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
     else if (statusFilter === "rejected") list = list.filter(c => c.status === "rejected");
     else if (statusFilter === "pending") list = list.filter(c => c.status === "pending");
     else if (statusFilter === "devolutiva") list = list.filter(c => c.devolutiva && c.devolutiva.trim() !== "");
+    else if (statusFilter === "approved_devolutiva") list = list.filter(c => c.status === "approved" && c.devolutiva && c.devolutiva.trim() !== "");
 
-    if (statusFilter === "devolutiva" && devolutivaFilter !== "all") {
+    if ((statusFilter === "devolutiva" || statusFilter === "approved_devolutiva") && devolutivaFilter !== "all") {
       list = list.filter(c => matchDevolutiva(c.devolutiva, devolutivaFilter));
     }
 
@@ -225,6 +226,7 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
             { key: "rejected", label: "Reprovados" },
             { key: "pending", label: "Pendentes" },
             { key: "devolutiva", label: "Com Devolutiva" },
+            { key: "approved_devolutiva", label: "Aprovado + Devolutiva" },
           ].map(f => (
             <button
               key={f.key}
@@ -242,7 +244,7 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
         </div>
 
         {/* Devolutiva sub-filter */}
-        {statusFilter === "devolutiva" && (
+        {(statusFilter === "devolutiva" || statusFilter === "approved_devolutiva") && (
           <div className="mb-3">
             <Select value={devolutivaFilter} onValueChange={setDevolutivaFilter} disabled={isSending}>
               <SelectTrigger className="rounded-xl bg-secondary/50 border-border/50 text-sm">
