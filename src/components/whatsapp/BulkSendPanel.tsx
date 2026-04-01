@@ -25,7 +25,7 @@ interface BulkSendPanelProps {
 }
 const SEND_INTERVAL_MS = 20000;
 
-type StatusFilter = "all" | "approved" | "rejected" | "pending" | "devolutiva" | "rejected_devolutiva" | "pending_devolutiva";
+type StatusFilter = "all" | "approved" | "rejected" | "pending" | "devolutiva";
 
 const DEVOLUTIVA_CATEGORIES = [
   { key: "fatura_ilegivel", label: "Fatura Ilegível", match: ["fatura ilegível", "fatura ilegivel"] },
