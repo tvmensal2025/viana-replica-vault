@@ -1,38 +1,75 @@
 
 
-## Proteger templates compartilhados e garantir isolamento multi-tenant
+## Painel Super Admin com controle de acesso
 
-### Problema identificado
+### Resumo
+Criar uma página `/super-admin` separada da `/admin` atual. O acesso é controlado por uma tabela `user_roles` no banco. Todos os consultores precisam ser autorizados pelo super admin para acessar o painel `/admin`.
 
-As políticas RLS já estão corretas:
-- **SELECT**: todos os autenticados leem todos os templates (`USING (true)`)
-- **INSERT/UPDATE/DELETE**: apenas o dono (`consultant_id = auth.uid()`)
+### 1. Migração SQL
 
-Porém a **UI não distingue** templates próprios dos compartilhados. Os botões de editar/excluir aparecem em TODOS os templates, e ao clicar em um que não é seu, o RLS bloqueia silenciosamente (update) ou falha (delete), causando erro.
+**Tabela `user_roles` + função `has_role` + campo `approved` nos consultants:**
 
-### Dados já isolados corretamente (sem mudanças necessárias)
-- **customers**: RLS owner-only (SELECT/INSERT/UPDATE/DELETE)
-- **crm_deals, customer_tags, scheduled_messages**: RLS owner-only
-- **whatsapp_instances**: RLS owner-only + UNIQUE(consultant_id)
-- **kanban_stages**: RLS owner-only
-- **Conversas**: via Evolution API com instância individual por consultor
+```sql
+-- Enum de roles
+CREATE TYPE public.app_role AS ENUM ('admin', 'user');
 
-### Alterações necessárias
+-- Tabela de roles
+CREATE TABLE public.user_roles (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  role app_role NOT NULL,
+  UNIQUE (user_id, role)
+);
+ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;
 
-**1. `src/components/whatsapp/TemplateManager.tsx`**
-- Adicionar prop `consultantId: string`
-- Comparar `template.consultant_id === consultantId` para cada template
-- **Templates alheios**: esconder botões de editar e excluir, mostrar apenas visualizar (preview)
-- **Templates próprios**: manter comportamento atual completo
+-- Função segura para checar role
+CREATE OR REPLACE FUNCTION public.has_role(_user_id uuid, _role app_role)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS (SELECT 1 FROM public.user_roles WHERE user_id = _user_id AND role = _role)
+$$;
 
-**2. `src/components/whatsapp/WhatsAppTab.tsx`**
-- Passar `consultantId` para o `TemplateManager`
+-- RLS: só admins leem/escrevem user_roles
+CREATE POLICY "Admins manage roles" ON public.user_roles
+  FOR ALL TO authenticated USING (public.has_role(auth.uid(), 'admin'))
+  WITH CHECK (public.has_role(auth.uid(), 'admin'));
 
-**3. `src/hooks/useTemplates.ts`**
-- Melhorar `deleteTemplate` para verificar resultado (como já faz o `updateTemplate`), evitando falha silenciosa por RLS
+-- Campo approved na tabela consultants
+ALTER TABLE public.consultants ADD COLUMN IF NOT EXISTS approved boolean DEFAULT false;
 
-### Resultado
-- Templates padrão (áudios, imagens) ficam visíveis para todos, mas só o criador pode editar/excluir
-- Cada conta nova vê os templates compartilhados e pode criar os seus
-- Nenhum erro de RLS ao interagir com templates alheios
+-- Inserir o super admin (rafael.ids@icloud.com)
+-- Será feito via SQL após identificar o user_id
+```
+
+### 2. Inserir admin inicial
+
+Após a migração, executar via SQL para associar o usuário `rafael.ids@icloud.com` como admin:
+```sql
+INSERT INTO public.user_roles (user_id, role)
+SELECT id, 'admin' FROM auth.users WHERE email = 'rafael.ids@icloud.com';
+```
+
+### 3. Hook `src/hooks/useUserRole.ts`
+- Chama `supabase.rpc('has_role', { _user_id, _role: 'admin' })`
+- Retorna `{ isAdmin, loading }`
+
+### 4. Página `src/pages/SuperAdmin.tsx`
+- Verifica role via hook; redireciona se não for admin
+- Funcionalidades:
+  - **Lista de consultores**: nome, email, licença, data de cadastro, status (aprovado/pendente)
+  - **Botão aprovar/reprovar**: alterna campo `approved` do consultor
+  - **Métricas globais**: total de consultores, total de clientes, consultores pendentes
+  - **Gerenciar roles**: promover/remover admins
+
+### 5. Proteção da página `/admin`
+- No `Admin.tsx`, após carregar o consultor, verificar se `approved === true`
+- Se não aprovado, mostrar tela de "Aguardando aprovação" e bloquear acesso
+
+### 6. `src/App.tsx`
+- Adicionar rota `/super-admin` → `SuperAdmin`
+
+### Detalhes técnicos
+- Role verificada no servidor via SECURITY DEFINER (impossível burlar no client)
+- Campo `approved` controlado apenas pelo super admin via RLS
+- A página `/admin` atual NÃO será alterada em funcionalidade, apenas adicionada a verificação de aprovação
+- Login do super admin usa a mesma tela `/auth`, mas ao detectar role admin, pode navegar para `/super-admin`
 
