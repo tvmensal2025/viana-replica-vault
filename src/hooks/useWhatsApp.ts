@@ -97,10 +97,11 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
   const checkState = useCallback(async (name: string): Promise<"open" | "close" | "connecting" | "unknown"> => {
     try {
       const result = await withTimeout(getConnectionState(name), 10000);
-      const state = result?.state || "close";
-      // Proxy returns "unknown" on timeout — pass it through
-      if (state === "unknown") return "unknown";
-      return state as "open" | "close" | "connecting";
+      const state: string = result?.state || "close";
+      if (state === "open") return "open";
+      if (state === "connecting") return "connecting";
+      if (state === "close") return "close";
+      return "unknown";
     } catch (err) {
       const msg = err instanceof Error ? err.message : "";
       if (isNotFoundError(msg)) return "close";
