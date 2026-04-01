@@ -60,7 +60,7 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [devolutivaFilter, setDevolutivaFilter] = useState<string>("all");
-  const [licenciadoFilter, setLicenciadoFilter] = useState<string>("all");
+  const [licenciadoFilter, setLicenciadoFilter] = useState<Set<string>>(new Set());
   const [viewingCustomer, setViewingCustomer] = useState<Customer | null>(null);
   const { toast } = useToast();
 
