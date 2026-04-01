@@ -54,6 +54,15 @@ function get(obj: Record<string, unknown>, ...keys: string[]): unknown {
   return null;
 }
 
+/** Remove prefixos técnicos internos do campo devolutiva (ex: "caminhoarquivo:", "caminhoarquivodoc1:") */
+function cleanDevolutiva(raw: string): string {
+  // Pattern: "caminhoarquivo: texto, caminhoarquivodoc1: texto, caminhocomprovante: texto"
+  // Remove prefixes like "caminhoarquivo: ", "caminhoarquivodoc1: ", "caminhocomprovante: "
+  const cleaned = raw.replace(/caminho[a-zA-Z0-9]*:\s*/g, "");
+  // Remove leading/trailing commas and extra spaces
+  return cleaned.replace(/^[,\s]+|[,\s]+$/g, "").replace(/,\s*,/g, ",").trim();
+}
+
 function buildRecord(c: Record<string, unknown>): Record<string, unknown> | null {
   const phoneRaw = get(c, "celular", "telefone", "phone", "whatsapp", "Celular", "Telefone");
   let phone = normalizePhone(String(phoneRaw || ""));
@@ -93,9 +102,9 @@ function buildRecord(c: Record<string, unknown>): Record<string, unknown> | null
   if (andamento) record.andamento_igreen = andamento;
 
   const devolutiva = safeStr(get(c, "devolutiva", "Devolutiva"));
-  if (devolutiva) record.devolutiva = devolutiva;
+  if (devolutiva) record.devolutiva = cleanDevolutiva(devolutiva);
 
-  const obs = safeStr(get(c, "observacao", "Observação", "obs"));
+  const obs = safeStr(get(c, "observacaoCompartilhada", "observacao", "Observação", "obs"));
   if (obs) record.observacao = obs;
 
   const icode = safeStr(get(c, "codigoIgreen", "codigo", "Código"));
