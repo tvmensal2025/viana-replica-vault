@@ -222,7 +222,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
             addLog("🔄 Verificando estabilidade da conexão...");
           }
           graceCountRef.current++;
-          pollRef.current = setTimeout(poll, 5000);
+          pollRef.current = setTimeout(poll, 10000);
           return;
         }
 
@@ -245,7 +245,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
           setError(null);
           addLog("📱 QR Code gerado — escaneie com seu celular");
         }
-        pollRef.current = setTimeout(poll, 5000);
+        pollRef.current = setTimeout(poll, 10000);
         return;
       }
 
@@ -255,7 +255,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
           addLog("🔄 Tentando recuperar a sessão do WhatsApp...");
         }
         graceCountRef.current++;
-        pollRef.current = setTimeout(poll, 5000);
+        pollRef.current = setTimeout(poll, 8000);
         return;
       }
 
@@ -279,7 +279,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
         setError(null);
         addLog("📱 QR Code gerado — escaneie com seu celular");
       }
-      pollRef.current = setTimeout(poll, 3000);
+      pollRef.current = setTimeout(poll, 8000);
     };
 
     poll();
@@ -503,7 +503,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
 
   const reconnect = useCallback(() => createAndConnect(), [createAndConnect]);
 
-  /* ── On mount: check if already connected ── */
+  /* ── On mount: check if already connected (optimized — single check + 8s timeout) ── */
   useEffect(() => {
     mountedRef.current = true;
     let cancelled = false;
@@ -513,16 +513,12 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       setInstanceName(name);
 
       try {
-        const state = await checkState(name);
+        // Single check with 8s global timeout — no multi-attempt confirmation
+        const state = await withTimeout(checkState(name), 8000);
         if (cancelled) return;
 
-        const confirmedOpen = state !== "missing"
-          ? await confirmConnectedState(name, state === "close" ? 2 : 3, 1200)
-          : false;
-
-        if (cancelled) return;
-
-        if (state === "open" || confirmedOpen) {
+        if (state === "open") {
+          // Already connected — trust single check, no re-confirm needed
           await markConnected(name, "✅ WhatsApp conectado!");
           startPolling(name);
           setIsLoading(false);
@@ -537,16 +533,13 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
           return;
         }
 
-        // "close" or "unknown" — check DB for saved instance
-        if (state === "close" || state === "missing") {
-          // Instance exists on server but disconnected — show connect button
-          setStatus("disconnected");
-          setError(null);
-          setIsLoading(false);
-          return;
-        }
+        // "close", "unknown", or "missing" — go straight to disconnected
+        setStatus("disconnected");
+        setError(null);
+        setIsLoading(false);
+        return;
       } catch {
-        // ignore init errors
+        // Timeout or network error — show disconnected instead of hanging
       }
 
       if (cancelled) return;
