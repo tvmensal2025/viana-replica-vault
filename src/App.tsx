@@ -8,6 +8,7 @@ import LicenciadaPage from "./pages/LicenciadaPage";
 import LicenciadaPreview from "./pages/LicenciadaPreview";
 import Auth from "./pages/Auth";
 import Admin from "./pages/Admin";
+import SuperAdmin from "./pages/SuperAdmin";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
