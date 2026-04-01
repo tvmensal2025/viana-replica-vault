@@ -19,6 +19,27 @@ import { WhatsAppTab } from "@/components/whatsapp/WhatsAppTab";
 import { WhatsAppErrorBoundary } from "@/components/whatsapp/WhatsAppErrorBoundary";
 import { QRCodeSVG } from "qrcode.react";
 
+function buildPendingConsultantDefaults(uid: string, email?: string | null) {
+  const rawBase = (email?.split("@")[0] || `consultor-${uid.slice(0, 8)}`)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+  const slugBase = rawBase
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 18) || `consultor-${uid.slice(0, 6)}`;
+
+  return {
+    id: uid,
+    name: email?.split("@")[0] || "Novo consultor",
+    license: `${slugBase}-${uid.slice(0, 4)}`,
+    phone: "",
+    cadastro_url: "",
+    approved: false,
+  } satisfies Database["public"]["Tables"]["consultants"]["Insert"];
+}
+
 const Admin = () => {
   const [loading, setLoading] = useState(true);
   const [approved, setApproved] = useState<boolean | null>(null);
@@ -107,36 +128,72 @@ const Admin = () => {
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
       if (!session) navigate("/auth");
-      else { setUserId(session.user.id); loadConsultant(session.user.id); }
+      else {
+        setLoading(true);
+        setApproved(false);
+        setUserId(session.user.id);
+        loadConsultant(session.user.id);
+      }
     });
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) navigate("/auth");
-      else { setUserId(session.user.id); loadConsultant(session.user.id); }
+      else {
+        setLoading(true);
+        setApproved(false);
+        setUserId(session.user.id);
+        loadConsultant(session.user.id);
+      }
     });
     return () => subscription.unsubscribe();
   }, [navigate]);
 
   const loadConsultant = async (uid: string) => {
-    const { data } = await supabase.from("consultants").select("*").eq("id", uid).maybeSingle();
-    if (data) {
-      const c = data as any;
-      setApproved(c.approved ?? false);
-      const id = c.igreen_id || "";
+    setPhotoPreview(null);
+
+    const applyConsultantData = (consultant: any) => {
+      const id = consultant.igreen_id || "";
+      setApproved(consultant.approved ?? false);
       setForm({
-        name: c.name,
-        license: c.license,
-        phone: c.phone,
+        name: consultant.name || "",
+        license: consultant.license || "",
+        phone: consultant.phone || "",
         igreen_id: id,
-        cadastro_url: id ? `https://digital.igreenenergy.com.br/?id=${id}&sendcontract=true` : c.cadastro_url,
-        licenciada_cadastro_url: id ? `https://expansao.igreenenergy.com.br/?id=${id}&checkout=true` : c.licenciada_cadastro_url || "",
-        facebook_pixel_id: c.facebook_pixel_id || "",
-        google_analytics_id: c.google_analytics_id || "",
-        igreen_portal_email: c.igreen_portal_email || "",
-        igreen_portal_password: c.igreen_portal_password || "",
+        cadastro_url: id ? `https://digital.igreenenergy.com.br/?id=${id}&sendcontract=true` : consultant.cadastro_url || "",
+        licenciada_cadastro_url: id ? `https://expansao.igreenenergy.com.br/?id=${id}&checkout=true` : consultant.licenciada_cadastro_url || "",
+        facebook_pixel_id: consultant.facebook_pixel_id || "",
+        google_analytics_id: consultant.google_analytics_id || "",
+        igreen_portal_email: consultant.igreen_portal_email || "",
+        igreen_portal_password: consultant.igreen_portal_password || "",
       });
-      if (c.photo_url) setPhotoPreview(c.photo_url);
+      if (consultant.photo_url) setPhotoPreview(consultant.photo_url);
+    };
+
+    try {
+      const { data } = await supabase.from("consultants").select("*").eq("id", uid).maybeSingle();
+
+      if (data) {
+        applyConsultantData(data);
+        return;
+      }
+
+      const { data: userData } = await supabase.auth.getUser();
+      const pendingConsultant = buildPendingConsultantDefaults(uid, userData.user?.email);
+      const { data: createdData, error: createError } = await supabase
+        .from("consultants")
+        .insert(pendingConsultant)
+        .select("*")
+        .single();
+
+      if (createError) {
+        throw createError;
+      }
+
+      applyConsultantData(createdData);
+    } catch {
+      setApproved(false);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
