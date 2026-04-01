@@ -395,22 +395,45 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Handle "Connection Closed" and similar transient errors gracefully for chat routes
+    // Handle "Connection Closed" and similar transient errors gracefully
     if (evolutionResponse.status >= 400 && isConnectionClosedError(responseBody)) {
-      if (safePath.startsWith("chat/findMessages/") || safePath.startsWith("chat/findChats/")) {
-        console.warn(`[evolution-proxy] Connection closed on ${safePath}, returning empty array`);
+      console.warn(`[evolution-proxy] Connection closed on ${safePath} (status ${evolutionResponse.status}), returning graceful response`);
+
+      if (safePath.startsWith("chat/findMessages/") || safePath.startsWith("chat/findChats/") || safePath.startsWith("chat/findContacts/")) {
         return new Response(JSON.stringify([]), {
           status: 200,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       if (safePath.startsWith("chat/fetchProfilePictureUrl/")) {
-        console.warn(`[evolution-proxy] Connection closed on ${safePath}, returning null`);
         return new Response(JSON.stringify({ profilePictureUrl: null, connectionClosed: true }), {
           status: 200,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+      if (safePath.startsWith("chat/markMessageAsRead/")) {
+        return new Response(JSON.stringify({ message: "Read messages", read: "skipped", connectionClosed: true }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (safePath.startsWith("message/")) {
+        return new Response(JSON.stringify({ error: "Conexão temporariamente instável. Tente novamente.", timeout: true, sent: false, connectionClosed: true }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (safePath.startsWith("instance/connectionState/")) {
+        return new Response(JSON.stringify({ instance: { state: "connecting" }, connectionClosed: true }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      // Generic fallback for any other path with connection closed
+      return new Response(JSON.stringify({ error: "Conexão temporariamente instável.", unavailable: true, connectionClosed: true }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     return new Response(responseBody, {
