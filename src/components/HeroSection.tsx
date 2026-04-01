@@ -94,11 +94,11 @@ const HeroSection = ({ cadastroUrl, whatsappUrl, consultantId }: HeroSectionProp
           </video>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <a href={CADASTRO} target="_blank" rel="noopener noreferrer" className="btn-cta-lg animate-pulse-green" onClick={() => handleClick("cadastro")}>
+        <div className="flex flex-col sm:flex-row gap-3 justify-center">
+          <a href={CADASTRO} target="_blank" rel="noopener noreferrer" className="btn-cta-lg animate-pulse-green !py-3 !px-6 !text-base" onClick={() => handleClick("cadastro")}>
             ⚡ Faça seu cadastro
           </a>
-          <a href={WHATSAPP} target="_blank" rel="noopener noreferrer" className="btn-whatsapp !px-10 !py-5 !text-lg !rounded-2xl" onClick={() => handleClick("whatsapp")}>
+          <a href={WHATSAPP} target="_blank" rel="noopener noreferrer" className="btn-whatsapp !px-6 !py-3 !text-base !rounded-xl" onClick={() => handleClick("whatsapp")}>
             💬 Atendimento no WhatsApp
           </a>
         </div>
