@@ -45,6 +45,7 @@ interface TemplateManagerProps {
   templates: MessageTemplate[];
   isLoading: boolean;
   onCreateTemplate: (name: string, content: string, mediaType?: string, mediaUrl?: string | null, imageUrl?: string | null) => Promise<void>;
+  onUpdateTemplate: (id: string, updates: { image_url?: string | null }) => Promise<void>;
   onDeleteTemplate: (id: string) => Promise<void>;
 }
 
