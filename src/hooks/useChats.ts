@@ -33,6 +33,9 @@ function formatPhoneNumber(raw: string): string {
     if (number.length === 9) return `(${ddd}) ${number.slice(0, 5)}-${number.slice(5)}`;
     if (number.length === 8) return `(${ddd}) ${number.slice(0, 4)}-${number.slice(4)}`;
   }
+  if (raw.length > 8) {
+    return `+${raw.slice(0, 2)} ${raw.slice(2)}`;
+  }
   return raw;
 }
 
