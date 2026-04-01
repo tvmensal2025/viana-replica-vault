@@ -1,11 +1,12 @@
 import { useState, useRef, useMemo } from "react";
-import { Users, Send, CheckSquare, Loader2, Sparkles, Megaphone, Timer, Shield, Filter, Eye, Phone, Mail, MapPin, Zap } from "lucide-react";
+import { Users, Send, CheckSquare, Loader2, Sparkles, Megaphone, Timer, Shield, Filter, Eye, Phone, Mail, MapPin, Zap, ChevronDown, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/components/ui/use-toast";
 import { sendWhatsAppMessage } from "@/services/messageSender";
 import type { MessageTemplate } from "@/types/whatsapp";
@@ -59,7 +60,7 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [devolutivaFilter, setDevolutivaFilter] = useState<string>("all");
-  const [licenciadoFilter, setLicenciadoFilter] = useState<string>("all");
+  const [licenciadoFilter, setLicenciadoFilter] = useState<Set<string>>(new Set());
   const [viewingCustomer, setViewingCustomer] = useState<Customer | null>(null);
   const { toast } = useToast();
 
@@ -80,12 +81,12 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
       list = list.filter(c => matchDevolutiva(c.devolutiva, devolutivaFilter));
     }
 
-    if (licenciadoFilter !== "all") {
-      list = list.filter(c => c.registered_by_name === licenciadoFilter);
+    if (licenciadoFilter.size > 0) {
+      list = list.filter(c => c.registered_by_name != null && licenciadoFilter.has(c.registered_by_name));
     }
 
     return list;
-  }, [customers, statusFilter, devolutivaFilter]);
+  }, [customers, statusFilter, devolutivaFilter, licenciadoFilter]);
 
   const allSelected = filteredCustomers.length > 0 && filteredCustomers.every(c => selectedIds.has(c.id));
 
@@ -120,7 +121,7 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
   function handleStatusFilter(val: string) {
     setStatusFilter(val as StatusFilter);
     setDevolutivaFilter("all");
-    setLicenciadoFilter("all");
+    setLicenciadoFilter(new Set());
     setSelectedIds(new Set());
   }
 
@@ -257,21 +258,77 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
           </div>
         )}
 
-        {/* Licenciado filter */}
+        {/* Licenciado multi-select filter */}
         {licenciadoOptions.length > 0 && (
           <div className="mb-3">
-            <Select value={licenciadoFilter} onValueChange={(v) => { setLicenciadoFilter(v); setSelectedIds(new Set()); }} disabled={isSending}>
-              <SelectTrigger className="rounded-xl bg-secondary/50 border-border/50 text-sm">
-                <Users className="w-3.5 h-3.5 text-muted-foreground mr-2" />
-                <SelectValue placeholder="Filtrar por licenciado..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os licenciados</SelectItem>
-                {licenciadoOptions.map(name => (
-                  <SelectItem key={name} value={name}>{name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  disabled={isSending}
+                  className={`w-full flex items-center gap-2 rounded-xl bg-secondary/50 border border-border/50 text-sm px-3 py-2 text-left transition-colors hover:bg-secondary/70 ${isSending ? "opacity-50 pointer-events-none" : ""}`}
+                >
+                  <Users className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  <span className="flex-1 truncate text-muted-foreground">
+                    {licenciadoFilter.size === 0
+                      ? "Todos os licenciados"
+                      : licenciadoFilter.size === 1
+                        ? Array.from(licenciadoFilter)[0]
+                        : `${licenciadoFilter.size} licenciados selecionados`}
+                  </span>
+                  {licenciadoFilter.size > 0 && (
+                    <span
+                      role="button"
+                      onClick={(e) => { e.stopPropagation(); setLicenciadoFilter(new Set()); setSelectedIds(new Set()); }}
+                      className="p-0.5 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </span>
+                  )}
+                  <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-72 p-0" align="start">
+                <div className="flex items-center justify-between px-3 py-2 border-b border-border/50">
+                  <span className="text-xs font-medium text-muted-foreground">Licenciados</span>
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => { setLicenciadoFilter(new Set(licenciadoOptions)); setSelectedIds(new Set()); }}
+                      className="text-[11px] text-primary hover:underline"
+                    >
+                      Todos
+                    </button>
+                    <span className="text-muted-foreground/40">|</span>
+                    <button
+                      onClick={() => { setLicenciadoFilter(new Set()); setSelectedIds(new Set()); }}
+                      className="text-[11px] text-muted-foreground hover:underline"
+                    >
+                      Limpar
+                    </button>
+                  </div>
+                </div>
+                <div className="max-h-52 overflow-y-auto p-1.5 space-y-0.5">
+                  {licenciadoOptions.map(name => (
+                    <label
+                      key={name}
+                      className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg cursor-pointer hover:bg-secondary/50 transition-colors"
+                    >
+                      <Checkbox
+                        checked={licenciadoFilter.has(name)}
+                        onCheckedChange={(checked) => {
+                          setLicenciadoFilter(prev => {
+                            const next = new Set(prev);
+                            if (checked) next.add(name); else next.delete(name);
+                            return next;
+                          });
+                          setSelectedIds(new Set());
+                        }}
+                      />
+                      <span className="text-sm text-foreground truncate">{name}</span>
+                    </label>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
         )}
 
