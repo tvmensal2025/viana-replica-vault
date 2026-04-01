@@ -119,7 +119,8 @@ const Admin = () => {
   const loadConsultant = async (uid: string) => {
     const { data } = await supabase.from("consultants").select("*").eq("id", uid).maybeSingle();
     if (data) {
-      const c = data as Consultant;
+      const c = data as any;
+      setApproved(c.approved ?? false);
       const id = c.igreen_id || "";
       setForm({
         name: c.name,
@@ -130,8 +131,8 @@ const Admin = () => {
         licenciada_cadastro_url: id ? `https://expansao.igreenenergy.com.br/?id=${id}&checkout=true` : c.licenciada_cadastro_url || "",
         facebook_pixel_id: c.facebook_pixel_id || "",
         google_analytics_id: c.google_analytics_id || "",
-        igreen_portal_email: (c as any).igreen_portal_email || "",
-        igreen_portal_password: (c as any).igreen_portal_password || "",
+        igreen_portal_email: c.igreen_portal_email || "",
+        igreen_portal_password: c.igreen_portal_password || "",
       });
       if (c.photo_url) setPhotoPreview(c.photo_url);
     }
