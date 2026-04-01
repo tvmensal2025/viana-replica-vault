@@ -126,25 +126,42 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
       .replace(/\{\{telefone\}\}/g, phone);
 
     try {
-      // Send optional image first
-      const imageUrl = (stage as any).auto_message_image_url;
-      if (imageUrl) {
-        const imgResult = await sendWhatsAppMessage({ instanceName, phone, mediaCategory: "image", mediaUrl: imageUrl });
-        if (imgResult.status === "failed") throw new Error(imgResult.error);
-      }
-
       const mediaCategory: MediaCategory = (stage.auto_message_type as MediaCategory) || "text";
+      const imageUrl = (stage as any).auto_message_image_url;
 
+      // 1) Audio first (if type is audio)
       if (mediaCategory === "audio" && stage.auto_message_media_url) {
         const audioResult = await sendWhatsAppMessage({ instanceName, phone, mediaCategory: "audio", mediaUrl: stage.auto_message_media_url });
         if (audioResult.status === "failed") throw new Error(audioResult.error);
+
+        // 2) Then optional image
+        if (imageUrl) {
+          await new Promise((r) => setTimeout(r, 2500));
+          const imgResult = await sendWhatsAppMessage({ instanceName, phone, mediaCategory: "image", mediaUrl: imageUrl });
+          if (imgResult.status === "failed") throw new Error(imgResult.error);
+        }
+
+        // 3) Then text
         if (messageText) {
+          await new Promise((r) => setTimeout(r, 1500));
           await sendWhatsAppMessage({ instanceName, phone, mediaCategory: "text", text: messageText });
         }
       } else if ((mediaCategory === "image" || mediaCategory === "video") && stage.auto_message_media_url) {
+        // Send optional image first, then media with caption
+        if (imageUrl && mediaCategory !== "image") {
+          const imgResult = await sendWhatsAppMessage({ instanceName, phone, mediaCategory: "image", mediaUrl: imageUrl });
+          if (imgResult.status === "failed") throw new Error(imgResult.error);
+          await new Promise((r) => setTimeout(r, 1500));
+        }
         const mediaResult = await sendWhatsAppMessage({ instanceName, phone, mediaCategory, mediaUrl: stage.auto_message_media_url, text: messageText });
         if (mediaResult.status === "failed") throw new Error(mediaResult.error);
       } else {
+        // Text-only: send optional image first, then text
+        if (imageUrl) {
+          const imgResult = await sendWhatsAppMessage({ instanceName, phone, mediaCategory: "image", mediaUrl: imageUrl });
+          if (imgResult.status === "failed") throw new Error(imgResult.error);
+          await new Promise((r) => setTimeout(r, 1500));
+        }
         const textResult = await sendWhatsAppMessage({ instanceName, phone, mediaCategory: "text", text: messageText });
         if (textResult.status === "failed") throw new Error(textResult.error);
       }
