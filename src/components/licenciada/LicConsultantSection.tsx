@@ -10,7 +10,7 @@ interface LicConsultantSectionProps {
 const DEFAULT_WHATSAPP = "https://api.whatsapp.com/send?phone=5515981077416&text=Ol%C3%A1,%20gostaria%20de%20mais%20informa%C3%A7%C3%B5es%20sobre%20a%20oportunidade%20de%20Licenciado%20iGreen%20Energy";
 
 const LicConsultantSection = ({
-  name = "Ayla Viana",
+  name = "Seu Consultor",
   whatsappUrl,
   photoUrl,
   igreenId = "126928",
