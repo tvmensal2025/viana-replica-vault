@@ -383,45 +383,6 @@ const Admin = () => {
               />
             </div>
 
-            {/* Clicks by target - separated by page */}
-            {analytics?.clicksByTarget && Object.keys(analytics.clicksByTarget).length > 0 && (
-              <div className="bg-card rounded-2xl border border-border p-4 sm:p-6">
-                <h3 className="font-heading font-bold text-foreground mb-1 flex items-center gap-2">
-                  <MousePointerClick className="w-4 h-4 text-primary" /> Cliques por Botão
-                </h3>
-                <p className="text-xs text-muted-foreground mb-4">Quais botões seus visitantes mais clicam — separado por página</p>
-
-                {/* Página Cliente */}
-                {analytics.clicksByPage?.client && Object.keys(analytics.clicksByPage.client).length > 0 && (
-                  <div className="mb-4">
-                    <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">📄 Página Cliente</p>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      {Object.entries(analytics.clicksByPage.client).map(([target, count]) => (
-                        <div key={target} className="bg-secondary rounded-xl p-4 text-center">
-                          <p className="text-2xl font-bold font-heading text-foreground">{count}</p>
-                          <p className="text-xs text-muted-foreground">{friendlyClickLabel(target)}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Página Licenciada */}
-                {analytics.clicksByPage?.licenciada && Object.keys(analytics.clicksByPage.licenciada).length > 0 && (
-                  <div>
-                    <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">💼 Página Licenciada</p>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      {Object.entries(analytics.clicksByPage.licenciada).map(([target, count]) => (
-                        <div key={target} className="bg-secondary rounded-xl p-4 text-center">
-                          <p className="text-2xl font-bold font-heading text-foreground">{count}</p>
-                          <p className="text-xs text-muted-foreground">{friendlyClickLabel(target)}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
 
             {/* Customer Consumption + Status Donut */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
