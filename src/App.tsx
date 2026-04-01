@@ -22,6 +22,7 @@ const App = () => (
         <Routes>
           <Route path="/auth" element={<Auth />} />
           <Route path="/admin" element={<Admin />} />
+          <Route path="/super-admin" element={<SuperAdmin />} />
           <Route path="/licenciada/preview" element={<LicenciadaPreview />} />
           <Route path="/licenciada/:licenca" element={<LicenciadaPage />} />
           <Route path="/:licenca" element={<ConsultantPage />} />
