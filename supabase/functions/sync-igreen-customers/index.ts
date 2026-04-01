@@ -102,9 +102,9 @@ function buildRecord(c: Record<string, unknown>): Record<string, unknown> | null
   if (andamento) record.andamento_igreen = andamento;
 
   const devolutiva = safeStr(get(c, "devolutiva", "Devolutiva"));
-  if (devolutiva) record.devolutiva = devolutiva;
+  if (devolutiva) record.devolutiva = cleanDevolutiva(devolutiva);
 
-  const obs = safeStr(get(c, "observacao", "Observação", "obs"));
+  const obs = safeStr(get(c, "observacaoCompartilhada", "observacao", "Observação", "obs"));
   if (obs) record.observacao = obs;
 
   const icode = safeStr(get(c, "codigoIgreen", "codigo", "Código"));
