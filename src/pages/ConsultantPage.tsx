@@ -53,6 +53,7 @@ const ConsultantPage = () => {
         <StatesSection />
         <ReferralSection />
         <TestimonialsSection />
+        <NewsSection />
         <ClubSection />
         <AdvantagesSection />
         <ConsultantSection
