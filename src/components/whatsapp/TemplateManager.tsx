@@ -49,7 +49,7 @@ interface TemplateManagerProps {
   onDeleteTemplate: (id: string) => Promise<void>;
 }
 
-export function TemplateManager({ templates, isLoading, onCreateTemplate, onDeleteTemplate }: TemplateManagerProps) {
+export function TemplateManager({ templates, isLoading, onCreateTemplate, onUpdateTemplate, onDeleteTemplate }: TemplateManagerProps) {
   const [name, setName] = useState("");
   const [content, setContent] = useState("");
   const [mediaType, setMediaType] = useState<TemplateMediaType>("text");
