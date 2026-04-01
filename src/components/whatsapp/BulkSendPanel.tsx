@@ -227,6 +227,8 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
             { key: "rejected", label: "Reprovados" },
             { key: "pending", label: "Pendentes" },
             { key: "devolutiva", label: "Com Devolutiva" },
+            { key: "rejected_devolutiva", label: "Reprovado + Devolutiva" },
+            { key: "pending_devolutiva", label: "Pendente + Devolutiva" },
           ].map(f => (
             <button
               key={f.key}
