@@ -279,8 +279,10 @@ const Admin = () => {
       const { error } = await supabase.from("consultants").upsert(payload, { onConflict: "id" });
       if (error) throw error;
       toast({ title: "✅ Dados salvos com sucesso!" });
-    } catch (error: unknown) {
-      toast({ title: "Erro ao salvar", description: error instanceof Error ? error.message : "Erro desconhecido", variant: "destructive" });
+    } catch (error: any) {
+      const msg = error?.message || error?.error_description || (typeof error === "string" ? error : JSON.stringify(error));
+      console.error("handleSave error:", error);
+      toast({ title: "Erro ao salvar", description: msg || "Erro desconhecido", variant: "destructive" });
     } finally { setSaving(false); }
   };
 
