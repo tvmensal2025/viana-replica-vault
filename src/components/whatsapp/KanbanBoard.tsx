@@ -26,7 +26,8 @@ import {
   Zap,
 } from "lucide-react";
 import { StageAutoMessageConfig } from "./StageAutoMessageConfig";
-import { sendTextMessage, sendMedia, sendAudio } from "@/services/evolutionApi";
+import { sendWhatsAppMessage, resolveRecipient } from "@/services/messageSender";
+import type { MediaCategory } from "@/services/messageSender";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 
 type KanbanStageRow = Tables<"kanban_stages">;
