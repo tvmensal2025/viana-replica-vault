@@ -1,11 +1,12 @@
 import { useState, useRef, useMemo } from "react";
-import { Users, Send, CheckSquare, Loader2, Sparkles, Megaphone, Timer, Shield, Filter, Eye, Phone, Mail, MapPin, Zap } from "lucide-react";
+import { Users, Send, CheckSquare, Loader2, Sparkles, Megaphone, Timer, Shield, Filter, Eye, Phone, Mail, MapPin, Zap, ChevronDown, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/components/ui/use-toast";
 import { sendWhatsAppMessage } from "@/services/messageSender";
 import type { MessageTemplate } from "@/types/whatsapp";
