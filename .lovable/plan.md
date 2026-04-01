@@ -1,38 +1,32 @@
 
 
-## Plano: Migrar upload de mídias de mensagens do MinIO para Supabase Storage
+## Diagnóstico: Imagens dos templates não foram salvas
 
-### Decisao
-- **Landing page** (vídeos de notícias, imagens, depoimentos) → continua no MinIO, sem mudanças
-- **Mídias de mensagens WhatsApp** (áudios, imagens, documentos dos templates/chat) → migra para Supabase Storage
+### Problema encontrado
+Consultei o banco de dados e confirmei: **todos os 4 templates de áudio têm `image_url = NULL`**.
 
-### O que muda
+| Template | media_type | image_url |
+|----------|-----------|-----------|
+| Cadastrado reprovado | audio | NULL |
+| Cadastro aprovado | audio | NULL |
+| Fatura Ilegível | audio | NULL |
+| Fatura com Débito | audio | NULL |
 
-#### 1. Reescrever a Edge Function `upload-media`
-Trocar toda a lógica de AWS Signature V4 / MinIO por um simples upload ao Supabase Storage usando o SDK do Supabase (service role key). Usar o bucket existente `IMAGE` (já público) ou criar um bucket dedicado `whatsapp-media`.
+As imagens foram enviadas ao Supabase Storage com sucesso (o upload funcionou), mas o **update no banco foi bloqueado pela política de RLS** que estava incorreta na hora em que você tentou salvar. 
 
-- Recebe o arquivo via FormData (igual hoje)
-- Valida tipo e tamanho (igual hoje)
-- Faz upload via `supabase.storage.from('whatsapp-media').upload(key, fileBytes)`
-- Retorna a URL pública do Supabase Storage
+A correção de RLS que acabamos de aplicar já está ativa no banco. Porém as imagens que você adicionou antes dessa correção **não foram gravadas**.
 
-#### 2. Criar bucket `whatsapp-media` (público)
-Migração SQL para criar o bucket e política de leitura pública.
+### Plano
 
-#### 3. Atualizar `src/services/minioUpload.ts`
-Renomear/atualizar comentários para refletir que agora usa Supabase Storage. A interface `UploadResult` e a função `uploadMedia` mantêm a mesma assinatura — apenas o backend muda (a edge function).
+#### Opção A — Você re-adiciona as imagens (recomendado)
+Basta clicar em "Adicionar imagem" em cada um dos 4 templates novamente. Agora o sistema vai:
+1. Fazer upload → funciona (já funcionava)
+2. Salvar `image_url` no banco → **agora funciona** com a RLS corrigida
+3. Se falhar, mostrar um erro visível (toast vermelho)
 
-**Nenhum componente frontend precisa mudar** — todos já usam `uploadMedia()` que chama a edge function. A mudança é transparente.
+#### Opção B — Corrigir via SQL (automático)
+Se você souber quais imagens foram para quais templates, posso rodar um UPDATE direto no banco para preencher os `image_url` dos 4 templates. Mas como os uploads anteriores geraram URLs que não sabemos qual é qual, é mais seguro re-adicionar manualmente.
 
-### Arquivos afetados
-| Arquivo | Ação |
-|---------|------|
-| `supabase/functions/upload-media/index.ts` | Reescrever (MinIO → Supabase Storage) |
-| Nova migração SQL | Criar bucket `whatsapp-media` público |
-| `src/services/minioUpload.ts` | Atualizar comentários/nome do logger |
-
-### Benefícios
-- Upload e download mais rápidos (mesmo datacenter Supabase)
-- Sem problemas de SSL/timeout do MinIO
-- Sem necessidade de AWS Signature V4
+### Melhoria adicional no código
+Adicionar um **toast de sucesso** quando a imagem for salva com sucesso no `AddImageToTemplate`, para dar feedback claro ao usuário de que a operação completou.
 
