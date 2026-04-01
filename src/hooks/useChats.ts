@@ -33,6 +33,9 @@ function formatPhoneNumber(raw: string): string {
     if (number.length === 9) return `(${ddd}) ${number.slice(0, 5)}-${number.slice(5)}`;
     if (number.length === 8) return `(${ddd}) ${number.slice(0, 4)}-${number.slice(4)}`;
   }
+  if (raw.length > 8) {
+    return `+${raw.slice(0, 2)} ${raw.slice(2)}`;
+  }
   return raw;
 }
 
@@ -59,7 +62,8 @@ function mapChat(chat: EvolutionChat, contactsMap: Map<string, EvolutionContact>
   const hasName = chat.pushName || chat.lastMessage?.pushName || contact?.pushName || chat.name;
   if (isLid && !hasName && !realPhone) return null;
 
-  const nameSource = chat.pushName || chat.lastMessage?.pushName || contact?.pushName || chat.name;
+  const lastMsgPushName = chat.lastMessage?.key?.fromMe ? undefined : chat.lastMessage?.pushName;
+  const nameSource = chat.pushName || lastMsgPushName || contact?.pushName || chat.name;
   const phoneSource = realPhone || (isLid ? null : rawJidNumber);
   const displayName = nameSource || (phoneSource ? formatPhoneNumber(phoneSource) : `Contato ${rawJidNumber.slice(-4)}`);
 
