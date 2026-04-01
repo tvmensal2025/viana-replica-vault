@@ -184,9 +184,10 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
       } catch { failed++; }
 
       if (i < selected.length - 1) {
-        setCountdown(SEND_INTERVAL_MS / 1000);
+        const intervalS = getRandomInterval(i);
+        setCountdown(intervalS);
         await new Promise<void>((resolve) => {
-          let seconds = SEND_INTERVAL_MS / 1000;
+          let seconds = intervalS;
           countdownRef.current = setInterval(() => {
             seconds--;
             setCountdown(seconds);
