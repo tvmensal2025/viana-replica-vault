@@ -1,17 +1,38 @@
 
 
-## Remover filtro "Com Devolutiva"
+## Proteger templates compartilhados e garantir isolamento multi-tenant
 
-### Análise
-O filtro "Com Devolutiva" mostra clientes não-aprovados que têm devolutiva — esses já aparecem no filtro "Reprovados" (pois clientes com devolutiva são tipicamente reprovados). O filtro "Aprovado + Devolutiva" permanece, pois é o caso especial.
+### Problema identificado
 
-### Alterações em `src/components/whatsapp/BulkSendPanel.tsx`
+As políticas RLS já estão corretas:
+- **SELECT**: todos os autenticados leem todos os templates (`USING (true)`)
+- **INSERT/UPDATE/DELETE**: apenas o dono (`consultant_id = auth.uid()`)
 
-1. **Remover `"devolutiva"` do tipo `StatusFilter`** (linha 28)
-2. **Remover a condição `statusFilter === "devolutiva"`** da lógica de filtro (linha 78)
-3. **Ajustar sub-filtro de categorias** para aparecer apenas quando `statusFilter === "approved_devolutiva"` (linhas 81, 247)
-4. **Remover o botão "Com Devolutiva"** da barra de filtros na UI
-5. **Ajustar `handleStatusFilter`** se necessário para não referenciar "devolutiva"
+Porém a **UI não distingue** templates próprios dos compartilhados. Os botões de editar/excluir aparecem em TODOS os templates, e ao clicar em um que não é seu, o RLS bloqueia silenciosamente (update) ou falha (delete), causando erro.
 
-Resultado: barra de filtros fica `Todos | Aprovados | Reprovados | Pendentes | Aprovado + Devolutiva`
+### Dados já isolados corretamente (sem mudanças necessárias)
+- **customers**: RLS owner-only (SELECT/INSERT/UPDATE/DELETE)
+- **crm_deals, customer_tags, scheduled_messages**: RLS owner-only
+- **whatsapp_instances**: RLS owner-only + UNIQUE(consultant_id)
+- **kanban_stages**: RLS owner-only
+- **Conversas**: via Evolution API com instância individual por consultor
+
+### Alterações necessárias
+
+**1. `src/components/whatsapp/TemplateManager.tsx`**
+- Adicionar prop `consultantId: string`
+- Comparar `template.consultant_id === consultantId` para cada template
+- **Templates alheios**: esconder botões de editar e excluir, mostrar apenas visualizar (preview)
+- **Templates próprios**: manter comportamento atual completo
+
+**2. `src/components/whatsapp/WhatsAppTab.tsx`**
+- Passar `consultantId` para o `TemplateManager`
+
+**3. `src/hooks/useTemplates.ts`**
+- Melhorar `deleteTemplate` para verificar resultado (como já faz o `updateTemplate`), evitando falha silenciosa por RLS
+
+### Resultado
+- Templates padrão (áudios, imagens) ficam visíveis para todos, mas só o criador pode editar/excluir
+- Cada conta nova vê os templates compartilhados e pode criar os seus
+- Nenhum erro de RLS ao interagir com templates alheios
 
