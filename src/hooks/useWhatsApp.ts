@@ -222,7 +222,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
             addLog("🔄 Verificando estabilidade da conexão...");
           }
           graceCountRef.current++;
-          pollRef.current = setTimeout(poll, 5000);
+          pollRef.current = setTimeout(poll, 10000);
           return;
         }
 
@@ -245,7 +245,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
           setError(null);
           addLog("📱 QR Code gerado — escaneie com seu celular");
         }
-        pollRef.current = setTimeout(poll, 5000);
+        pollRef.current = setTimeout(poll, 10000);
         return;
       }
 
