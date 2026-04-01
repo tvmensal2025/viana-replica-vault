@@ -185,6 +185,9 @@ export function useChats(instanceName: string | null) {
             setChats((prev) =>
               prev.map((c) => (picMap.has(c.remoteJid) ? { ...c, profilePicUrl: picMap.get(c.remoteJid) } : c))
             );
+          } else {
+            // All returned null — pause globally for 5 minutes
+            globalPicPauseUntilRef.current = Date.now() + GLOBAL_PIC_PAUSE_TTL;
           }
         }).catch(() => { /* non-critical */ })
           .finally(() => { fetchingPicsRef.current = false; });

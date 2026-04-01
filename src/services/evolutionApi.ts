@@ -49,7 +49,19 @@ async function request<T>(path: string, method: string, body?: unknown): Promise
       throw new Error(detail);
     }
 
-    return res.json();
+    const json = await res.json();
+
+    // Detect graceful timeout/error responses from proxy (200 with error payload)
+    if (json && typeof json === "object" && !Array.isArray(json)) {
+      if ((json as Record<string, unknown>).timeout === true) {
+        throw new Error("Timeout ao processar requisição");
+      }
+      if ((json as Record<string, unknown>).unavailable === true) {
+        throw new Error((json as Record<string, unknown>).message as string || "Serviço temporariamente indisponível");
+      }
+    }
+
+    return json;
   } catch (err) {
     if (err instanceof TypeError) {
       throw new Error("Erro de conexão. Verifique sua internet.");
