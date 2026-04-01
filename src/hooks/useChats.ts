@@ -95,6 +95,8 @@ interface PicCacheEntry {
   fetchedAt: number;
 }
 
+const GLOBAL_PIC_PAUSE_TTL = 5 * 60 * 1000; // 5 minutes
+
 export function useChats(instanceName: string | null) {
   const [chats, setChats] = useState<ChatItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
