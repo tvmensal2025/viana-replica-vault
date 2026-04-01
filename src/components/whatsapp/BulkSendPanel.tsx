@@ -25,7 +25,7 @@ interface BulkSendPanelProps {
 }
 const SEND_INTERVAL_MS = 20000;
 
-type StatusFilter = "all" | "approved" | "rejected" | "pending" | "devolutiva";
+type StatusFilter = "all" | "approved" | "rejected" | "pending" | "devolutiva" | "rejected_devolutiva" | "pending_devolutiva";
 
 const DEVOLUTIVA_CATEGORIES = [
   { key: "fatura_ilegivel", label: "Fatura Ilegível", match: ["fatura ilegível", "fatura ilegivel"] },
@@ -76,8 +76,10 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
     else if (statusFilter === "rejected") list = list.filter(c => c.status === "rejected");
     else if (statusFilter === "pending") list = list.filter(c => c.status === "pending");
     else if (statusFilter === "devolutiva") list = list.filter(c => c.devolutiva && c.devolutiva.trim() !== "");
+    else if (statusFilter === "rejected_devolutiva") list = list.filter(c => c.status === "rejected" && c.devolutiva && c.devolutiva.trim() !== "");
+    else if (statusFilter === "pending_devolutiva") list = list.filter(c => c.status === "pending" && c.devolutiva && c.devolutiva.trim() !== "");
 
-    if (statusFilter === "devolutiva" && devolutivaFilter !== "all") {
+    if ((statusFilter === "devolutiva" || statusFilter === "rejected_devolutiva" || statusFilter === "pending_devolutiva") && devolutivaFilter !== "all") {
       list = list.filter(c => matchDevolutiva(c.devolutiva, devolutivaFilter));
     }
 
@@ -225,6 +227,8 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
             { key: "rejected", label: "Reprovados" },
             { key: "pending", label: "Pendentes" },
             { key: "devolutiva", label: "Com Devolutiva" },
+            { key: "rejected_devolutiva", label: "Reprovado + Devolutiva" },
+            { key: "pending_devolutiva", label: "Pendente + Devolutiva" },
           ].map(f => (
             <button
               key={f.key}
@@ -242,7 +246,7 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
         </div>
 
         {/* Devolutiva sub-filter */}
-        {statusFilter === "devolutiva" && (
+        {(statusFilter === "devolutiva" || statusFilter === "rejected_devolutiva" || statusFilter === "pending_devolutiva") && (
           <div className="mb-3">
             <Select value={devolutivaFilter} onValueChange={setDevolutivaFilter} disabled={isSending}>
               <SelectTrigger className="rounded-xl bg-secondary/50 border-border/50 text-sm">
