@@ -442,8 +442,17 @@ Deno.serve(async (req) => {
     });
   } catch (error) {
     console.error("evolution-proxy error:", error);
+    const errMsg = (error as Error).message || "Internal error";
+    // Catch connection-closed errors that bubble up as exceptions
+    if (isConnectionClosedError(errMsg)) {
+      console.warn("[evolution-proxy] Connection closed in catch block, returning graceful response");
+      return new Response(
+        JSON.stringify({ error: "Conexão temporariamente instável.", unavailable: true, connectionClosed: true }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
     return new Response(
-      JSON.stringify({ error: (error as Error).message || "Internal error" }),
+      JSON.stringify({ error: errMsg }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
