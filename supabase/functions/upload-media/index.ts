@@ -1,6 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { Client as MinioClient } from "npm:minio@8.0.5";
-import { Buffer } from "node:buffer";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -8,7 +6,6 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const BUCKET = Deno.env.get("MINIO_BUCKET") || "media-templates";
 const MAX_SIZE = 100 * 1024 * 1024;
 
 const ALLOWED_TYPES: Record<string, string[]> = {
@@ -50,6 +47,12 @@ function getExtension(mime: string): string {
   return map[mime] || "bin";
 }
 
+/**
+ * Generate HMAC-SHA256 signature for S3-compatible auth (AWS Signature V4 simplified).
+ * We use a simpler approach: direct PUT with presigned-style or basic auth.
+ * Since MinIO supports basic auth via Access-Key headers, we use that.
+ */
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -59,6 +62,7 @@ serve(async (req) => {
     const minioUrl = (Deno.env.get("MINIO_SERVER_URL") ?? "").trim().replace(/\/+$/, "");
     const accessKey = (Deno.env.get("MINIO_ROOT_USER") ?? "").trim();
     const secretKey = (Deno.env.get("MINIO_ROOT_PASSWORD") ?? "").trim();
+    const BUCKET = Deno.env.get("MINIO_BUCKET") || "media-templates";
 
     if (!minioUrl || !accessKey || !secretKey) {
       return new Response(
@@ -66,11 +70,6 @@ serve(async (req) => {
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    const parsedUrl = new URL(minioUrl);
-    const useSSL = parsedUrl.protocol === "https:";
-    const endPoint = parsedUrl.hostname;
-    const port = parsedUrl.port ? parseInt(parsedUrl.port, 10) : useSSL ? 443 : 80;
 
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
@@ -99,43 +98,111 @@ serve(async (req) => {
 
     const ext = getExtension(file.type);
     const objectKey = `${crypto.randomUUID()}-${Date.now()}.${ext}`;
-    const fileBuffer = Buffer.from(new Uint8Array(await file.arrayBuffer()));
+    const fileBytes = new Uint8Array(await file.arrayBuffer());
 
-    const minioClient = new MinioClient({
-      endPoint,
-      port,
-      useSSL,
-      accessKey,
-      secretKey,
-      region: "us-east-1",
+    // Use S3 PUT Object via fetch with AWS Signature V4
+    const putUrl = `${minioUrl}/${BUCKET}/${objectKey}`;
+    const now = new Date();
+    const dateStamp = now.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+    const shortDate = dateStamp.substring(0, 8);
+    const region = "us-east-1";
+    const service = "s3";
+
+    // AWS Signature V4
+    const encoder = new TextEncoder();
+
+    async function hmacSHA256(key: ArrayBuffer | Uint8Array, msg: string): Promise<ArrayBuffer> {
+      const cryptoKey = await crypto.subtle.importKey(
+        "raw", key, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+      );
+      return await crypto.subtle.sign("HMAC", cryptoKey, encoder.encode(msg));
+    }
+
+    async function sha256(data: Uint8Array): Promise<string> {
+      const hash = await crypto.subtle.digest("SHA-256", data);
+      return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("");
+    }
+
+    const payloadHash = await sha256(fileBytes);
+
+    const parsedUrl = new URL(putUrl);
+    const hostHeader = parsedUrl.host;
+    const canonicalUri = parsedUrl.pathname;
+
+    const signedHeaders = "content-type;host;x-amz-content-sha256;x-amz-date";
+    const canonicalHeaders =
+      `content-type:${file.type}\n` +
+      `host:${hostHeader}\n` +
+      `x-amz-content-sha256:${payloadHash}\n` +
+      `x-amz-date:${dateStamp}\n`;
+
+    const canonicalRequest = [
+      "PUT",
+      canonicalUri,
+      "", // query string
+      canonicalHeaders,
+      signedHeaders,
+      payloadHash,
+    ].join("\n");
+
+    const credentialScope = `${shortDate}/${region}/${service}/aws4_request`;
+    const canonicalRequestHash = await sha256(encoder.encode(canonicalRequest));
+
+    const stringToSign = [
+      "AWS4-HMAC-SHA256",
+      dateStamp,
+      credentialScope,
+      canonicalRequestHash,
+    ].join("\n");
+
+    // Derive signing key
+    const kDate = await hmacSHA256(encoder.encode("AWS4" + secretKey), shortDate);
+    const kRegion = await hmacSHA256(kDate, region);
+    const kService = await hmacSHA256(kRegion, service);
+    const kSigning = await hmacSHA256(kService, "aws4_request");
+
+    const signatureBytes = await hmacSHA256(kSigning, stringToSign);
+    const signature = Array.from(new Uint8Array(signatureBytes))
+      .map(b => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    const authHeader = `AWS4-HMAC-SHA256 Credential=${accessKey}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+    console.log("Uploading to MinIO:", putUrl);
+
+    const res = await fetch(putUrl, {
+      method: "PUT",
+      headers: {
+        "Content-Type": file.type,
+        "x-amz-content-sha256": payloadHash,
+        "x-amz-date": dateStamp,
+        "Authorization": authHeader,
+      },
+      body: fileBytes,
     });
 
-    try {
-      await minioClient.putObject(BUCKET, objectKey, fileBuffer, file.size, {
-        "Content-Type": file.type,
-      });
-    } catch (error: any) {
-      console.error("MinIO putObject error:", {
-        code: error?.code,
-        message: error?.message,
-        bucket: BUCKET,
-      });
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => "");
+      console.error("MinIO PUT error:", res.status, errBody);
 
-      if (error?.code === "NoSuchBucket") {
+      if (errBody.includes("NoSuchBucket")) {
         return new Response(
           JSON.stringify({ error: `Bucket '${BUCKET}' not found on MinIO` }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      if (error?.code === "AccessDenied" || /authorized credentials/i.test(String(error?.message ?? ""))) {
+      if (res.status === 403) {
         return new Response(
-          JSON.stringify({ error: "Valid and authorized credentials required for this bucket" }),
+          JSON.stringify({ error: "MinIO access denied - check credentials" }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      throw error;
+      return new Response(
+        JSON.stringify({ error: `MinIO upload failed (${res.status}): ${errBody.substring(0, 200)}` }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     const publicUrl = `${minioUrl}/${BUCKET}/${objectKey}`;
