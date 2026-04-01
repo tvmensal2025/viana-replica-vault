@@ -1,10 +1,11 @@
 import { useState, useRef, useMemo } from "react";
-import { Users, Send, CheckSquare, Loader2, Sparkles, Megaphone, Timer, Shield, Filter } from "lucide-react";
+import { Users, Send, CheckSquare, Loader2, Sparkles, Megaphone, Timer, Shield, Filter, Eye, Phone, Mail, MapPin, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { sendWhatsAppMessage } from "@/services/messageSender";
 import type { MessageTemplate } from "@/types/whatsapp";
@@ -13,6 +14,9 @@ export type BulkSendResult = { total: number; sent: number; failed: number };
 interface Customer {
   id: string; name: string; phone_whatsapp: string; electricity_bill_value?: number;
   status?: string; devolutiva?: string | null;
+  email?: string | null; cpf?: string | null; address_city?: string | null; address_state?: string | null;
+  distribuidora?: string | null; observacao?: string | null; andamento_igreen?: string | null;
+  media_consumo?: number | null; registered_by_name?: string | null;
 }
 interface BulkSendPanelProps {
   instanceName: string; customers: Customer[]; templates: MessageTemplate[];
@@ -55,6 +59,7 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [devolutivaFilter, setDevolutivaFilter] = useState<string>("all");
+  const [viewingCustomer, setViewingCustomer] = useState<Customer | null>(null);
   const { toast } = useToast();
 
   const filteredCustomers = useMemo(() => {
@@ -259,10 +264,10 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
               {customers.length === 0 ? "Nenhum cliente" : "Nenhum cliente com este filtro"}
             </p>
           ) : filteredCustomers.map((c) => (
-            <label key={c.id} className={`w-full flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-all hover:bg-secondary/40 ${selectedIds.has(c.id) ? "bg-orange-500/5" : ""} ${isSending ? "pointer-events-none opacity-50" : ""}`}>
+            <div key={c.id} className={`w-full flex items-center gap-3 px-4 py-2.5 transition-all hover:bg-secondary/40 ${selectedIds.has(c.id) ? "bg-orange-500/5" : ""} ${isSending ? "pointer-events-none opacity-50" : ""}`}>
               <Checkbox checked={selectedIds.has(c.id)} onCheckedChange={() => toggleCustomer(c.id)} disabled={isSending} />
-              <div className="min-w-0 flex-1">
-                <p className="text-sm text-foreground truncate">{c.name}</p>
+              <div className="min-w-0 flex-1 cursor-pointer" onClick={() => setViewingCustomer(c)}>
+                <p className="text-sm text-foreground truncate hover:underline">{c.name}</p>
                 <p className="text-xs text-muted-foreground/70">{c.phone_whatsapp}</p>
               </div>
               <div className="flex items-center gap-1.5">
@@ -270,8 +275,11 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
                 {c.status === "rejected" && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/15 text-red-400 font-medium">Reprovado</span>}
                 {c.status === "pending" && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-yellow-500/15 text-yellow-400 font-medium">Pendente</span>}
                 {c.devolutiva && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-orange-500/15 text-orange-400 font-medium">Dev.</span>}
+                <button onClick={() => setViewingCustomer(c)} className="p-1 rounded-lg hover:bg-secondary/60 text-muted-foreground hover:text-foreground transition-colors">
+                  <Eye className="w-3.5 h-3.5" />
+                </button>
               </div>
-            </label>
+            </div>
           ))}
         </div>
 
@@ -332,6 +340,80 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
           {isSending ? <><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</> : <><Send className="w-4 h-4" /> Enviar para {selectedIds.size} clientes</>}
         </Button>
       </div>
+
+      {/* Customer detail dialog */}
+      <Dialog open={!!viewingCustomer} onOpenChange={(open) => !open && setViewingCustomer(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-lg">{viewingCustomer?.name}</DialogTitle>
+          </DialogHeader>
+          {viewingCustomer && (
+            <div className="space-y-3 text-sm">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Phone className="w-4 h-4 shrink-0" />
+                  <span>{viewingCustomer.phone_whatsapp}</span>
+                </div>
+                {viewingCustomer.email && (
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Mail className="w-4 h-4 shrink-0" />
+                    <span className="truncate">{viewingCustomer.email}</span>
+                  </div>
+                )}
+              </div>
+
+              {viewingCustomer.cpf && (
+                <div className="text-muted-foreground"><span className="font-medium text-foreground">CPF:</span> {viewingCustomer.cpf}</div>
+              )}
+
+              {(viewingCustomer.address_city || viewingCustomer.address_state) && (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <MapPin className="w-4 h-4 shrink-0" />
+                  <span>{[viewingCustomer.address_city, viewingCustomer.address_state].filter(Boolean).join(" - ")}</span>
+                </div>
+              )}
+
+              {viewingCustomer.distribuidora && (
+                <div className="text-muted-foreground"><span className="font-medium text-foreground">Distribuidora:</span> {viewingCustomer.distribuidora}</div>
+              )}
+
+              {viewingCustomer.electricity_bill_value != null && (
+                <div className="text-muted-foreground"><span className="font-medium text-foreground">Conta de Luz:</span> R$ {viewingCustomer.electricity_bill_value.toFixed(2)}</div>
+              )}
+
+              {viewingCustomer.media_consumo != null && (
+                <div className="text-muted-foreground"><span className="font-medium text-foreground">Consumo Médio:</span> {viewingCustomer.media_consumo} kWh</div>
+              )}
+
+              {viewingCustomer.registered_by_name && (
+                <div className="text-muted-foreground"><span className="font-medium text-foreground">Licenciada:</span> {viewingCustomer.registered_by_name}</div>
+              )}
+
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-foreground">Status:</span>
+                {viewingCustomer.status === "approved" && <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/15 text-green-400 font-medium">Aprovado</span>}
+                {viewingCustomer.status === "rejected" && <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/15 text-red-400 font-medium">Reprovado</span>}
+                {viewingCustomer.status === "pending" && <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/15 text-yellow-400 font-medium">Pendente</span>}
+              </div>
+
+              {viewingCustomer.andamento_igreen && (
+                <div className="text-muted-foreground"><span className="font-medium text-foreground">Andamento:</span> {viewingCustomer.andamento_igreen}</div>
+              )}
+
+              {viewingCustomer.devolutiva && (
+                <div className="rounded-lg bg-orange-500/10 border border-orange-500/20 p-3">
+                  <p className="text-xs font-medium text-orange-400 mb-1">Devolutiva</p>
+                  <p className="text-xs text-muted-foreground whitespace-pre-wrap">{viewingCustomer.devolutiva}</p>
+                </div>
+              )}
+
+              {viewingCustomer.observacao && (
+                <div className="text-muted-foreground"><span className="font-medium text-foreground">Observação:</span> {viewingCustomer.observacao}</div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
