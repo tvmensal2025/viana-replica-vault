@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -6,7 +7,8 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const MAX_SIZE = 100 * 1024 * 1024;
+const MAX_SIZE = 100 * 1024 * 1024; // 100 MB
+const BUCKET = "whatsapp-media";
 
 const ALLOWED_TYPES: Record<string, string[]> = {
   image: ["image/jpeg", "image/png", "image/webp", "image/gif"],
@@ -47,29 +49,23 @@ function getExtension(mime: string): string {
   return map[mime] || "bin";
 }
 
-/**
- * Generate HMAC-SHA256 signature for S3-compatible auth (AWS Signature V4 simplified).
- * We use a simpler approach: direct PUT with presigned-style or basic auth.
- * Since MinIO supports basic auth via Access-Key headers, we use that.
- */
-
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const minioUrl = (Deno.env.get("MINIO_SERVER_URL") ?? "").trim().replace(/\/+$/, "");
-    const accessKey = (Deno.env.get("MINIO_ROOT_USER") ?? "").trim();
-    const secretKey = (Deno.env.get("MINIO_ROOT_PASSWORD") ?? "").trim();
-    const BUCKET = Deno.env.get("MINIO_BUCKET") || "media-templates";
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
-    if (!minioUrl || !accessKey || !secretKey) {
+    if (!supabaseUrl || !serviceRoleKey) {
       return new Response(
-        JSON.stringify({ error: "MinIO credentials not configured" }),
+        JSON.stringify({ error: "Supabase credentials not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
@@ -100,112 +96,28 @@ serve(async (req) => {
     const objectKey = `${crypto.randomUUID()}-${Date.now()}.${ext}`;
     const fileBytes = new Uint8Array(await file.arrayBuffer());
 
-    // Use S3 PUT Object via fetch with AWS Signature V4
-    const putUrl = `${minioUrl}/${BUCKET}/${objectKey}`;
-    const now = new Date();
-    const dateStamp = now.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
-    const shortDate = dateStamp.substring(0, 8);
-    const region = "us-east-1";
-    const service = "s3";
+    console.log("Uploading to Supabase Storage:", objectKey, file.type, file.size);
 
-    // AWS Signature V4
-    const encoder = new TextEncoder();
+    const { error: uploadError } = await supabase.storage
+      .from(BUCKET)
+      .upload(objectKey, fileBytes, {
+        contentType: file.type,
+        upsert: false,
+      });
 
-    async function hmacSHA256(key: ArrayBuffer | Uint8Array, msg: string): Promise<ArrayBuffer> {
-      const cryptoKey = await crypto.subtle.importKey(
-        "raw", key, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
-      );
-      return await crypto.subtle.sign("HMAC", cryptoKey, encoder.encode(msg));
-    }
-
-    async function sha256(data: Uint8Array): Promise<string> {
-      const hash = await crypto.subtle.digest("SHA-256", data);
-      return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("");
-    }
-
-    const payloadHash = await sha256(fileBytes);
-
-    const parsedUrl = new URL(putUrl);
-    const hostHeader = parsedUrl.host;
-    const canonicalUri = parsedUrl.pathname;
-
-    const signedHeaders = "content-type;host;x-amz-content-sha256;x-amz-date";
-    const canonicalHeaders =
-      `content-type:${file.type}\n` +
-      `host:${hostHeader}\n` +
-      `x-amz-content-sha256:${payloadHash}\n` +
-      `x-amz-date:${dateStamp}\n`;
-
-    const canonicalRequest = [
-      "PUT",
-      canonicalUri,
-      "", // query string
-      canonicalHeaders,
-      signedHeaders,
-      payloadHash,
-    ].join("\n");
-
-    const credentialScope = `${shortDate}/${region}/${service}/aws4_request`;
-    const canonicalRequestHash = await sha256(encoder.encode(canonicalRequest));
-
-    const stringToSign = [
-      "AWS4-HMAC-SHA256",
-      dateStamp,
-      credentialScope,
-      canonicalRequestHash,
-    ].join("\n");
-
-    // Derive signing key
-    const kDate = await hmacSHA256(encoder.encode("AWS4" + secretKey), shortDate);
-    const kRegion = await hmacSHA256(kDate, region);
-    const kService = await hmacSHA256(kRegion, service);
-    const kSigning = await hmacSHA256(kService, "aws4_request");
-
-    const signatureBytes = await hmacSHA256(kSigning, stringToSign);
-    const signature = Array.from(new Uint8Array(signatureBytes))
-      .map(b => b.toString(16).padStart(2, "0"))
-      .join("");
-
-    const authHeader = `AWS4-HMAC-SHA256 Credential=${accessKey}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
-
-    console.log("Uploading to MinIO:", putUrl);
-
-    const res = await fetch(putUrl, {
-      method: "PUT",
-      headers: {
-        "Content-Type": file.type,
-        "x-amz-content-sha256": payloadHash,
-        "x-amz-date": dateStamp,
-        "Authorization": authHeader,
-      },
-      body: fileBytes,
-    });
-
-    if (!res.ok) {
-      const errBody = await res.text().catch(() => "");
-      console.error("MinIO PUT error:", res.status, errBody);
-
-      if (errBody.includes("NoSuchBucket")) {
-        return new Response(
-          JSON.stringify({ error: `Bucket '${BUCKET}' not found on MinIO` }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      if (res.status === 403) {
-        return new Response(
-          JSON.stringify({ error: "MinIO access denied - check credentials" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
+    if (uploadError) {
+      console.error("Supabase Storage upload error:", uploadError);
       return new Response(
-        JSON.stringify({ error: `MinIO upload failed (${res.status}): ${errBody.substring(0, 200)}` }),
+        JSON.stringify({ error: `Upload failed: ${uploadError.message}` }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const publicUrl = `${minioUrl}/${BUCKET}/${objectKey}`;
+    const { data: publicUrlData } = supabase.storage
+      .from(BUCKET)
+      .getPublicUrl(objectKey);
+
+    const publicUrl = publicUrlData.publicUrl;
 
     return new Response(
       JSON.stringify({ url: publicUrl, key: objectKey, type: file.type, size: file.size }),

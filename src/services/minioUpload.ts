@@ -1,7 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { createLogger } from "@/lib/logger";
 
-const logger = createLogger("MinIO Upload");
+const logger = createLogger("Media Upload");
 
 export interface UploadResult {
   url: string;
@@ -11,7 +11,7 @@ export interface UploadResult {
 }
 
 /**
- * Upload a file to MinIO via the upload-media edge function.
+ * Upload a file to Supabase Storage via the upload-media edge function.
  * Returns the public URL of the uploaded file.
  */
 export async function uploadMedia(
