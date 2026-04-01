@@ -257,7 +257,24 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
           </div>
         )}
 
-        {/* Select all */}
+        {/* Licenciado filter */}
+        {licenciadoOptions.length > 0 && (
+          <div className="mb-3">
+            <Select value={licenciadoFilter} onValueChange={(v) => { setLicenciadoFilter(v); setSelectedIds(new Set()); }} disabled={isSending}>
+              <SelectTrigger className="rounded-xl bg-secondary/50 border-border/50 text-sm">
+                <Users className="w-3.5 h-3.5 text-muted-foreground mr-2" />
+                <SelectValue placeholder="Filtrar por licenciado..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os licenciados</SelectItem>
+                {licenciadoOptions.map(name => (
+                  <SelectItem key={name} value={name}>{name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
         <div className="flex items-center justify-between mb-3 px-1">
           <label className="flex items-center gap-2.5 cursor-pointer">
             <Checkbox checked={allSelected} onCheckedChange={toggleAll} disabled={isSending || filteredCustomers.length === 0} />
