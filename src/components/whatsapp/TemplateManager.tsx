@@ -45,10 +45,48 @@ interface TemplateManagerProps {
   templates: MessageTemplate[];
   isLoading: boolean;
   onCreateTemplate: (name: string, content: string, mediaType?: string, mediaUrl?: string | null, imageUrl?: string | null) => Promise<void>;
+  onUpdateTemplate: (id: string, updates: { image_url?: string | null }) => Promise<void>;
   onDeleteTemplate: (id: string) => Promise<void>;
 }
 
-export function TemplateManager({ templates, isLoading, onCreateTemplate, onDeleteTemplate }: TemplateManagerProps) {
+function AddImageToTemplate({ templateId, onUpdateTemplate }: { templateId: string; onUpdateTemplate: (id: string, updates: { image_url?: string | null }) => Promise<void> }) {
+  const [uploading, setUploading] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const result = await uploadMedia(file);
+      await onUpdateTemplate(templateId, { image_url: result.url });
+      toast.success("Imagem adicionada ao template!");
+    } catch {
+      toast.error("Erro ao enviar imagem");
+    } finally {
+      setUploading(false);
+    }
+  }, [templateId, onUpdateTemplate]);
+
+  return (
+    <div className="mt-2">
+      <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={handleUpload} className="hidden" />
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => inputRef.current?.click()}
+        disabled={uploading}
+        className="h-6 text-[10px] gap-1 border-dashed border-blue-500/30 text-blue-400 hover:bg-blue-500/10"
+      >
+        {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Image className="w-3 h-3" />}
+        {uploading ? "Enviando..." : "Adicionar imagem"}
+      </Button>
+    </div>
+  );
+}
+
+export function TemplateManager({ templates, isLoading, onCreateTemplate, onUpdateTemplate, onDeleteTemplate }: TemplateManagerProps) {
   const [name, setName] = useState("");
   const [content, setContent] = useState("");
   const [mediaType, setMediaType] = useState<TemplateMediaType>("text");
@@ -284,11 +322,13 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onDele
                       )}
                     </div>
                   )}
-                  {t.image_url && (
+                  {t.image_url ? (
                     <div className="mt-2 flex items-center gap-2">
                       <Image className="w-3 h-3 text-blue-400 shrink-0" />
                       <img src={t.image_url} alt="Imagem anexa" className="rounded-md max-h-16 object-contain border border-border/20" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
                     </div>
+                  ) : t.media_type !== "image" && (
+                    <AddImageToTemplate templateId={t.id} onUpdateTemplate={onUpdateTemplate} />
                   )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
