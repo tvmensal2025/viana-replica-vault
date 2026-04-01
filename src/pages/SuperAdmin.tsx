@@ -33,10 +33,31 @@ const SuperAdmin = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) navigate("/auth");
-      else setUserId(session.user.id);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
+      if (!session) {
+        setUserId(null);
+        setAuthLoading(false);
+        navigate("/auth", { replace: true });
+        return;
+      }
+
+      setUserId(session.user.id);
+      setAuthLoading(false);
     });
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) {
+        setUserId(null);
+        setAuthLoading(false);
+        navigate("/auth", { replace: true });
+        return;
+      }
+
+      setUserId(session.user.id);
+      setAuthLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, [navigate]);
 
   useEffect(() => {
