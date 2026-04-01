@@ -86,11 +86,15 @@ export function useTemplates(consultantId: string) {
 
   const deleteTemplate = useCallback(
     async (id: string) => {
-      const { error } = await supabase
+      const { error, data } = await supabase
         .from("message_templates")
         .delete()
-        .eq("id", id);
+        .eq("id", id)
+        .select();
       if (error) throw error;
+      if (!data || data.length === 0) {
+        throw new Error("Não foi possível excluir o template. Verifique se você é o proprietário.");
+      }
       await fetchTemplates();
     },
     [fetchTemplates]
