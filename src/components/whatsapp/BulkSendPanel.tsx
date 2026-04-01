@@ -121,7 +121,7 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
   function handleStatusFilter(val: string) {
     setStatusFilter(val as StatusFilter);
     setDevolutivaFilter("all");
-    setLicenciadoFilter("all");
+    setLicenciadoFilter(new Set());
     setSelectedIds(new Set());
   }
 
