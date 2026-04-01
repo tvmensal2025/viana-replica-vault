@@ -7,9 +7,12 @@ export function useUserRole(userId: string | null) {
 
   useEffect(() => {
     if (!userId) {
+      setIsAdmin(false);
       setLoading(false);
       return;
     }
+
+    setLoading(true);
 
     const checkRole = async () => {
       try {
