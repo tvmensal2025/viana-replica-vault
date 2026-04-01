@@ -242,7 +242,7 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
         </div>
 
         {/* Devolutiva sub-filter */}
-        {(statusFilter === "devolutiva" || statusFilter === "rejected_devolutiva" || statusFilter === "pending_devolutiva") && (
+        {statusFilter === "devolutiva" && (
           <div className="mb-3">
             <Select value={devolutivaFilter} onValueChange={setDevolutivaFilter} disabled={isSending}>
               <SelectTrigger className="rounded-xl bg-secondary/50 border-border/50 text-sm">
