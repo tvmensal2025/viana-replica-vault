@@ -15,7 +15,7 @@ const DEFAULT_CADASTRO_URL = "https://digital.igreenenergy.com.br/?id=126928&sen
 const DEFAULT_WHATSAPP_URL = "https://api.whatsapp.com/send?phone=5515981077416&text=Ol%C3%A1,%20gostaria%20de%20mais%20informa%C3%A7%C3%B5es%20sobre%20o%20desconto%20na%20conta%20de%20luz%20oferecido%20pela%20iGreen%20Energy";
 
 const ConsultantSection = ({
-  name = "Ayla Viana",
+  name = "Seu Consultor",
   cadastroUrl,
   whatsappUrl,
   photoUrl,
