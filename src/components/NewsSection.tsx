@@ -4,13 +4,11 @@ import { Play } from "lucide-react";
 const MINIO_BASE = "https://igreen-minio.b099mi.easypanel.host/igreen";
 
 const videos = [
-  { src: `${MINIO_BASE}/noticia1.mp4`, label: "Reportagem 1" },
-  { src: `${MINIO_BASE}/noticia2.mp4`, label: "Reportagem 2" },
-  { src: `${MINIO_BASE}/noticia3.mp4`, label: "Reportagem 3" },
-  { src: `${MINIO_BASE}/noticia5.mp4`, label: "Reportagem 4" },
-  { src: `${MINIO_BASE}/noticia6.mp4`, label: "Reportagem 5" },
-  { src: `${MINIO_BASE}/noticia7.mp4`, label: "Reportagem 6" },
-  { src: `${MINIO_BASE}/noticia8.mp4`, label: "Reportagem 7" },
+  `${MINIO_BASE}/noticia1.mp4`,
+  `${MINIO_BASE}/noticia2.mp4`,
+  `${MINIO_BASE}/noticia3.mp4`,
+  `${MINIO_BASE}/noticia5.mp4`,
+  `${MINIO_BASE}/noticia6.mp4`,
 ];
 
 function NewsVideoCard({ src, label }: { src: string; label: string }) {
