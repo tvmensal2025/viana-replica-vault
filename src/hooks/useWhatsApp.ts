@@ -255,7 +255,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
           addLog("🔄 Tentando recuperar a sessão do WhatsApp...");
         }
         graceCountRef.current++;
-        pollRef.current = setTimeout(poll, 5000);
+        pollRef.current = setTimeout(poll, 8000);
         return;
       }
 
@@ -279,7 +279,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
         setError(null);
         addLog("📱 QR Code gerado — escaneie com seu celular");
       }
-      pollRef.current = setTimeout(poll, 3000);
+      pollRef.current = setTimeout(poll, 8000);
     };
 
     poll();
