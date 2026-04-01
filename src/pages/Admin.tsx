@@ -21,6 +21,7 @@ import { QRCodeSVG } from "qrcode.react";
 
 const Admin = () => {
   const [loading, setLoading] = useState(true);
+  const [approved, setApproved] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<"dashboard" | "dados" | "links" | "preview" | "whatsapp">("dashboard");
   const [qrModal, setQrModal] = useState<{ url: string; label: string } | null>(null);
