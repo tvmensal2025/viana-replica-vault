@@ -340,6 +340,80 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
           {isSending ? <><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</> : <><Send className="w-4 h-4" /> Enviar para {selectedIds.size} clientes</>}
         </Button>
       </div>
+
+      {/* Customer detail dialog */}
+      <Dialog open={!!viewingCustomer} onOpenChange={(open) => !open && setViewingCustomer(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-lg">{viewingCustomer?.name}</DialogTitle>
+          </DialogHeader>
+          {viewingCustomer && (
+            <div className="space-y-3 text-sm">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Phone className="w-4 h-4 shrink-0" />
+                  <span>{viewingCustomer.phone_whatsapp}</span>
+                </div>
+                {viewingCustomer.email && (
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Mail className="w-4 h-4 shrink-0" />
+                    <span className="truncate">{viewingCustomer.email}</span>
+                  </div>
+                )}
+              </div>
+
+              {viewingCustomer.cpf && (
+                <div className="text-muted-foreground"><span className="font-medium text-foreground">CPF:</span> {viewingCustomer.cpf}</div>
+              )}
+
+              {(viewingCustomer.address_city || viewingCustomer.address_state) && (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <MapPin className="w-4 h-4 shrink-0" />
+                  <span>{[viewingCustomer.address_city, viewingCustomer.address_state].filter(Boolean).join(" - ")}</span>
+                </div>
+              )}
+
+              {viewingCustomer.distribuidora && (
+                <div className="text-muted-foreground"><span className="font-medium text-foreground">Distribuidora:</span> {viewingCustomer.distribuidora}</div>
+              )}
+
+              {viewingCustomer.electricity_bill_value != null && (
+                <div className="text-muted-foreground"><span className="font-medium text-foreground">Conta de Luz:</span> R$ {viewingCustomer.electricity_bill_value.toFixed(2)}</div>
+              )}
+
+              {viewingCustomer.media_consumo != null && (
+                <div className="text-muted-foreground"><span className="font-medium text-foreground">Consumo Médio:</span> {viewingCustomer.media_consumo} kWh</div>
+              )}
+
+              {viewingCustomer.registered_by_name && (
+                <div className="text-muted-foreground"><span className="font-medium text-foreground">Licenciada:</span> {viewingCustomer.registered_by_name}</div>
+              )}
+
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-foreground">Status:</span>
+                {viewingCustomer.status === "approved" && <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/15 text-green-400 font-medium">Aprovado</span>}
+                {viewingCustomer.status === "rejected" && <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/15 text-red-400 font-medium">Reprovado</span>}
+                {viewingCustomer.status === "pending" && <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/15 text-yellow-400 font-medium">Pendente</span>}
+              </div>
+
+              {viewingCustomer.andamento_igreen && (
+                <div className="text-muted-foreground"><span className="font-medium text-foreground">Andamento:</span> {viewingCustomer.andamento_igreen}</div>
+              )}
+
+              {viewingCustomer.devolutiva && (
+                <div className="rounded-lg bg-orange-500/10 border border-orange-500/20 p-3">
+                  <p className="text-xs font-medium text-orange-400 mb-1">Devolutiva</p>
+                  <p className="text-xs text-muted-foreground whitespace-pre-wrap">{viewingCustomer.devolutiva}</p>
+                </div>
+              )}
+
+              {viewingCustomer.observacao && (
+                <div className="text-muted-foreground"><span className="font-medium text-foreground">Observação:</span> {viewingCustomer.observacao}</div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
