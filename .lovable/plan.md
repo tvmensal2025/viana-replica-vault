@@ -1,18 +1,49 @@
 
 
-## Plano: Adicionar policies de admin para templates
+## Problema Identificado
 
-O usuario `rafael.ids@icloud.com` ja possui a role `admin`. Porem, as policies de UPDATE, DELETE e INSERT na tabela `message_templates` so permitem ao dono (`consultant_id = auth.uid()`). O admin precisa de policies adicionais.
+O `useUserRole` hook tem um bug de race condition:
 
-### Migracao SQL
+1. Inicialmente `userId` é `null` → `loading` é setado para `false`
+2. Quando `userId` chega, o effect re-executa, mas `loading` continua `false` enquanto a query RPC ainda está em andamento
+3. O `SuperAdmin.tsx` vê `roleLoading=false` + `isAdmin=false` e redireciona imediatamente com "Acesso negado"
 
-Adicionar 3 policies na tabela `message_templates`:
+A função `has_role` no banco funciona corretamente — retorna `true` para rafael.ids@icloud.com. O problema é puramente de timing no frontend.
 
-1. **Admins update all templates** — permite admin editar qualquer template
-2. **Admins delete all templates** — permite admin deletar qualquer template  
-3. **Admins insert templates** — permite admin criar templates
+## Plano
 
-Todas usam `public.has_role(auth.uid(), 'admin')`.
+### 1. Corrigir o hook `useUserRole`
 
-Nenhuma alteracao de codigo necessaria.
+Resetar `loading` para `true` quando `userId` muda, antes de iniciar a query:
+
+```typescript
+useEffect(() => {
+  if (!userId) {
+    setIsAdmin(false);
+    setLoading(false);
+    return;
+  }
+  
+  setLoading(true); // ← fix: reset loading quando userId muda
+  
+  const checkRole = async () => { ... };
+  checkRole();
+}, [userId]);
+```
+
+### 2. Adicionar as 3 policies de admin no `message_templates`
+
+Migração SQL para permitir que admins gerenciem todos os templates:
+- **Admins update all templates**
+- **Admins delete all templates** 
+- **Admins insert templates**
+
+### 3. Sobre a página de controle de novos cadastros
+
+A página `/super-admin` já existe com funcionalidade para:
+- Ver todos os consultores cadastrados
+- Aprovar/revogar acesso de cada consultor
+- Ver estatísticas (total, aprovados, pendentes)
+
+Com o fix do hook, o Rafael terá acesso a essa página normalmente.
 
