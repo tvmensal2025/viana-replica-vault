@@ -61,14 +61,20 @@ const SuperAdmin = () => {
   }, [navigate]);
 
   useEffect(() => {
-    if (roleLoading || !userId) return;
+    if (authLoading || roleLoading || !userId) return;
+
     if (!isAdmin) {
-      toast({ title: "Acesso negado", description: "Você não tem permissão de administrador.", variant: "destructive" });
-      navigate("/admin");
+      if (!accessDeniedToastShownRef.current) {
+        accessDeniedToastShownRef.current = true;
+        toast({ title: "Acesso negado", description: "Você não tem permissão de administrador.", variant: "destructive" });
+      }
+      navigate("/admin", { replace: true });
       return;
     }
+
+    accessDeniedToastShownRef.current = false;
     loadConsultants();
-  }, [isAdmin, roleLoading, userId]);
+  }, [authLoading, isAdmin, roleLoading, userId, navigate, toast]);
 
   const loadConsultants = async () => {
     setLoadingData(true);
