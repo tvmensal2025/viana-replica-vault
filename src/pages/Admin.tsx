@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useQueryClient } from "@tanstack/react-query";
 import { WhatsAppTab } from "@/components/whatsapp/WhatsAppTab";
+import { WhatsAppErrorBoundary } from "@/components/whatsapp/WhatsAppErrorBoundary";
 import { QRCodeSVG } from "qrcode.react";
 
 const Admin = () => {
