@@ -23,7 +23,15 @@ interface BulkSendPanelProps {
   instanceName: string; customers: Customer[]; templates: MessageTemplate[];
   applyTemplate: (t: MessageTemplate, c: { name: string; electricity_bill_value?: number }) => string;
 }
-const SEND_INTERVAL_MS = 20000;
+const SEND_INTERVAL_MIN_S = 18;
+const SEND_INTERVAL_MAX_S = 35;
+const PROGRESSIVE_EXTRA_S = 5; // extra seconds every 10 messages
+
+function getRandomInterval(messageIndex: number): number {
+  const base = SEND_INTERVAL_MIN_S + Math.random() * (SEND_INTERVAL_MAX_S - SEND_INTERVAL_MIN_S);
+  const progressive = Math.floor(messageIndex / 10) * PROGRESSIVE_EXTRA_S;
+  return Math.round(base + progressive);
+}
 
 type StatusFilter = "all" | "approved" | "rejected" | "pending" | "approved_devolutiva";
 
