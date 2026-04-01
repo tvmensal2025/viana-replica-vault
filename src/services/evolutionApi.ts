@@ -10,7 +10,12 @@ function normalizeQrBase64(value: unknown): string | null {
   return value;
 }
 
-async function request<T>(path: string, method: string, body?: unknown): Promise<T> {
+async function request<T>(
+  path: string,
+  method: string,
+  body?: unknown,
+  options?: { gracefulTimeout?: boolean }
+): Promise<T> {
   try {
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token || "";
@@ -54,9 +59,15 @@ async function request<T>(path: string, method: string, body?: unknown): Promise
     // Detect graceful timeout/error responses from proxy (200 with error payload)
     if (json && typeof json === "object" && !Array.isArray(json)) {
       if ((json as Record<string, unknown>).timeout === true) {
+        if (options?.gracefulTimeout) {
+          return json as T;
+        }
         throw new Error("Timeout ao processar requisição");
       }
       if ((json as Record<string, unknown>).unavailable === true) {
+        if (options?.gracefulTimeout) {
+          return json as T;
+        }
         throw new Error((json as Record<string, unknown>).message as string || "Serviço temporariamente indisponível");
       }
     }
@@ -199,29 +210,35 @@ export async function findContacts(instanceName: string): Promise<EvolutionConta
 
 // ─── Message Sending ───
 
-export async function sendTextMessage(instanceName: string, phone: string, text: string) {
-  return request<{ key: { id: string } }>(`message/sendText/${instanceName}`, "POST", { number: phone, text });
+export async function sendTextMessage(instanceName: string, phone: string, text: string, gracefulTimeout = false) {
+  return request<{ key: { id: string } }>(
+    `message/sendText/${instanceName}`,
+    "POST",
+    { number: phone, text },
+    { gracefulTimeout }
+  );
 }
 
 export async function sendMedia(
   instanceName: string, phone: string, mediaUrl: string, caption: string,
-  mediatype: "image" | "video" | "document"
+  mediatype: "image" | "video" | "document",
+  gracefulTimeout = false
 ) {
   return request<{ key: { id: string } }>(`message/sendMedia/${instanceName}`, "POST", {
     number: phone, mediatype, media: mediaUrl, caption,
-  });
+  }, { gracefulTimeout });
 }
 
-export async function sendAudio(instanceName: string, phone: string, audioUrl: string) {
+export async function sendAudio(instanceName: string, phone: string, audioUrl: string, gracefulTimeout = false) {
   return request<{ key: { id: string } }>(`message/sendWhatsAppAudio/${instanceName}`, "POST", {
     number: phone, audio: audioUrl,
-  });
+  }, { gracefulTimeout });
 }
 
-export async function sendDocument(instanceName: string, phone: string, docUrl: string, fileName: string) {
+export async function sendDocument(instanceName: string, phone: string, docUrl: string, fileName: string, gracefulTimeout = false) {
   return request<{ key: { id: string } }>(`message/sendMedia/${instanceName}`, "POST", {
     number: phone, mediatype: "document", media: docUrl, fileName,
-  });
+  }, { gracefulTimeout });
 }
 
 // ─── Presence / Read ───

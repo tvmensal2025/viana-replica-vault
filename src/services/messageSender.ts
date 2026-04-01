@@ -38,6 +38,15 @@ function isTimeoutResponse(result: unknown): boolean {
   );
 }
 
+function isUnavailableResponse(result: unknown): boolean {
+  return (
+    typeof result === "object" &&
+    result !== null &&
+    ((result as Record<string, unknown>).unavailable === true ||
+      (result as Record<string, unknown>).connectionClosed === true)
+  );
+}
+
 /**
  * Send a single message through the correct Evolution API endpoint.
  * Returns a typed SendResult instead of throwing on timeout.
@@ -51,12 +60,12 @@ export async function sendWhatsAppMessage(payload: SendPayload): Promise<SendRes
     switch (mediaCategory) {
       case "text":
         if (!text?.trim()) return { status: "failed", error: "Texto vazio" };
-        result = await sendTextMessage(instanceName, phone, text);
+        result = await sendTextMessage(instanceName, phone, text, true);
         break;
 
       case "audio":
         if (!mediaUrl) return { status: "failed", error: "URL de áudio ausente" };
-        result = await sendAudio(instanceName, phone, mediaUrl);
+        result = await sendAudio(instanceName, phone, mediaUrl, true);
         break;
 
       case "document":
@@ -65,7 +74,8 @@ export async function sendWhatsAppMessage(payload: SendPayload): Promise<SendRes
           instanceName,
           phone,
           mediaUrl,
-          fileName || "documento"
+          fileName || "documento",
+          true
         );
         break;
 
@@ -77,7 +87,8 @@ export async function sendWhatsAppMessage(payload: SendPayload): Promise<SendRes
           phone,
           mediaUrl,
           text || "",
-          mediaCategory
+          mediaCategory,
+          true
         );
         break;
 
@@ -88,6 +99,11 @@ export async function sendWhatsAppMessage(payload: SendPayload): Promise<SendRes
     if (isTimeoutResponse(result)) {
       logger.warn("Timeout ao enviar", { phone, mediaCategory });
       return { status: "timeout", error: "Timeout ao enviar mensagem" };
+    }
+
+    if (isUnavailableResponse(result)) {
+      logger.warn("Serviço indisponível ao enviar", { phone, mediaCategory });
+      return { status: "timeout", error: "Serviço temporariamente indisponível" };
     }
 
     return { status: "sent" };
