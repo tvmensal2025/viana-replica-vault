@@ -187,9 +187,10 @@ Deno.serve(async (req) => {
       movedCount++;
 
       // Send auto-message if enabled (supports text, audio, image, video)
+      const hasContent = stageData.auto_message_text || stageData.auto_message_media_url || stageData.auto_message_image_url;
       if (
         stageData.auto_message_enabled &&
-        stageData.auto_message_text &&
+        hasContent &&
         deal.remote_jid &&
         evolutionUrl &&
         evolutionKey
