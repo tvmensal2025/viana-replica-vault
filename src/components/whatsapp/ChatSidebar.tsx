@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Search, MessageCirclePlus } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Search, MessageCirclePlus, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -26,6 +26,26 @@ function formatTime(ts: number): string {
 
 export function ChatSidebar({ chats, isLoading, selectedJid, onSelectChat }: ChatSidebarProps) {
   const [search, setSearch] = useState("");
+  const [showNewChat, setShowNewChat] = useState(false);
+  const [newPhone, setNewPhone] = useState("");
+  const newPhoneRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (showNewChat) {
+      setTimeout(() => newPhoneRef.current?.focus(), 100);
+    }
+  }, [showNewChat]);
+
+  const handleStartNewChat = () => {
+    const clean = newPhone.replace(/\D/g, "");
+    if (clean.length < 10) return;
+    // Add country code if missing
+    const phone = clean.startsWith("55") ? clean : `55${clean}`;
+    const jid = `${phone}@s.whatsapp.net`;
+    onSelectChat(jid);
+    setNewPhone("");
+    setShowNewChat(false);
+  };
 
   const filtered = chats.filter(
     (c) =>
@@ -38,8 +58,40 @@ export function ChatSidebar({ chats, isLoading, selectedJid, onSelectChat }: Cha
       {/* Header */}
       <div className="p-3 border-b border-border flex items-center justify-between">
         <h3 className="font-semibold text-foreground text-sm">Conversas</h3>
-        <MessageCirclePlus className="h-4 w-4 text-muted-foreground cursor-pointer hover:text-primary transition-colors" />
+        <MessageCirclePlus
+          className="h-4 w-4 text-muted-foreground cursor-pointer hover:text-primary transition-colors"
+          onClick={() => setShowNewChat((v) => !v)}
+        />
       </div>
+
+      {/* New chat input */}
+      {showNewChat && (
+        <div className="p-2 border-b border-border bg-secondary/30">
+          <p className="text-[10px] text-muted-foreground mb-1.5">Nova conversa — digite o número:</p>
+          <div className="flex gap-1.5">
+            <Input
+              ref={newPhoneRef}
+              value={newPhone}
+              onChange={(e) => setNewPhone(e.target.value)}
+              placeholder="(11) 99999-9999"
+              className="h-8 text-xs flex-1 bg-background border-border/50"
+              onKeyDown={(e) => e.key === "Enter" && handleStartNewChat()}
+            />
+            <button
+              onClick={handleStartNewChat}
+              className="h-8 px-3 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors"
+            >
+              Iniciar
+            </button>
+            <button
+              onClick={() => { setShowNewChat(false); setNewPhone(""); }}
+              className="h-8 w-8 flex items-center justify-center rounded-md hover:bg-secondary transition-colors"
+            >
+              <X className="h-3.5 w-3.5 text-muted-foreground" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Search */}
       <div className="p-2">
