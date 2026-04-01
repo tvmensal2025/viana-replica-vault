@@ -106,6 +106,7 @@ export function useChats(instanceName: string | null) {
   const profilePicCacheRef = useRef<Map<string, PicCacheEntry>>(new Map());
   const fetchingChatsRef = useRef(false);
   const fetchingPicsRef = useRef(false);
+  const globalPicPauseUntilRef = useRef(0);
 
   const fetchContacts = useCallback(async () => {
     if (!instanceName) return;
