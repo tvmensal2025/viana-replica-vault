@@ -23,7 +23,7 @@ const DEFAULT_WHATSAPP = "https://api.whatsapp.com/send?phone=5515981077416&text
 
 const LicenciadaPreview = () => (
   <>
-    <SEOHead title="Licenciada Ayla Viana – iGreen Energy" description="Descubra como se tornar um Licenciado iGreen Energy" />
+    <SEOHead title="Licenciado iGreen Energy" description="Descubra como se tornar um Licenciado iGreen Energy" />
     <div className="min-h-screen">
       <LicHeroSection />
       <LicUrgencyBanner />

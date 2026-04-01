@@ -19,7 +19,7 @@ const ConsultantSection = ({
   cadastroUrl,
   whatsappUrl,
   photoUrl,
-  igreenId = "126928",
+  igreenId = "",
   consultantId,
 }: ConsultantSectionProps) => {
   const CADASTRO = cadastroUrl || DEFAULT_CADASTRO_URL;

@@ -17,7 +17,7 @@ const LicConsultantSection = ({
 }: LicConsultantSectionProps) => {
   const WHATSAPP = whatsappUrl || DEFAULT_WHATSAPP;
   const photo = photoUrl || consultantDefault;
-  const displayId = igreenId || "126928";
+  const displayId = igreenId || "";
 
   return (
     <section className="relative overflow-hidden">
