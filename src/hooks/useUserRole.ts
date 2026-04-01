@@ -4,10 +4,14 @@ import { supabase } from "@/integrations/supabase/client";
 export function useUserRole(userId: string | null) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [checkedUserId, setCheckedUserId] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+
     if (!userId) {
       setIsAdmin(false);
+      setCheckedUserId(null);
       setLoading(false);
       return;
     }
@@ -20,17 +24,32 @@ export function useUserRole(userId: string | null) {
           _user_id: userId,
           _role: "admin",
         });
+
         if (error) throw error;
-        setIsAdmin(data === true);
+        if (!cancelled) {
+          setIsAdmin(data === true);
+          setCheckedUserId(userId);
+        }
       } catch {
-        setIsAdmin(false);
+        if (!cancelled) {
+          setIsAdmin(false);
+          setCheckedUserId(userId);
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
     checkRole();
+
+    return () => {
+      cancelled = true;
+    };
   }, [userId]);
 
-  return { isAdmin, loading };
+  const isCheckingCurrentUser = Boolean(userId) && (loading || checkedUserId !== userId);
+
+  return { isAdmin, loading: isCheckingCurrentUser };
 }
