@@ -36,8 +36,18 @@ function formatPhoneNumber(raw: string): string {
   return raw;
 }
 
+function isSystemChatJid(jid: string): boolean {
+  return jid === "status@broadcast" || jid === "0@s.whatsapp.net" || jid.endsWith("@broadcast");
+}
+
+function canFetchProfilePicture(jid: string): boolean {
+  return jid.endsWith("@s.whatsapp.net") || jid.endsWith("@lid");
+}
+
 function mapChat(chat: EvolutionChat, contactsMap: Map<string, EvolutionContact>): ChatItem | null {
   const jid = chat.remoteJid || chat.id;
+  if (!jid || isSystemChatJid(jid)) return null;
+
   const contact = contactsMap.get(jid);
 
   const altJid = chat.lastMessage?.key?.remoteJidAlt || chat.lastMessage?.key?.participantAlt;
@@ -158,6 +168,8 @@ export function useChats(instanceName: string | null) {
       const now = Date.now();
       const missingPics = mapped
         .filter((c) => {
+          const targetJid = c.sendTargetJid || c.remoteJid;
+          if (!canFetchProfilePicture(targetJid)) return false;
           if (c.profilePicUrl) return false;
           const cached = cache.get(c.remoteJid);
           if (cached && now - cached.fetchedAt < CACHE_TTL) return false;
