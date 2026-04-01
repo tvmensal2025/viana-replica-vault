@@ -59,8 +59,15 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [devolutivaFilter, setDevolutivaFilter] = useState<string>("all");
+  const [licenciadoFilter, setLicenciadoFilter] = useState<string>("all");
   const [viewingCustomer, setViewingCustomer] = useState<Customer | null>(null);
   const { toast } = useToast();
+
+  const licenciadoOptions = useMemo(() => {
+    const names = new Set<string>();
+    customers.forEach(c => { if (c.registered_by_name) names.add(c.registered_by_name); });
+    return Array.from(names).sort();
+  }, [customers]);
 
   const filteredCustomers = useMemo(() => {
     let list = customers;
