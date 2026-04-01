@@ -264,10 +264,10 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
               {customers.length === 0 ? "Nenhum cliente" : "Nenhum cliente com este filtro"}
             </p>
           ) : filteredCustomers.map((c) => (
-            <label key={c.id} className={`w-full flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-all hover:bg-secondary/40 ${selectedIds.has(c.id) ? "bg-orange-500/5" : ""} ${isSending ? "pointer-events-none opacity-50" : ""}`}>
+            <div key={c.id} className={`w-full flex items-center gap-3 px-4 py-2.5 transition-all hover:bg-secondary/40 ${selectedIds.has(c.id) ? "bg-orange-500/5" : ""} ${isSending ? "pointer-events-none opacity-50" : ""}`}>
               <Checkbox checked={selectedIds.has(c.id)} onCheckedChange={() => toggleCustomer(c.id)} disabled={isSending} />
-              <div className="min-w-0 flex-1">
-                <p className="text-sm text-foreground truncate">{c.name}</p>
+              <div className="min-w-0 flex-1 cursor-pointer" onClick={() => setViewingCustomer(c)}>
+                <p className="text-sm text-foreground truncate hover:underline">{c.name}</p>
                 <p className="text-xs text-muted-foreground/70">{c.phone_whatsapp}</p>
               </div>
               <div className="flex items-center gap-1.5">
@@ -275,8 +275,11 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
                 {c.status === "rejected" && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/15 text-red-400 font-medium">Reprovado</span>}
                 {c.status === "pending" && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-yellow-500/15 text-yellow-400 font-medium">Pendente</span>}
                 {c.devolutiva && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-orange-500/15 text-orange-400 font-medium">Dev.</span>}
+                <button onClick={() => setViewingCustomer(c)} className="p-1 rounded-lg hover:bg-secondary/60 text-muted-foreground hover:text-foreground transition-colors">
+                  <Eye className="w-3.5 h-3.5" />
+                </button>
               </div>
-            </label>
+            </div>
           ))}
         </div>
 
