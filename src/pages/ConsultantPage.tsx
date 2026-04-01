@@ -8,6 +8,7 @@ import SolarPlantsSection from "@/components/SolarPlantsSection";
 import StatesSection from "@/components/StatesSection";
 import ReferralSection from "@/components/ReferralSection";
 import TestimonialsSection from "@/components/TestimonialsSection";
+import NewsSection from "@/components/NewsSection";
 import ClubSection from "@/components/ClubSection";
 import AdvantagesSection from "@/components/AdvantagesSection";
 import ConsultantSection from "@/components/ConsultantSection";
@@ -52,6 +53,7 @@ const ConsultantPage = () => {
         <StatesSection />
         <ReferralSection />
         <TestimonialsSection />
+        <NewsSection />
         <ClubSection />
         <AdvantagesSection />
         <ConsultantSection
