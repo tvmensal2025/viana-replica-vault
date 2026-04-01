@@ -254,6 +254,63 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onUpda
     }
   }
 
+  function startEditing(t: MessageTemplate) {
+    setEditingId(t.id);
+    setEditName(t.name);
+    setEditContent(t.content || "");
+    setEditMediaUrl(t.media_url || "");
+    setEditImageUrl(t.image_url || "");
+    setEditMediaType((t.media_type as TemplateMediaType) || "text");
+  }
+
+  function cancelEditing() {
+    setEditingId(null);
+    setEditName("");
+    setEditContent("");
+    setEditMediaUrl("");
+    setEditImageUrl("");
+    setEditMediaType("text");
+  }
+
+  async function handleEditFileUpload(e: React.ChangeEvent<HTMLInputElement>, target: "media" | "image") {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsEditUploading(true);
+    setEditUploadProgress(0);
+    try {
+      const result = await uploadMedia(file, (pct) => setEditUploadProgress(pct));
+      if (target === "media") setEditMediaUrl(result.url);
+      else setEditImageUrl(result.url);
+      toast.success(`Arquivo enviado: ${formatFileSize(result.size)}`);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Erro no upload");
+    } finally {
+      setIsEditUploading(false);
+      if (editFileRef.current) editFileRef.current.value = "";
+      if (editImageRef.current) editImageRef.current.value = "";
+    }
+  }
+
+  async function handleSaveEdit() {
+    if (!editingId || !editName.trim()) return;
+    setIsEditSaving(true);
+    try {
+      await onUpdateTemplate(editingId, {
+        name: editName.trim(),
+        content: editContent.trim(),
+        media_type: editMediaType,
+        media_url: editMediaType !== "text" ? editMediaUrl.trim() || null : null,
+        image_url: editImageUrl.trim() || null,
+      });
+      cancelEditing();
+      toast.success("Template atualizado!");
+    } catch {
+      toast.error("Erro ao atualizar template");
+    } finally {
+      setIsEditSaving(false);
+    }
+  }
+
   async function handleCreate() {
     if (!name.trim()) return;
     if (mediaType === "text" && !content.trim()) return;
