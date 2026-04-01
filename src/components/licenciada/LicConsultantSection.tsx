@@ -13,7 +13,7 @@ const LicConsultantSection = ({
   name = "Seu Consultor",
   whatsappUrl,
   photoUrl,
-  igreenId = "126928",
+  igreenId = "",
 }: LicConsultantSectionProps) => {
   const WHATSAPP = whatsappUrl || DEFAULT_WHATSAPP;
   const photo = photoUrl || consultantDefault;
