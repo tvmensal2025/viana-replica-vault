@@ -21,6 +21,7 @@ import { QRCodeSVG } from "qrcode.react";
 
 const Admin = () => {
   const [loading, setLoading] = useState(true);
+  const [approved, setApproved] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<"dashboard" | "dados" | "links" | "preview" | "whatsapp">("dashboard");
   const [qrModal, setQrModal] = useState<{ url: string; label: string } | null>(null);
@@ -118,7 +119,8 @@ const Admin = () => {
   const loadConsultant = async (uid: string) => {
     const { data } = await supabase.from("consultants").select("*").eq("id", uid).maybeSingle();
     if (data) {
-      const c = data as Consultant;
+      const c = data as any;
+      setApproved(c.approved ?? false);
       const id = c.igreen_id || "";
       setForm({
         name: c.name,
@@ -129,8 +131,8 @@ const Admin = () => {
         licenciada_cadastro_url: id ? `https://expansao.igreenenergy.com.br/?id=${id}&checkout=true` : c.licenciada_cadastro_url || "",
         facebook_pixel_id: c.facebook_pixel_id || "",
         google_analytics_id: c.google_analytics_id || "",
-        igreen_portal_email: (c as any).igreen_portal_email || "",
-        igreen_portal_password: (c as any).igreen_portal_password || "",
+        igreen_portal_email: c.igreen_portal_email || "",
+        igreen_portal_password: c.igreen_portal_password || "",
       });
       if (c.photo_url) setPhotoPreview(c.photo_url);
     }
@@ -243,6 +245,23 @@ const Admin = () => {
       <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-background">
         <img src="/images/logo-colorida-igreen.png" alt="iGreen" className="w-32 animate-pulse" />
         <p className="text-muted-foreground">Carregando painel...</p>
+      </div>
+    );
+  }
+
+  if (approved === false) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-background px-4">
+        <img src="/images/logo-colorida-igreen.png" alt="iGreen" className="w-32" />
+        <div className="text-center space-y-2">
+          <h1 className="text-xl font-bold font-heading text-foreground">Aguardando Aprovação</h1>
+          <p className="text-muted-foreground text-sm max-w-md">
+            Sua conta está sendo analisada pelo administrador. Você receberá acesso assim que for aprovado.
+          </p>
+        </div>
+        <Button variant="ghost" size="sm" onClick={handleLogout} className="text-muted-foreground gap-2">
+          <LogOut className="w-4 h-4" /> Sair
+        </Button>
       </div>
     );
   }

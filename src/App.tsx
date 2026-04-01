@@ -8,6 +8,7 @@ import LicenciadaPage from "./pages/LicenciadaPage";
 import LicenciadaPreview from "./pages/LicenciadaPreview";
 import Auth from "./pages/Auth";
 import Admin from "./pages/Admin";
+import SuperAdmin from "./pages/SuperAdmin";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -21,6 +22,7 @@ const App = () => (
         <Routes>
           <Route path="/auth" element={<Auth />} />
           <Route path="/admin" element={<Admin />} />
+          <Route path="/super-admin" element={<SuperAdmin />} />
           <Route path="/licenciada/preview" element={<LicenciadaPreview />} />
           <Route path="/licenciada/:licenca" element={<LicenciadaPage />} />
           <Route path="/:licenca" element={<ConsultantPage />} />
