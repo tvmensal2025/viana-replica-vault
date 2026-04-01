@@ -1,0 +1,85 @@
+# Implementation Plan
+
+- [ ] 1. Write bug condition exploration test
+  - **Property 1: Bug Condition** - Direct VPS Calls Instead of Supabase Proxy
+  - **CRITICAL**: This test MUST FAIL on unfixed code - failure confirms the bug exists
+  - **DO NOT attempt to fix the test or the code when it fails**
+  - **NOTE**: This test encodes the expected behavior - it will validate the fix when it passes after implementation
+  - **GOAL**: Surface counterexamples that demonstrate `request()` calls the VPS directly instead of the Supabase proxy
+  - **Scoped PBT Approach**: Scope the property to concrete failing cases: any call to an exported function (e.g., `sendTextMessage`, `createInstance`, `getConnectionState`) should route through the proxy
+  - Write a property-based test in `src/services/evolutionApi.test.ts` that:
+    - Mocks `fetch` and `supabase.auth.getSession()`
+    - Calls exported functions (e.g., `sendTextMessage("inst", "5511999999999", "Olá")`, `createInstance("test-inst")`, `getConnectionState("inst")`)
+    - Asserts that `fetch` was called with URL containing `/functions/v1/evolution-proxy`
+    - Asserts that `fetch` was called with `Authorization: Bearer {token}` header
+    - Asserts that `fetch` was called with `apikey` header matching Supabase anon key
+    - Asserts that `fetch` body is in proxy format `{ path, method, body }` (from Bug Condition in design: `isBugCondition` — request sends to `VITE_EVOLUTION_API_URL` instead of proxy)
+  - Run test on UNFIXED code
+  - **EXPECTED OUTCOME**: Test FAILS (fetch URL will contain `VITE_EVOLUTION_API_URL` instead of proxy URL, no `Authorization` header, body not in proxy format — this proves the bug exists)
+  - Document counterexamples found (e.g., "sendTextMessage calls `https://igreen-evolution-api.../message/sendText/inst` with `apikey: 429683...` instead of proxy URL with Bearer token")
+  - Mark task complete when test is written, run, and failure is documented
+  - _Requirements: 1.1, 1.2_
+
+- [ ] 2. Write preservation property tests (BEFORE implementing fix)
+  - **Property 2: Preservation** - Exported Function Signatures and Return Types
+  - **IMPORTANT**: Follow observation-first methodology
+  - Observe behavior on UNFIXED code for non-buggy aspects (function signatures, body payloads, return type structures):
+    - Observe: `createInstance("inst")` sends body `{ instanceName: "inst", qrcode: true, integration: "WHATSAPP-BAILEYS" }` to path `instance/create` with method `POST`, returns `{ instance, qrcode }` with normalized base64
+    - Observe: `connectInstance("inst")` calls path `instance/connect/inst` with method `GET`, returns `{ base64, pairingCode }` normalized
+    - Observe: `sendTextMessage("inst", "phone", "text")` sends body `{ number: "phone", text: "text" }` to path `message/sendText/inst` with method `POST`
+    - Observe: `sendMedia("inst", "phone", "url", "cap", "image")` sends body `{ number: "phone", mediatype: "image", media: "url", caption: "cap" }` to path `message/sendMedia/inst`
+    - Observe: `sendAudio("inst", "phone", "url")` sends body `{ number: "phone", audio: "url" }` to path `message/sendWhatsAppAudio/inst`
+    - Observe: `findChats("inst")` sends body `{}` to path `chat/findChats/inst` with method `POST`
+    - Observe: `normalizeQrBase64` returns `null` for empty/falsy strings, original string for valid values
+  - Write property-based tests that verify:
+    - For all exported functions, the path, method, and body payload sent to `request()` remain identical regardless of transport (these are the preservation properties from design section 3.1–3.9)
+    - `normalizeQrBase64` behavior is preserved (returns null for empty strings, original for valid)
+    - `createInstance` normalizes qrcode base64 in response
+    - `connectInstance` normalizes base64 and extracts pairingCode from response
+    - Error handling: 401 → "Erro de autenticação com a API do WhatsApp", TypeError → "Erro de conexão. Verifique sua internet.", other HTTP errors → statusText
+  - Verify tests PASS on UNFIXED code
+  - **EXPECTED OUTCOME**: Tests PASS (confirms baseline behavior to preserve)
+  - Mark task complete when tests are written, run, and passing on unfixed code
+  - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9_
+
+- [ ] 3. Fix for direct VPS calls — rewrite `request()` to use Supabase proxy
+
+  - [ ] 3.1 Implement the fix in `src/services/evolutionApi.ts`
+    - Import `supabase` from `@/integrations/supabase/client`
+    - Replace `BASE_URL` and `API_KEY` constants with Supabase proxy constants:
+      - `SUPABASE_URL = "https://zlzasfhcxcznaprrragl.supabase.co"`
+      - `SUPABASE_PUBLISHABLE_KEY` = anon key from client.ts
+      - `PROXY_URL = ${SUPABASE_URL}/functions/v1/evolution-proxy`
+    - Remove the `headers()` function (no longer needed)
+    - Rewrite `request()` to:
+      - Get `access_token` via `supabase.auth.getSession()`
+      - `fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer {token}", apikey: SUPABASE_PUBLISHABLE_KEY }, body: JSON.stringify({ path, method, body }) })`
+      - Handle errors: 401 → throw "Erro de autenticação com a API do WhatsApp", TypeError → throw "Erro de conexão. Verifique sua internet.", other → throw `res.statusText`
+    - Keep `normalizeQrBase64` unchanged
+    - Keep all exported functions unchanged (they continue calling `request()` with the same arguments)
+    - _Bug_Condition: isBugCondition(input) — request() sends fetch to VITE_EVOLUTION_API_URL/{path} with apikey header instead of Supabase proxy_
+    - _Expected_Behavior: request() sends POST to {SUPABASE_URL}/functions/v1/evolution-proxy with Authorization: Bearer {token}, apikey: {anon_key}, body: { path, method, body }_
+    - _Preservation: All exported function signatures, payloads, return types, and normalizeQrBase64 behavior remain identical_
+    - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9_
+
+  - [ ] 3.2 Verify bug condition exploration test now passes
+    - **Property 1: Expected Behavior** - Proxy Routing Verified
+    - **IMPORTANT**: Re-run the SAME test from task 1 - do NOT write a new test
+    - The test from task 1 encodes the expected behavior (fetch to proxy URL with auth headers and proxy body format)
+    - When this test passes, it confirms the expected behavior is satisfied
+    - Run bug condition exploration test from step 1
+    - **EXPECTED OUTCOME**: Test PASSES (confirms bug is fixed — all calls now route through Supabase proxy)
+    - _Requirements: 2.1, 2.2_
+
+  - [ ] 3.3 Verify preservation tests still pass
+    - **Property 2: Preservation** - Exported Function Signatures and Return Types
+    - **IMPORTANT**: Re-run the SAME tests from task 2 - do NOT write new tests
+    - Run preservation property tests from step 2
+    - **EXPECTED OUTCOME**: Tests PASS (confirms no regressions — all function signatures, payloads, return types preserved)
+    - Confirm all tests still pass after fix (no regressions)
+
+- [ ] 4. Checkpoint - Ensure all tests pass
+  - Run the full test suite (`vitest --run`) to ensure all tests pass
+  - Verify existing tests in `src/services/evolutionApi.test.ts` pass (these already validate proxy-based behavior)
+  - Ensure no regressions in other test files
+  - Ask the user if questions arise

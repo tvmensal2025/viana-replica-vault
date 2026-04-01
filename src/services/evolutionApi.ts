@@ -1,11 +1,9 @@
-// Direct Evolution API calls — no proxy, no extra latency
+// Evolution API calls routed through Supabase Edge Function proxy
+import { supabase } from "@/integrations/supabase/client";
 
-const BASE_URL = (import.meta.env.VITE_EVOLUTION_API_URL || "").replace(/\/+$/, "");
-const API_KEY = import.meta.env.VITE_EVOLUTION_API_KEY || "";
-
-function headers(): Record<string, string> {
-  return { "Content-Type": "application/json", apikey: API_KEY };
-}
+const SUPABASE_URL = "https://zlzasfhcxcznaprrragl.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpsemFzZmhjeGN6bmFwcnJyYWdsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyNzQ1NzAsImV4cCI6MjA4Njg1MDU3MH0.OJzRdi_Z_1TFZjQXmK8rJofBeHVZc27VSo2vMMw9Spo";
+const PROXY_URL = `${SUPABASE_URL}/functions/v1/evolution-proxy`;
 
 function normalizeQrBase64(value: unknown): string | null {
   if (typeof value !== "string" || !value.trim()) return null;
@@ -13,25 +11,51 @@ function normalizeQrBase64(value: unknown): string | null {
 }
 
 async function request<T>(path: string, method: string, body?: unknown): Promise<T> {
-  const url = `${BASE_URL}/${path}`;
-  const opts: RequestInit = { method, headers: headers() };
-  if (body && (method === "POST" || method === "PUT")) {
-    opts.body = JSON.stringify(body);
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token || "";
+
+    const proxyBody: Record<string, unknown> = { path, method };
+    if (body !== undefined) {
+      proxyBody.body = body;
+    }
+
+    const res = await fetch(PROXY_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        apikey: SUPABASE_PUBLISHABLE_KEY,
+      },
+      body: JSON.stringify(proxyBody),
+    });
+
+    if (res.status === 401) {
+      throw new Error("Erro de autenticação com a API do WhatsApp");
+    }
+
+    if (!res.ok) {
+      let detail = res.statusText || "Erro na API";
+      try {
+        const json = await res.json();
+        console.error("[evolutionApi] proxy error response:", JSON.stringify(json, null, 2));
+        const msg =
+          json?.response?.message?.[0] ||
+          json?.response?.message ||
+          json?.error ||
+          json?.message;
+        if (msg) detail = typeof msg === "string" ? msg : JSON.stringify(msg);
+      } catch { /* not json */ }
+      throw new Error(detail);
+    }
+
+    return res.json();
+  } catch (err) {
+    if (err instanceof TypeError) {
+      throw new Error("Erro de conexão. Verifique sua internet.");
+    }
+    throw err;
   }
-
-  const res = await fetch(url, opts);
-
-  if (!res.ok) {
-    let detail = res.statusText || "Erro na API";
-    try {
-      const json = await res.json();
-      const msg = json?.response?.message?.[0] || json?.response?.message || json?.error || json?.message;
-      if (msg) detail = typeof msg === "string" ? msg : JSON.stringify(msg);
-    } catch { /* not json */ }
-    throw new Error(`[${res.status}] ${detail}`);
-  }
-
-  return res.json();
 }
 
 // ─── Instance Management ───
