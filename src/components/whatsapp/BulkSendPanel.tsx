@@ -76,8 +76,10 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
     else if (statusFilter === "rejected") list = list.filter(c => c.status === "rejected");
     else if (statusFilter === "pending") list = list.filter(c => c.status === "pending");
     else if (statusFilter === "devolutiva") list = list.filter(c => c.devolutiva && c.devolutiva.trim() !== "");
+    else if (statusFilter === "rejected_devolutiva") list = list.filter(c => c.status === "rejected" && c.devolutiva && c.devolutiva.trim() !== "");
+    else if (statusFilter === "pending_devolutiva") list = list.filter(c => c.status === "pending" && c.devolutiva && c.devolutiva.trim() !== "");
 
-    if (statusFilter === "devolutiva" && devolutivaFilter !== "all") {
+    if ((statusFilter === "devolutiva" || statusFilter === "rejected_devolutiva" || statusFilter === "pending_devolutiva") && devolutivaFilter !== "all") {
       list = list.filter(c => matchDevolutiva(c.devolutiva, devolutivaFilter));
     }
 
