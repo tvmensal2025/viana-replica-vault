@@ -40,6 +40,19 @@ function buildPendingConsultantDefaults(uid: string, email?: string | null) {
   } satisfies Database["public"]["Tables"]["consultants"]["Insert"];
 }
 
+const DEFAULT_CONSULTANT_FORM = {
+  name: "",
+  license: "",
+  phone: "",
+  cadastro_url: "",
+  igreen_id: "",
+  licenciada_cadastro_url: "",
+  facebook_pixel_id: "",
+  google_analytics_id: "",
+  igreen_portal_email: "",
+  igreen_portal_password: "",
+};
+
 const Admin = () => {
   const [loading, setLoading] = useState(true);
   const [approved, setApproved] = useState<boolean | null>(null);
@@ -47,9 +60,7 @@ const Admin = () => {
   const [activeTab, setActiveTab] = useState<"dashboard" | "dados" | "links" | "preview" | "whatsapp">("dashboard");
   const [qrModal, setQrModal] = useState<{ url: string; label: string } | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
-  const [form, setForm] = useState({
-    name: "", license: "", phone: "", cadastro_url: "", igreen_id: "", licenciada_cadastro_url: "", facebook_pixel_id: "", google_analytics_id: "", igreen_portal_email: "", igreen_portal_password: "",
-  });
+  const [form, setForm] = useState({ ...DEFAULT_CONSULTANT_FORM });
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [syncingDashboard, setSyncingDashboard] = useState(false);
@@ -62,6 +73,16 @@ const Admin = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: analytics } = useAnalytics(userId);
+  const loadingUidRef = useRef<string | null>(null);
+  const activeUidRef = useRef<string | null>(null);
+  const loadRequestIdRef = useRef(0);
+
+  const resetConsultantState = () => {
+    setApproved(false);
+    setForm({ ...DEFAULT_CONSULTANT_FORM });
+    setPhotoFile(null);
+    setPhotoPreview(null);
+  };
 
   // Derive unique licenciados list and filtered metrics
   const licenciadoOptions = useMemo(() => {
@@ -125,37 +146,58 @@ const Admin = () => {
     return { totalCustomers, totalKw, avgKw, customersByStatus, weeklyNewCustomers };
   }, [analytics, selectedLicenciado]);
 
-  const loadingUidRef = useRef<string | null>(null);
-
   useEffect(() => {
     const handleSession = (session: { user: { id: string } } | null) => {
-      if (!session) { navigate("/auth"); return; }
+      if (!session) {
+        activeUidRef.current = null;
+        loadingUidRef.current = null;
+        loadRequestIdRef.current += 1;
+        setUserId(null);
+        resetConsultantState();
+        setLoading(false);
+        navigate("/auth");
+        return;
+      }
+
       const uid = session.user.id;
-      // Prevent duplicate loads for the same user
       if (loadingUidRef.current === uid) return;
+
       loadingUidRef.current = uid;
+      activeUidRef.current = uid;
+      const requestId = ++loadRequestIdRef.current;
+
       setLoading(true);
-      setApproved(false);
+      resetConsultantState();
       setUserId(uid);
-      loadConsultant(uid);
+      void loadConsultant(uid, requestId);
     };
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
       handleSession(session);
     });
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       handleSession(session);
     });
-    return () => { subscription.unsubscribe(); loadingUidRef.current = null; };
+
+    return () => {
+      subscription.unsubscribe();
+      activeUidRef.current = null;
+      loadingUidRef.current = null;
+      loadRequestIdRef.current += 1;
+    };
   }, [navigate]);
 
-  const loadConsultant = async (uid: string) => {
-    setPhotoPreview(null);
+  const loadConsultant = async (uid: string, requestId: number) => {
+    const isStale = () => activeUidRef.current !== uid || loadRequestIdRef.current !== requestId;
 
     const applyConsultantData = (consultant: any) => {
+      if (isStale()) return;
+
       const id = consultant.igreen_id || "";
-      setApproved(consultant.approved ?? false);
+      setApproved(consultant.approved === true);
       setForm({
+        ...DEFAULT_CONSULTANT_FORM,
         name: consultant.name || "",
         license: consultant.license || "",
         phone: consultant.phone || "",
@@ -171,15 +213,19 @@ const Admin = () => {
     };
 
     try {
-      const { data } = await supabase.from("consultants").select("*").eq("id", uid).maybeSingle();
+      const { data, error } = await supabase.from("consultants").select("*").eq("id", uid).maybeSingle();
+      if (isStale()) return;
+      if (error) throw error;
 
       if (data) {
         applyConsultantData(data);
         return;
       }
 
-      // New user — create pending record with upsert to avoid conflicts
-      const { data: userData } = await supabase.auth.getUser();
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (isStale()) return;
+      if (userError) throw userError;
+
       const pendingConsultant = buildPendingConsultantDefaults(uid, userData.user?.email);
       const { data: createdData, error: createError } = await supabase
         .from("consultants")
@@ -187,13 +233,16 @@ const Admin = () => {
         .select("*")
         .single();
 
+      if (isStale()) return;
       if (createError) throw createError;
+
       applyConsultantData(createdData);
     } catch {
-      setApproved(false);
+      if (isStale()) return;
+      resetConsultantState();
     } finally {
+      if (isStale()) return;
       setLoading(false);
-      // Allow re-load if user changes
       loadingUidRef.current = null;
     }
   };
