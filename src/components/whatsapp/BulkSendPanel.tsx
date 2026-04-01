@@ -79,6 +79,11 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
     if (statusFilter === "devolutiva" && devolutivaFilter !== "all") {
       list = list.filter(c => matchDevolutiva(c.devolutiva, devolutivaFilter));
     }
+
+    if (licenciadoFilter !== "all") {
+      list = list.filter(c => c.registered_by_name === licenciadoFilter);
+    }
+
     return list;
   }, [customers, statusFilter, devolutivaFilter]);
 
