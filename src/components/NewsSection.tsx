@@ -11,7 +11,7 @@ const videos = [
   `${MINIO_BASE}/noticia6.mp4`,
 ];
 
-function NewsVideoCard({ src, label }: { src: string; label: string }) {
+function NewsVideoCard({ src }: { src: string }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
 
@@ -29,7 +29,7 @@ function NewsVideoCard({ src, label }: { src: string; label: string }) {
           ref={videoRef}
           controls={playing}
           preload="metadata"
-          className="w-full aspect-video object-cover"
+          className="w-full aspect-[4/3] object-cover"
           onPlay={() => setPlaying(true)}
           onPause={() => setPlaying(false)}
         >
@@ -40,14 +40,11 @@ function NewsVideoCard({ src, label }: { src: string; label: string }) {
             onClick={handlePlay}
             className="absolute inset-0 flex items-center justify-center bg-black/30 transition-all duration-300 group-hover:bg-black/20"
           >
-            <div className="w-14 h-14 rounded-full bg-primary/90 flex items-center justify-center shadow-lg transition-transform duration-300 group-hover:scale-110">
-              <Play className="w-6 h-6 text-primary-foreground ml-1" fill="currentColor" />
+            <div className="w-16 h-16 rounded-full bg-primary/90 flex items-center justify-center shadow-lg transition-transform duration-300 group-hover:scale-110">
+              <Play className="w-7 h-7 text-primary-foreground ml-1" fill="currentColor" />
             </div>
           </button>
         )}
-      </div>
-      <div className="px-3 py-2 text-center">
-        <span className="text-xs text-muted-foreground">{label}</span>
       </div>
     </div>
   );
