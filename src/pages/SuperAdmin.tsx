@@ -114,7 +114,7 @@ const SuperAdmin = () => {
     navigate("/auth");
   };
 
-  if (roleLoading || (!isAdmin && userId)) {
+  if (authLoading || roleLoading || (!isAdmin && userId)) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-background">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
