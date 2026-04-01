@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -23,29 +23,58 @@ interface ConsultantRow {
 
 const SuperAdmin = () => {
   const [userId, setUserId] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [consultants, setConsultants] = useState<ConsultantRow[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const accessDeniedToastShownRef = useRef(false);
   const { isAdmin, loading: roleLoading } = useUserRole(userId);
   const navigate = useNavigate();
   const { toast } = useToast();
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) navigate("/auth");
-      else setUserId(session.user.id);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
+      if (!session) {
+        setUserId(null);
+        setAuthLoading(false);
+        navigate("/auth", { replace: true });
+        return;
+      }
+
+      setUserId(session.user.id);
+      setAuthLoading(false);
     });
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) {
+        setUserId(null);
+        setAuthLoading(false);
+        navigate("/auth", { replace: true });
+        return;
+      }
+
+      setUserId(session.user.id);
+      setAuthLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, [navigate]);
 
   useEffect(() => {
-    if (roleLoading || !userId) return;
+    if (authLoading || roleLoading || !userId) return;
+
     if (!isAdmin) {
-      toast({ title: "Acesso negado", description: "Você não tem permissão de administrador.", variant: "destructive" });
-      navigate("/admin");
+      if (!accessDeniedToastShownRef.current) {
+        accessDeniedToastShownRef.current = true;
+        toast({ title: "Acesso negado", description: "Você não tem permissão de administrador.", variant: "destructive" });
+      }
+      navigate("/admin", { replace: true });
       return;
     }
+
+    accessDeniedToastShownRef.current = false;
     loadConsultants();
-  }, [isAdmin, roleLoading, userId]);
+  }, [authLoading, isAdmin, roleLoading, userId, navigate, toast]);
 
   const loadConsultants = async () => {
     setLoadingData(true);
@@ -85,7 +114,7 @@ const SuperAdmin = () => {
     navigate("/auth");
   };
 
-  if (roleLoading || (!isAdmin && userId)) {
+  if (authLoading || roleLoading || (!isAdmin && userId)) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-background">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />

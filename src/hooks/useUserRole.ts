@@ -4,10 +4,14 @@ import { supabase } from "@/integrations/supabase/client";
 export function useUserRole(userId: string | null) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [checkedUserId, setCheckedUserId] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+
     if (!userId) {
       setIsAdmin(false);
+      setCheckedUserId(null);
       setLoading(false);
       return;
     }
@@ -16,21 +20,36 @@ export function useUserRole(userId: string | null) {
 
     const checkRole = async () => {
       try {
-        const { data, error } = await (supabase as any).rpc("has_role", {
+        const { data, error } = await supabase.rpc("has_role", {
           _user_id: userId,
           _role: "admin",
         });
+
         if (error) throw error;
-        setIsAdmin(data === true);
+        if (!cancelled) {
+          setIsAdmin(Boolean(data));
+          setCheckedUserId(userId);
+        }
       } catch {
-        setIsAdmin(false);
+        if (!cancelled) {
+          setIsAdmin(false);
+          setCheckedUserId(userId);
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
     checkRole();
+
+    return () => {
+      cancelled = true;
+    };
   }, [userId]);
 
-  return { isAdmin, loading };
+  const isCheckingCurrentUser = Boolean(userId) && (loading || checkedUserId !== userId);
+
+  return { isAdmin, loading: isCheckingCurrentUser };
 }
