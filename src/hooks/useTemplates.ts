@@ -69,11 +69,16 @@ export function useTemplates(consultantId: string) {
 
   const updateTemplate = useCallback(
     async (id: string, updates: { name?: string; image_url?: string | null; content?: string; media_url?: string | null; media_type?: string }) => {
-      const { error } = await supabase
+      const { error, data, count } = await supabase
         .from("message_templates")
         .update(updates)
-        .eq("id", id);
+        .eq("id", id)
+        .select();
       if (error) throw error;
+      if (!data || data.length === 0) {
+        console.error("Template update blocked by RLS or not found. ID:", id, "Updates:", updates);
+        throw new Error("Não foi possível atualizar o template. Verifique se você está autenticado.");
+      }
       await fetchTemplates();
     },
     [fetchTemplates]
