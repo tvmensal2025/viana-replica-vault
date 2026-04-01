@@ -27,7 +27,7 @@ export function useUserRole(userId: string | null) {
 
         if (error) throw error;
         if (!cancelled) {
-          setIsAdmin(data === true);
+          setIsAdmin(Boolean(data));
           setCheckedUserId(userId);
         }
       } catch {
