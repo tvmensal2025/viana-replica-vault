@@ -349,35 +349,17 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       }
 
       if (state === "unknown") {
-        addLog("⚠️ Conexão instável. Tentando recuperar a instância...");
-        const qrAttempt = await tryGetQr(name);
-        const recoveredConnection = qrAttempt.alreadyConnected || (
-          !qrAttempt.qr && await confirmConnectedState(name, 2, 1000)
-        );
-        if (!mountedRef.current) return;
-
-        if (recoveredConnection) {
-          await markConnected(name, "✅ WhatsApp já está conectado!");
-          startPolling(name);
-          return;
-        }
-
-        if (qrAttempt.qr) {
-          await saveInstance(name);
-          instanceSavedRef.current = true;
-          setQrCode(qrAttempt.qr);
-          setQrGeneratedAt(Date.now());
-          setStatus("connecting");
-          addLog("📱 QR Code recuperado — escaneie com seu celular");
-          startPolling(name);
-          return;
-        }
+        // Fail fast — don't attempt expensive recovery, just show disconnected
+        addLog("⚠️ Servidor temporariamente indisponível. Tente novamente em alguns segundos.");
+        setStatus("disconnected");
+        setError("Servidor temporariamente indisponível");
+        return;
       }
 
       // Step 3: Instance doesn't exist or state is uncertain — create it
       addLog("Criando instância...");
       try {
-        const response = await withTimeout(createInstance(name), 35000);
+        const response = await withTimeout(createInstance(name), 12000);
         if (!mountedRef.current) return;
 
         await saveInstance(name);
