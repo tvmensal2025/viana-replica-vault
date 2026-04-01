@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { MessageTemplate } from "@/types/whatsapp";
 
@@ -23,8 +23,15 @@ export function applyTemplate(
 export function useTemplates(consultantId: string) {
   const [templates, setTemplates] = useState<MessageTemplate[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const fetchTemplates = useCallback(async () => {
+    if (!mountedRef.current) return;
     setIsLoading(true);
     try {
       const { data, error } = await supabase
@@ -32,11 +39,15 @@ export function useTemplates(consultantId: string) {
         .select("*");
 
       if (error) throw error;
-      setTemplates((data as MessageTemplate[]) ?? []);
+      if (mountedRef.current) {
+        setTemplates((data as MessageTemplate[]) ?? []);
+      }
     } catch {
       // silently handle – consumer can check templates length
     } finally {
-      setIsLoading(false);
+      if (mountedRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [consultantId]);
 

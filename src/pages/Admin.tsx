@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useQueryClient } from "@tanstack/react-query";
 import { WhatsAppTab } from "@/components/whatsapp/WhatsAppTab";
+import { WhatsAppErrorBoundary } from "@/components/whatsapp/WhatsAppErrorBoundary";
 import { QRCodeSVG } from "qrcode.react";
 
 const Admin = () => {
@@ -1078,7 +1079,9 @@ const Admin = () => {
 
         {/* WhatsApp Tab — always mounted, hidden when inactive to preserve connection state */}
         {userId && activeTab === "whatsapp" && (
-          <WhatsAppTab key="whatsapp-tab" userId={userId} />
+          <WhatsAppErrorBoundary>
+            <WhatsAppTab key="whatsapp-tab" userId={userId} />
+          </WhatsAppErrorBoundary>
         )}
 
         {/* Preview Tab */}
