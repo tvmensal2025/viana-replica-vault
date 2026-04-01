@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -125,26 +125,28 @@ const Admin = () => {
     return { totalCustomers, totalKw, avgKw, customersByStatus, weeklyNewCustomers };
   }, [analytics, selectedLicenciado]);
 
+  const loadingUidRef = useRef<string | null>(null);
+
   useEffect(() => {
+    const handleSession = (session: { user: { id: string } } | null) => {
+      if (!session) { navigate("/auth"); return; }
+      const uid = session.user.id;
+      // Prevent duplicate loads for the same user
+      if (loadingUidRef.current === uid) return;
+      loadingUidRef.current = uid;
+      setLoading(true);
+      setApproved(false);
+      setUserId(uid);
+      loadConsultant(uid);
+    };
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
-      if (!session) navigate("/auth");
-      else {
-        setLoading(true);
-        setApproved(false);
-        setUserId(session.user.id);
-        loadConsultant(session.user.id);
-      }
+      handleSession(session);
     });
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) navigate("/auth");
-      else {
-        setLoading(true);
-        setApproved(false);
-        setUserId(session.user.id);
-        loadConsultant(session.user.id);
-      }
+      handleSession(session);
     });
-    return () => subscription.unsubscribe();
+    return () => { subscription.unsubscribe(); loadingUidRef.current = null; };
   }, [navigate]);
 
   const loadConsultant = async (uid: string) => {
@@ -176,23 +178,23 @@ const Admin = () => {
         return;
       }
 
+      // New user — create pending record with upsert to avoid conflicts
       const { data: userData } = await supabase.auth.getUser();
       const pendingConsultant = buildPendingConsultantDefaults(uid, userData.user?.email);
       const { data: createdData, error: createError } = await supabase
         .from("consultants")
-        .insert(pendingConsultant)
+        .upsert(pendingConsultant, { onConflict: "id" })
         .select("*")
         .single();
 
-      if (createError) {
-        throw createError;
-      }
-
+      if (createError) throw createError;
       applyConsultantData(createdData);
     } catch {
       setApproved(false);
     } finally {
       setLoading(false);
+      // Allow re-load if user changes
+      loadingUidRef.current = null;
     }
   };
 
