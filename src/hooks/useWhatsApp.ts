@@ -485,7 +485,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
 
   const reconnect = useCallback(() => createAndConnect(), [createAndConnect]);
 
-  /* ── On mount: check if already connected (optimized — single check + 8s timeout) ── */
+  /* ── On mount: check if already connected (only if instance exists in DB) ── */
   useEffect(() => {
     mountedRef.current = true;
     let cancelled = false;
@@ -495,12 +495,28 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       setInstanceName(name);
 
       try {
-        // Single check with 8s global timeout — no multi-attempt confirmation
+        // First check if this user has ever had an instance saved
+        const { data: instanceRecord } = await supabase
+          .from("whatsapp_instances")
+          .select("id")
+          .eq("consultant_id", consultantId)
+          .maybeSingle();
+
+        if (cancelled) return;
+
+        // No saved instance → go straight to disconnected, skip API calls
+        if (!instanceRecord) {
+          setStatus("disconnected");
+          setError(null);
+          setIsLoading(false);
+          return;
+        }
+
+        // Instance exists in DB — check Evolution API state
         const state = await withTimeout(checkState(name), 8000);
         if (cancelled) return;
 
         if (state === "open") {
-          // Already connected — trust single check, no re-confirm needed
           await markConnected(name, "✅ WhatsApp conectado!");
           startPolling(name);
           setIsLoading(false);
