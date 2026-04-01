@@ -249,7 +249,23 @@ const Admin = () => {
     );
   }
 
-  const chartData = analytics?.daily.map((d) => ({
+  if (approved === false) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-background px-4">
+        <img src="/images/logo-colorida-igreen.png" alt="iGreen" className="w-32" />
+        <div className="text-center space-y-2">
+          <h1 className="text-xl font-bold font-heading text-foreground">Aguardando Aprovação</h1>
+          <p className="text-muted-foreground text-sm max-w-md">
+            Sua conta está sendo analisada pelo administrador. Você receberá acesso assim que for aprovado.
+          </p>
+        </div>
+        <Button variant="ghost" size="sm" onClick={handleLogout} className="text-muted-foreground gap-2">
+          <LogOut className="w-4 h-4" /> Sair
+        </Button>
+      </div>
+    );
+  }
+
     ...d,
     label: new Date(d.date + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
   })) || [];
