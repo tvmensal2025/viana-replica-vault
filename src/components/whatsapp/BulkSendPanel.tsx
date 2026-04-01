@@ -81,12 +81,12 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
       list = list.filter(c => matchDevolutiva(c.devolutiva, devolutivaFilter));
     }
 
-    if (licenciadoFilter !== "all") {
-      list = list.filter(c => c.registered_by_name === licenciadoFilter);
+    if (licenciadoFilter.size > 0) {
+      list = list.filter(c => c.registered_by_name != null && licenciadoFilter.has(c.registered_by_name));
     }
 
     return list;
-  }, [customers, statusFilter, devolutivaFilter]);
+  }, [customers, statusFilter, devolutivaFilter, licenciadoFilter]);
 
   const allSelected = filteredCustomers.length > 0 && filteredCustomers.every(c => selectedIds.has(c.id));
 
