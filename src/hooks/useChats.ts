@@ -62,7 +62,8 @@ function mapChat(chat: EvolutionChat, contactsMap: Map<string, EvolutionContact>
   const hasName = chat.pushName || chat.lastMessage?.pushName || contact?.pushName || chat.name;
   if (isLid && !hasName && !realPhone) return null;
 
-  const nameSource = chat.pushName || chat.lastMessage?.pushName || contact?.pushName || chat.name;
+  const lastMsgPushName = chat.lastMessage?.key?.fromMe ? undefined : chat.lastMessage?.pushName;
+  const nameSource = chat.pushName || lastMsgPushName || contact?.pushName || chat.name;
   const phoneSource = realPhone || (isLid ? null : rawJidNumber);
   const displayName = nameSource || (phoneSource ? formatPhoneNumber(phoneSource) : `Contato ${rawJidNumber.slice(-4)}`);
 
