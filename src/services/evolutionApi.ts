@@ -43,7 +43,6 @@ async function request<T>(
       let detail = res.statusText || "Erro na API";
       try {
         const json = await res.json();
-        console.error("[evolutionApi] proxy error response:", JSON.stringify(json, null, 2));
         const msg =
           json?.response?.message?.[0] ||
           json?.response?.message ||
