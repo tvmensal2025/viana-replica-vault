@@ -165,7 +165,7 @@ export function useChats(instanceName: string | null) {
         })
         .slice(0, 3);
 
-      if (missingPics.length > 0 && instanceName) {
+      if (missingPics.length > 0 && instanceName && now >= globalPicPauseUntilRef.current) {
         fetchingPicsRef.current = true;
         processWithConcurrency(missingPics, 1, async (chat) => {
           const targetJid = chat.sendTargetJid || chat.remoteJid;
