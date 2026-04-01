@@ -4,16 +4,14 @@ import { Play } from "lucide-react";
 const MINIO_BASE = "https://igreen-minio.b099mi.easypanel.host/igreen";
 
 const videos = [
-  { src: `${MINIO_BASE}/noticia1.mp4`, label: "Reportagem 1" },
-  { src: `${MINIO_BASE}/noticia2.mp4`, label: "Reportagem 2" },
-  { src: `${MINIO_BASE}/noticia3.mp4`, label: "Reportagem 3" },
-  { src: `${MINIO_BASE}/noticia5.mp4`, label: "Reportagem 4" },
-  { src: `${MINIO_BASE}/noticia6.mp4`, label: "Reportagem 5" },
-  { src: `${MINIO_BASE}/noticia7.mp4`, label: "Reportagem 6" },
-  { src: `${MINIO_BASE}/noticia8.mp4`, label: "Reportagem 7" },
+  `${MINIO_BASE}/noticia1.mp4`,
+  `${MINIO_BASE}/noticia2.mp4`,
+  `${MINIO_BASE}/noticia3.mp4`,
+  `${MINIO_BASE}/noticia5.mp4`,
+  `${MINIO_BASE}/noticia6.mp4`,
 ];
 
-function NewsVideoCard({ src, label }: { src: string; label: string }) {
+function NewsVideoCard({ src }: { src: string }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
 
@@ -31,7 +29,7 @@ function NewsVideoCard({ src, label }: { src: string; label: string }) {
           ref={videoRef}
           controls={playing}
           preload="metadata"
-          className="w-full aspect-video object-cover"
+          className="w-full aspect-[4/3] object-cover"
           onPlay={() => setPlaying(true)}
           onPause={() => setPlaying(false)}
         >
@@ -42,14 +40,11 @@ function NewsVideoCard({ src, label }: { src: string; label: string }) {
             onClick={handlePlay}
             className="absolute inset-0 flex items-center justify-center bg-black/30 transition-all duration-300 group-hover:bg-black/20"
           >
-            <div className="w-14 h-14 rounded-full bg-primary/90 flex items-center justify-center shadow-lg transition-transform duration-300 group-hover:scale-110">
-              <Play className="w-6 h-6 text-primary-foreground ml-1" fill="currentColor" />
+            <div className="w-16 h-16 rounded-full bg-primary/90 flex items-center justify-center shadow-lg transition-transform duration-300 group-hover:scale-110">
+              <Play className="w-7 h-7 text-primary-foreground ml-1" fill="currentColor" />
             </div>
           </button>
         )}
-      </div>
-      <div className="px-3 py-2 text-center">
-        <span className="text-xs text-muted-foreground">{label}</span>
       </div>
     </div>
   );
@@ -67,9 +62,9 @@ const NewsSection = () => (
         Veja como a mídia tem falado sobre a economia na conta de luz proporcionada pela iGreen Energy
       </p>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 max-w-7xl mx-auto">
-        {videos.map((v, i) => (
-          <NewsVideoCard key={i} src={v.src} label={v.label} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
+        {videos.map((src, i) => (
+          <NewsVideoCard key={i} src={src} />
         ))}
       </div>
     </div>
