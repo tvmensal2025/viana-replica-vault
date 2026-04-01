@@ -44,6 +44,7 @@ function mediaBadge(type: TemplateMediaType) {
 interface TemplateManagerProps {
   templates: MessageTemplate[];
   isLoading: boolean;
+  consultantId: string;
   onCreateTemplate: (name: string, content: string, mediaType?: string, mediaUrl?: string | null, imageUrl?: string | null) => Promise<void>;
   onUpdateTemplate: (id: string, updates: { name?: string; image_url?: string | null; content?: string; media_url?: string | null; media_type?: string }) => Promise<void>;
   onDeleteTemplate: (id: string) => Promise<void>;
@@ -86,7 +87,7 @@ function AddImageToTemplate({ templateId, onUpdateTemplate }: { templateId: stri
   );
 }
 
-export function TemplateManager({ templates, isLoading, onCreateTemplate, onUpdateTemplate, onDeleteTemplate }: TemplateManagerProps) {
+export function TemplateManager({ templates, isLoading, consultantId, onCreateTemplate, onUpdateTemplate, onDeleteTemplate }: TemplateManagerProps) {
   const [name, setName] = useState("");
   const [content, setContent] = useState("");
   const [mediaType, setMediaType] = useState<TemplateMediaType>("text");
@@ -473,31 +474,35 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onUpda
                   )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <Button variant="ghost" size="icon" onClick={() => startEditing(t)}
-                    className="text-muted-foreground hover:text-purple-400 h-8 w-8 opacity-0 group-hover:opacity-100 transition-all">
-                    <Pencil className="w-3.5 h-3.5" />
-                  </Button>
+                  {t.consultant_id === consultantId && (
+                    <Button variant="ghost" size="icon" onClick={() => startEditing(t)}
+                      className="text-muted-foreground hover:text-purple-400 h-8 w-8 opacity-0 group-hover:opacity-100 transition-all">
+                      <Pencil className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
                   <Button variant="ghost" size="icon" onClick={() => setPreviewTemplate(t)}
                     className="text-muted-foreground hover:text-foreground h-8 w-8 opacity-0 group-hover:opacity-100 transition-all">
                     <Eye className="w-3.5 h-3.5" />
                   </Button>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button variant="ghost" size="icon" className="shrink-0 text-red-400/60 hover:text-red-400 hover:bg-red-500/10 h-8 w-8 opacity-0 group-hover:opacity-100 transition-all">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Excluir template</AlertDialogTitle>
-                        <AlertDialogDescription>Excluir "{t.name}"? Essa ação não pode ser desfeita.</AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => onDeleteTemplate(t.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Excluir</AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+                  {t.consultant_id === consultantId && (
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="ghost" size="icon" className="shrink-0 text-red-400/60 hover:text-red-400 hover:bg-red-500/10 h-8 w-8 opacity-0 group-hover:opacity-100 transition-all">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Excluir template</AlertDialogTitle>
+                          <AlertDialogDescription>Excluir "{t.name}"? Essa ação não pode ser desfeita.</AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => onDeleteTemplate(t.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Excluir</AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  )}
                 </div>
               </div>
             ))}
