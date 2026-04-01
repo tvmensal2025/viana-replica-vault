@@ -51,6 +51,14 @@ function isRecoverableConnectionError(message: string): boolean {
   return /timeout|connection closed|temporariamente|inst[áa]vel|erro de conex[ãa]o/i.test(message);
 }
 
+function isAlreadyConnectedError(message: string): boolean {
+  return /already.*(connected|open)|connection.*already|j[áa].*conectad|inst[âa]ncia.*(aberta|conectada)/i.test(message);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
     const id = setTimeout(() => reject(new Error("timeout")), ms);
@@ -105,6 +113,28 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
     await supabase.from("whatsapp_instances").delete().eq("consultant_id", consultantId);
   }, [consultantId]);
 
+  const markConnected = useCallback(async (name: string, message?: string) => {
+    graceCountRef.current = 0;
+
+    if (statusRef.current !== "connected" && message) {
+      addLog(message);
+    }
+
+    setQrCode(null);
+    setQrGeneratedAt(null);
+    setError(null);
+    setStatus("connected");
+
+    if (!instanceSavedRef.current) {
+      try {
+        await saveInstance(name);
+        instanceSavedRef.current = true;
+      } catch {
+        // Non-critical persistence failure
+      }
+    }
+  }, [addLog, saveInstance, setStatus]);
+
   /* ── Check state with proper error handling ── */
   const checkState = useCallback(async (name: string): Promise<ConnectionCheckState> => {
     try {
@@ -121,15 +151,41 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
     }
   }, []);
 
+  const confirmConnectedState = useCallback(async (
+    name: string,
+    attempts = 3,
+    delayMs = 1500
+  ): Promise<boolean> => {
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      const state = await checkState(name);
+      if (state === "open") return true;
+      if (state === "missing") return false;
+      if (attempt < attempts - 1) {
+        await sleep(delayMs);
+      }
+    }
+
+    return false;
+  }, [checkState]);
+
   /* ── Try to get QR code ── */
-  const tryGetQr = useCallback(async (name: string): Promise<string | null> => {
+  const tryGetQr = useCallback(async (
+    name: string
+  ): Promise<{ qr: string | null; alreadyConnected: boolean }> => {
     try {
       const resp = await withTimeout(connectInstance(name), 12000);
-      return resp?.base64 || null;
-    } catch {
-      return null;
+      return { qr: resp?.base64 || null, alreadyConnected: false };
+    } catch (err) {
+      const msg = sanitize(err instanceof Error ? err.message : "");
+
+      if (isAlreadyConnectedError(msg)) {
+        return { qr: null, alreadyConnected: true };
+      }
+
+      const confirmedOpen = await confirmConnectedState(name, 2, 1000);
+      return { qr: null, alreadyConnected: confirmedOpen };
     }
-  }, []);
+  }, [confirmConnectedState]);
 
   /* ── Single unified polling loop ── */
   const startPolling = useCallback((name: string) => {
@@ -142,22 +198,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       if (!mountedRef.current) return;
 
       if (state === "open") {
-        graceCountRef.current = 0;
-        if (statusRef.current !== "connected") {
-          addLog("✅ WhatsApp conectado!");
-          setQrCode(null);
-          setQrGeneratedAt(null);
-          setError(null);
-        }
-        setStatus("connected");
-        if (!instanceSavedRef.current) {
-          try {
-            await saveInstance(name);
-            instanceSavedRef.current = true;
-          } catch {
-            // Non-critical persistence failure
-          }
-        }
+        await markConnected(name, "✅ WhatsApp conectado!");
         pollRef.current = setTimeout(poll, 60000);
         return;
       }
@@ -175,18 +216,31 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       }
 
       if (state === "connecting" || state === "unknown") {
-        // Grace period: if we were connected, tolerate 2 transient checks
-        if (statusRef.current === "connected" || graceCountRef.current < 2) {
+        const maxGraceChecks = statusRef.current === "connected" ? 6 : 2;
+        if (graceCountRef.current < maxGraceChecks) {
+          if (statusRef.current === "connected" && graceCountRef.current === 0) {
+            addLog("🔄 Verificando estabilidade da conexão...");
+          }
           graceCountRef.current++;
           pollRef.current = setTimeout(poll, 5000);
           return;
         }
-        // After grace period, transition to connecting and try QR
+
         setStatus("connecting");
-        const qr = await tryGetQr(name);
+        const qrAttempt = await tryGetQr(name);
+        const recoveredConnection = qrAttempt.alreadyConnected || (
+          !qrAttempt.qr && await confirmConnectedState(name, 2, 1000)
+        );
         if (!mountedRef.current) return;
-        if (qr) {
-          setQrCode(qr);
+
+        if (recoveredConnection) {
+          await markConnected(name, "✅ WhatsApp conectado!");
+          pollRef.current = setTimeout(poll, 60000);
+          return;
+        }
+
+        if (qrAttempt.qr) {
+          setQrCode(qrAttempt.qr);
           setQrGeneratedAt(Date.now());
           setError(null);
           addLog("📱 QR Code gerado — escaneie com seu celular");
@@ -196,12 +250,31 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       }
 
       // state === "close"
+      if (statusRef.current === "connected" && graceCountRef.current < 3) {
+        if (graceCountRef.current === 0) {
+          addLog("🔄 Tentando recuperar a sessão do WhatsApp...");
+        }
+        graceCountRef.current++;
+        pollRef.current = setTimeout(poll, 5000);
+        return;
+      }
+
       graceCountRef.current = 0;
       setStatus("connecting");
-      const qr = await tryGetQr(name);
+      const qrAttempt = await tryGetQr(name);
+      const recoveredConnection = qrAttempt.alreadyConnected || (
+        !qrAttempt.qr && await confirmConnectedState(name, 2, 1000)
+      );
       if (!mountedRef.current) return;
-      if (qr) {
-        setQrCode(qr);
+
+      if (recoveredConnection) {
+        await markConnected(name, "✅ WhatsApp conectado!");
+        pollRef.current = setTimeout(poll, 60000);
+        return;
+      }
+
+      if (qrAttempt.qr) {
+        setQrCode(qrAttempt.qr);
         setQrGeneratedAt(Date.now());
         setError(null);
         addLog("📱 QR Code gerado — escaneie com seu celular");
@@ -210,7 +283,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
     };
 
     poll();
-  }, [addLog, checkState, saveInstance, setStatus, stopPolling, tryGetQr]);
+  }, [addLog, checkState, confirmConnectedState, markConnected, setStatus, stopPolling, tryGetQr]);
 
   /* ── Create & Connect ── */
   const createAndConnect = useCallback(async () => {
@@ -235,11 +308,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       if (!mountedRef.current) return;
 
       if (state === "open") {
-        setStatus("connected");
-        setError(null);
-        addLog("✅ WhatsApp já está conectado!");
-        await saveInstance(name);
-        instanceSavedRef.current = true;
+        await markConnected(name, "✅ WhatsApp já está conectado!");
         startPolling(name);
         return;
       }
@@ -247,13 +316,22 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       // Step 2: If instance exists (connecting or close), try to get QR
       if (state === "connecting" || state === "close") {
         addLog("⏳ Recuperando QR Code...");
-        const qr = await tryGetQr(name);
+        const qrAttempt = await tryGetQr(name);
+        const recoveredConnection = qrAttempt.alreadyConnected || (
+          !qrAttempt.qr && await confirmConnectedState(name, 2, 1000)
+        );
         if (!mountedRef.current) return;
 
-        if (qr) {
+        if (recoveredConnection) {
+          await markConnected(name, "✅ WhatsApp já está conectado!");
+          startPolling(name);
+          return;
+        }
+
+        if (qrAttempt.qr) {
           await saveInstance(name);
           instanceSavedRef.current = true;
-          setQrCode(qr);
+          setQrCode(qrAttempt.qr);
           setQrGeneratedAt(Date.now());
           setStatus("connecting");
           addLog("📱 QR Code gerado — escaneie com seu celular");
@@ -272,13 +350,22 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
 
       if (state === "unknown") {
         addLog("⚠️ Conexão instável. Tentando recuperar a instância...");
-        const qr = await tryGetQr(name);
+        const qrAttempt = await tryGetQr(name);
+        const recoveredConnection = qrAttempt.alreadyConnected || (
+          !qrAttempt.qr && await confirmConnectedState(name, 2, 1000)
+        );
         if (!mountedRef.current) return;
 
-        if (qr) {
+        if (recoveredConnection) {
+          await markConnected(name, "✅ WhatsApp já está conectado!");
+          startPolling(name);
+          return;
+        }
+
+        if (qrAttempt.qr) {
           await saveInstance(name);
           instanceSavedRef.current = true;
-          setQrCode(qr);
+          setQrCode(qrAttempt.qr);
           setQrGeneratedAt(Date.now());
           setStatus("connecting");
           addLog("📱 QR Code recuperado — escaneie com seu celular");
@@ -351,7 +438,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       lockRef.current = false;
       setIsLoading(false);
     }
-  }, [consultantId, addLog, checkState, saveInstance, setStatus, startPolling, stopPolling, tryGetQr]);
+  }, [consultantId, addLog, checkState, confirmConnectedState, markConnected, saveInstance, setStatus, startPolling, stopPolling, tryGetQr]);
 
   /* ── Refresh QR ── */
   const refreshQr = useCallback(async () => {
@@ -361,18 +448,24 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
     // First check if already connected
     const state = await checkState(name);
     if (state === "open") {
-      setStatus("connected");
-      setQrCode(null);
-      setQrGeneratedAt(null);
-      setError(null);
-      addLog("✅ WhatsApp já está conectado!");
+      await markConnected(name, "✅ WhatsApp já está conectado!");
       startPolling(name);
       return;
     }
 
-    const qr = await tryGetQr(name);
-    if (qr) {
-      setQrCode(qr);
+    const qrAttempt = await tryGetQr(name);
+    const recoveredConnection = qrAttempt.alreadyConnected || (
+      !qrAttempt.qr && await confirmConnectedState(name, 2, 1000)
+    );
+
+    if (recoveredConnection) {
+      await markConnected(name, "✅ WhatsApp já está conectado!");
+      startPolling(name);
+      return;
+    }
+
+    if (qrAttempt.qr) {
+      setQrCode(qrAttempt.qr);
       setQrGeneratedAt(Date.now());
       setStatus("connecting");
       setError(null);
@@ -380,7 +473,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
     } else {
       addLog("⏳ QR Code ainda não disponível. Tentando novamente...");
     }
-  }, [instanceName, consultantId, addLog, checkState, setStatus, startPolling, tryGetQr]);
+  }, [instanceName, consultantId, addLog, checkState, confirmConnectedState, markConnected, setStatus, startPolling, tryGetQr]);
 
   /* ── Disconnect ── */
   const disconnect = useCallback(async () => {
@@ -423,12 +516,14 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
         const state = await checkState(name);
         if (cancelled) return;
 
-        if (state === "open") {
-          setStatus("connected");
-          setError(null);
-          addLog("✅ WhatsApp conectado!");
-          await saveInstance(name);
-          instanceSavedRef.current = true;
+        const confirmedOpen = state !== "missing"
+          ? await confirmConnectedState(name, state === "close" ? 2 : 3, 1200)
+          : false;
+
+        if (cancelled) return;
+
+        if (state === "open" || confirmedOpen) {
+          await markConnected(name, "✅ WhatsApp conectado!");
           startPolling(name);
           setIsLoading(false);
           return;
