@@ -20,7 +20,7 @@ export function useUserRole(userId: string | null) {
 
     const checkRole = async () => {
       try {
-        const { data, error } = await (supabase as any).rpc("has_role", {
+        const { data, error } = await supabase.rpc("has_role", {
           _user_id: userId,
           _role: "admin",
         });
