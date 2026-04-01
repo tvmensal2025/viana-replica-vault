@@ -87,7 +87,7 @@ function AddImageToTemplate({ templateId, onUpdateTemplate }: { templateId: stri
   );
 }
 
-export function TemplateManager({ templates, isLoading, onCreateTemplate, onUpdateTemplate, onDeleteTemplate }: TemplateManagerProps) {
+export function TemplateManager({ templates, isLoading, consultantId, onCreateTemplate, onUpdateTemplate, onDeleteTemplate }: TemplateManagerProps) {
   const [name, setName] = useState("");
   const [content, setContent] = useState("");
   const [mediaType, setMediaType] = useState<TemplateMediaType>("text");
