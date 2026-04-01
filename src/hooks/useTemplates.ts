@@ -67,6 +67,18 @@ export function useTemplates(consultantId: string) {
     [consultantId, fetchTemplates]
   );
 
+  const updateTemplate = useCallback(
+    async (id: string, updates: { image_url?: string | null; content?: string; media_url?: string | null; media_type?: string }) => {
+      const { error } = await supabase
+        .from("message_templates")
+        .update(updates)
+        .eq("id", id);
+      if (error) throw error;
+      await fetchTemplates();
+    },
+    [fetchTemplates]
+  );
+
   const deleteTemplate = useCallback(
     async (id: string) => {
       const { error } = await supabase
