@@ -99,6 +99,7 @@ export function useTemplates(consultantId: string) {
     templates,
     isLoading,
     createTemplate,
+    updateTemplate,
     deleteTemplate,
     applyTemplate,
   };
