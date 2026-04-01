@@ -56,6 +56,7 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
     templates,
     isLoading: templatesLoading,
     createTemplate,
+    updateTemplate,
     deleteTemplate,
     applyTemplate,
   } = useTemplates(userId);
