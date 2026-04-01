@@ -1,75 +1,92 @@
 
+## Análise Profunda: Configuração e Segurança
 
-## Painel Super Admin com controle de acesso
+### Problemas Encontrados
 
-### Resumo
-Criar uma página `/super-admin` separada da `/admin` atual. O acesso é controlado por uma tabela `user_roles` no banco. Todos os consultores precisam ser autorizados pelo super admin para acessar o painel `/admin`.
+**1. CRÍTICO — SuperAdmin não consegue listar todos os consultores**
 
-### 1. Migração SQL
+A página `SuperAdmin.tsx` faz `supabase.from("consultants").select(...)` sem filtro de `id`, mas a RLS da tabela `consultants` só permite `Owner read` (`id = auth.uid()`). Isso significa que o admin só vê a si mesmo, nunca os outros consultores. O painel de aprovação está quebrado.
 
-**Tabela `user_roles` + função `has_role` + campo `approved` nos consultants:**
-
+**Correção:** Criar uma policy RLS que permite admins lerem todos os consultores:
 ```sql
--- Enum de roles
-CREATE TYPE public.app_role AS ENUM ('admin', 'user');
-
--- Tabela de roles
-CREATE TABLE public.user_roles (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-  role app_role NOT NULL,
-  UNIQUE (user_id, role)
-);
-ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;
-
--- Função segura para checar role
-CREATE OR REPLACE FUNCTION public.has_role(_user_id uuid, _role app_role)
-RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
-  SELECT EXISTS (SELECT 1 FROM public.user_roles WHERE user_id = _user_id AND role = _role)
-$$;
-
--- RLS: só admins leem/escrevem user_roles
-CREATE POLICY "Admins manage roles" ON public.user_roles
-  FOR ALL TO authenticated USING (public.has_role(auth.uid(), 'admin'))
+CREATE POLICY "Admins read all consultants" ON public.consultants
+  FOR SELECT TO authenticated
+  USING (public.has_role(auth.uid(), 'admin'));
+```
+E uma policy para admins atualizarem o campo `approved`:
+```sql
+CREATE POLICY "Admins update consultants" ON public.consultants
+  FOR UPDATE TO authenticated
+  USING (public.has_role(auth.uid(), 'admin'))
   WITH CHECK (public.has_role(auth.uid(), 'admin'));
-
--- Campo approved na tabela consultants
-ALTER TABLE public.consultants ADD COLUMN IF NOT EXISTS approved boolean DEFAULT false;
-
--- Inserir o super admin (rafael.ids@icloud.com)
--- Será feito via SQL após identificar o user_id
 ```
 
-### 2. Inserir admin inicial
+---
 
-Após a migração, executar via SQL para associar o usuário `rafael.ids@icloud.com` como admin:
-```sql
-INSERT INTO public.user_roles (user_id, role)
-SELECT id, 'admin' FROM auth.users WHERE email = 'rafael.ids@icloud.com';
-```
+**2. SEGURANÇA — Credenciais Evolution API expostas no `.env` (baixo risco)**
 
-### 3. Hook `src/hooks/useUserRole.ts`
-- Chama `supabase.rpc('has_role', { _user_id, _role: 'admin' })`
-- Retorna `{ isAdmin, loading }`
+O `.env` contém `VITE_EVOLUTION_API_URL` e `VITE_EVOLUTION_API_KEY`. Variáveis `VITE_` são embutidas no bundle do frontend. Porém, o `evolutionApi.ts` já NÃO usa essas variáveis — ele roteia tudo pelo proxy Supabase corretamente. Nenhum arquivo `.ts`/`.tsx` referencia `VITE_EVOLUTION_API`.
 
-### 4. Página `src/pages/SuperAdmin.tsx`
-- Verifica role via hook; redireciona se não for admin
-- Funcionalidades:
-  - **Lista de consultores**: nome, email, licença, data de cadastro, status (aprovado/pendente)
-  - **Botão aprovar/reprovar**: alterna campo `approved` do consultor
-  - **Métricas globais**: total de consultores, total de clientes, consultores pendentes
-  - **Gerenciar roles**: promover/remover admins
+**Correção:** Remover as linhas `VITE_EVOLUTION_API_URL` e `VITE_EVOLUTION_API_KEY` do `.env` para limpeza. Não afetam funcionalidade, mas são lixo que pode confundir.
 
-### 5. Proteção da página `/admin`
-- No `Admin.tsx`, após carregar o consultor, verificar se `approved === true`
-- Se não aprovado, mostrar tela de "Aguardando aprovação" e bloquear acesso
+---
 
-### 6. `src/App.tsx`
-- Adicionar rota `/super-admin` → `SuperAdmin`
+**3. OK — Evolution API proxy (`evolution-proxy`)**
 
-### Detalhes técnicos
-- Role verificada no servidor via SECURITY DEFINER (impossível burlar no client)
-- Campo `approved` controlado apenas pelo super admin via RLS
-- A página `/admin` atual NÃO será alterada em funcionalidade, apenas adicionada a verificação de aprovação
-- Login do super admin usa a mesma tela `/auth`, mas ao detectar role admin, pode navegar para `/super-admin`
+- Usa `Deno.env.get("EVOLUTION_API_URL")` e `Deno.env.get("EVOLUTION_API_KEY")` — secrets do Supabase ✅
+- Autenticação via `supabase.auth.getUser(token)` ✅
+- Timeout/retry/graceful responses implementados ✅
+- Logs mostram que está funcionando (auth OK, timeouts da VPS são tratados)
 
+---
+
+**4. OK — Upload Media (`upload-media`)**
+
+- Usa `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` do Deno env ✅
+- Upload para Supabase Storage bucket `whatsapp-media` ✅
+- Não depende de MinIO ✅
+
+---
+
+**5. OK — Sync iGreen (`sync-igreen-customers`)**
+
+- Usa `IGREEN_PORTAL_EMAIL` e `IGREEN_PORTAL_PASSWORD` do Deno env ✅
+- Permite override por body da request (per-consultant) ✅
+- Secrets existem no Supabase ✅
+
+---
+
+**6. OK — CRM Auto Progress (`crm-auto-progress`)**
+
+- Usa `EVOLUTION_API_URL` e `EVOLUTION_API_KEY` do Deno env ✅
+- Chama Evolution API diretamente (server-side, sem CORS) ✅
+
+---
+
+**7. OK — Secrets do Supabase**
+
+Todos os secrets necessários existem: `EVOLUTION_API_URL`, `EVOLUTION_API_KEY`, `MINIO_SERVER_URL`, `MINIO_BUCKET`, `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `IGREEN_PORTAL_EMAIL`, `IGREEN_PORTAL_PASSWORD`, `SUPABASE_SERVICE_ROLE_KEY`.
+
+---
+
+**8. ATENÇÃO — MinIO secrets existem mas nenhuma Edge Function as usa**
+
+Os secrets `MINIO_SERVER_URL`, `MINIO_BUCKET`, `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD` estão configurados mas nenhuma das Edge Functions atuais referencia MinIO. O upload foi migrado para Supabase Storage. Esses secrets são inativos — podem ser mantidos para uso futuro.
+
+---
+
+### Resumo de Ações
+
+| # | Problema | Severidade | Ação |
+|---|----------|-----------|------|
+| 1 | SuperAdmin não vê outros consultores (RLS) | CRÍTICO | Criar policies RLS para admins |
+| 2 | `VITE_EVOLUTION_*` no `.env` (não usadas) | Baixa | Remover linhas do `.env` |
+| 3-7 | Proxy, Upload, Sync, CRM, Secrets | OK | Nenhuma |
+| 8 | Secrets MinIO sem uso | Info | Manter para referência |
+
+### Implementação
+
+1. **Migração SQL** — Adicionar 2 policies RLS na tabela `consultants` para admins
+2. **`.env`** — Remover `VITE_EVOLUTION_API_URL` e `VITE_EVOLUTION_API_KEY`
+
+Total: 2 alterações. O problema crítico é a RLS que impede o SuperAdmin de funcionar.
