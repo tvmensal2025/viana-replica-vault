@@ -249,7 +249,7 @@ const Admin = () => {
     );
   }
 
-  if (approved === false) {
+  if (!approved) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-background px-4">
         <img src="/images/logo-colorida-igreen.png" alt="iGreen" className="w-32" />
