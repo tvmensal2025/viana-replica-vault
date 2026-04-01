@@ -1,49 +1,40 @@
 
 
-## Problema Identificado
+# Plan: Otimizar conexão WhatsApp e envio em massa
 
-O `useUserRole` hook tem um bug de race condition:
+## Problemas identificados
 
-1. Inicialmente `userId` é `null` → `loading` é setado para `false`
-2. Quando `userId` chega, o effect re-executa, mas `loading` continua `false` enquanto a query RPC ainda está em andamento
-3. O `SuperAdmin.tsx` vê `roleLoading=false` + `isAdmin=false` e redireciona imediatamente com "Acesso negado"
+1. **Init demora muito**: Na montagem, o hook faz `confirmConnectedState` com ate 3 tentativas de 1200ms cada, somando 3.6s+ antes de mostrar qualquer coisa. Se a API estiver lenta, fica travado em "Verificando conexao..."
 
-A função `has_role` no banco funciona corretamente — retorna `true` para rafael.ids@icloud.com. O problema é puramente de timing no frontend.
+2. **Polling agressivo em estado instavel**: Quando o estado e "unknown" ou "connecting", o polling roda a cada 5s com grace periods, gerando muitas requisicoes que sobrecarregam a API
 
-## Plano
+3. **Envio em massa sem randomizacao**: O intervalo fixo de 20s entre mensagens e previsivel, o que pode causar bloqueio pelo WhatsApp por deteccao de automacao
 
-### 1. Corrigir o hook `useUserRole`
+4. **Sem timeout no init**: Se a API Evolution estiver fora, o init pode ficar pendurado indefinidamente
 
-Resetar `loading` para `true` quando `userId` muda, antes de iniciar a query:
+## Mudancas propostas
 
-```typescript
-useEffect(() => {
-  if (!userId) {
-    setIsAdmin(false);
-    setLoading(false);
-    return;
-  }
-  
-  setLoading(true); // ← fix: reset loading quando userId muda
-  
-  const checkRole = async () => { ... };
-  checkRole();
-}, [userId]);
-```
+### 1. Otimizar init do useWhatsApp (`src/hooks/useWhatsApp.ts`)
+- Reduzir `confirmConnectedState` no init para 1 tentativa (sem re-check)
+- Se o primeiro `checkState` retornar "open", conectar imediatamente sem confirmar
+- Adicionar timeout global de 8s no init - se exceder, mostrar estado desconectado ao inves de ficar carregando
+- Se estado for "close" ou "unknown", ir direto para desconectado sem tentar QR
 
-### 2. Adicionar as 3 policies de admin no `message_templates`
+### 2. Reduzir agressividade do polling
+- Aumentar intervalo de grace period de 5s para 10s
+- Aumentar polling quando em estado "close" de 3s para 8s
+- Limitar tentativas de QR automatico antes de parar e mostrar botao manual
 
-Migração SQL para permitir que admins gerenciem todos os templates:
-- **Admins update all templates**
-- **Admins delete all templates** 
-- **Admins insert templates**
+### 3. Randomizar intervalo no envio em massa (`src/components/whatsapp/BulkSendPanel.tsx`)
+- Mudar `SEND_INTERVAL_MS` de 20s fixo para intervalo randomizado entre 18s-35s
+- Adicionar variacao progressiva: apos cada 10 mensagens, adicionar 5s extra ao intervalo base
+- Isso simula comportamento humano e reduz risco de bloqueio
 
-### 3. Sobre a página de controle de novos cadastros
+### 4. Adicionar delay entre mensagens multiplas do mesmo contato
+- No loop de envio (audio -> imagem -> texto), ja existe delay entre tipos de midia
+- Adicionar delay randomizado de 2-4s entre cada tipo (atualmente fixo em 0s no bulk send)
 
-A página `/super-admin` já existe com funcionalidade para:
-- Ver todos os consultores cadastrados
-- Aprovar/revogar acesso de cada consultor
-- Ver estatísticas (total, aprovados, pendentes)
-
-Com o fix do hook, o Rafael terá acesso a essa página normalmente.
+## Arquivos a editar
+- `src/hooks/useWhatsApp.ts` - Init e polling
+- `src/components/whatsapp/BulkSendPanel.tsx` - Intervalos de envio
 
