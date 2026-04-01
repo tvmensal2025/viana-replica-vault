@@ -59,8 +59,15 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [devolutivaFilter, setDevolutivaFilter] = useState<string>("all");
+  const [licenciadoFilter, setLicenciadoFilter] = useState<string>("all");
   const [viewingCustomer, setViewingCustomer] = useState<Customer | null>(null);
   const { toast } = useToast();
+
+  const licenciadoOptions = useMemo(() => {
+    const names = new Set<string>();
+    customers.forEach(c => { if (c.registered_by_name) names.add(c.registered_by_name); });
+    return Array.from(names).sort();
+  }, [customers]);
 
   const filteredCustomers = useMemo(() => {
     let list = customers;
@@ -72,6 +79,11 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
     if (statusFilter === "devolutiva" && devolutivaFilter !== "all") {
       list = list.filter(c => matchDevolutiva(c.devolutiva, devolutivaFilter));
     }
+
+    if (licenciadoFilter !== "all") {
+      list = list.filter(c => c.registered_by_name === licenciadoFilter);
+    }
+
     return list;
   }, [customers, statusFilter, devolutivaFilter]);
 
@@ -108,6 +120,7 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
   function handleStatusFilter(val: string) {
     setStatusFilter(val as StatusFilter);
     setDevolutivaFilter("all");
+    setLicenciadoFilter("all");
     setSelectedIds(new Set());
   }
 
@@ -244,7 +257,24 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
           </div>
         )}
 
-        {/* Select all */}
+        {/* Licenciado filter */}
+        {licenciadoOptions.length > 0 && (
+          <div className="mb-3">
+            <Select value={licenciadoFilter} onValueChange={(v) => { setLicenciadoFilter(v); setSelectedIds(new Set()); }} disabled={isSending}>
+              <SelectTrigger className="rounded-xl bg-secondary/50 border-border/50 text-sm">
+                <Users className="w-3.5 h-3.5 text-muted-foreground mr-2" />
+                <SelectValue placeholder="Filtrar por licenciado..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os licenciados</SelectItem>
+                {licenciadoOptions.map(name => (
+                  <SelectItem key={name} value={name}>{name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
         <div className="flex items-center justify-between mb-3 px-1">
           <label className="flex items-center gap-2.5 cursor-pointer">
             <Checkbox checked={allSelected} onCheckedChange={toggleAll} disabled={isSending || filteredCustomers.length === 0} />
