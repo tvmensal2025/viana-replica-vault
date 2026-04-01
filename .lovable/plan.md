@@ -1,32 +1,34 @@
 
 
-## Diagnóstico: Imagens dos templates não foram salvas
+## Filtro multi-licenciado no Envio em Massa
 
-### Problema encontrado
-Consultei o banco de dados e confirmei: **todos os 4 templates de áudio têm `image_url = NULL`**.
+### Problema atual
+1. O filtro de licenciado só permite selecionar **um** de cada vez (usa `Select` single-value)
+2. Bug existente: `licenciadoFilter` está **ausente** do array de dependências do `useMemo` (linha 88), o que pode causar filtragem desatualizada
+3. Ao trocar status, o filtro de licenciado é resetado — isso deve continuar funcionando com multi-seleção
 
-| Template | media_type | image_url |
-|----------|-----------|-----------|
-| Cadastrado reprovado | audio | NULL |
-| Cadastro aprovado | audio | NULL |
-| Fatura Ilegível | audio | NULL |
-| Fatura com Débito | audio | NULL |
+### Plano de implementação
 
-As imagens foram enviadas ao Supabase Storage com sucesso (o upload funcionou), mas o **update no banco foi bloqueado pela política de RLS** que estava incorreta na hora em que você tentou salvar. 
+**Arquivo**: `src/components/whatsapp/BulkSendPanel.tsx`
 
-A correção de RLS que acabamos de aplicar já está ativa no banco. Porém as imagens que você adicionou antes dessa correção **não foram gravadas**.
+1. **Trocar estado de `string` para `Set<string>`**
+   - `licenciadoFilter` passa de `useState<string>("all")` para `useState<Set<string>>(new Set())`
+   - Set vazio = "todos os licenciados" (sem filtro)
 
-### Plano
+2. **Substituir `Select` por lista de checkboxes com dropdown**
+   - Usar um `Popover` + lista de `Checkbox` para cada licenciado
+   - Mostrar no trigger quantos estão selecionados (ex: "3 licenciados" ou "Todos os licenciados")
+   - Botões "Selecionar Todos" e "Limpar" no topo do popover
 
-#### Opção A — Você re-adiciona as imagens (recomendado)
-Basta clicar em "Adicionar imagem" em cada um dos 4 templates novamente. Agora o sistema vai:
-1. Fazer upload → funciona (já funcionava)
-2. Salvar `image_url` no banco → **agora funciona** com a RLS corrigida
-3. Se falhar, mostrar um erro visível (toast vermelho)
+3. **Atualizar lógica de filtro**
+   - `if (licenciadoFilter.size > 0)` → filtra clientes cujo `registered_by_name` está no Set
+   - Adicionar `licenciadoFilter` no array de dependências do `useMemo`
 
-#### Opção B — Corrigir via SQL (automático)
-Se você souber quais imagens foram para quais templates, posso rodar um UPDATE direto no banco para preencher os `image_url` dos 4 templates. Mas como os uploads anteriores geraram URLs que não sabemos qual é qual, é mais seguro re-adicionar manualmente.
+4. **Corrigir reset ao trocar status**
+   - `handleStatusFilter` reseta para `new Set()` em vez de `"all"`
 
-### Melhoria adicional no código
-Adicionar um **toast de sucesso** quando a imagem for salva com sucesso no `AddImageToTemplate`, para dar feedback claro ao usuário de que a operação completou.
+### Detalhes técnicos
+- Componentes já disponíveis: `Popover`, `PopoverTrigger`, `PopoverContent` de `@/components/ui/popover`, `Checkbox` de `@/components/ui/checkbox`
+- Nenhuma dependência nova necessária
+- Corrige o bug de dependência do `useMemo` que existe hoje
 
