@@ -359,7 +359,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       // Step 3: Instance doesn't exist or state is uncertain — create it
       addLog("Criando instância...");
       try {
-        const response = await withTimeout(createInstance(name), 35000);
+        const response = await withTimeout(createInstance(name), 12000);
         if (!mountedRef.current) return;
 
         await saveInstance(name);
