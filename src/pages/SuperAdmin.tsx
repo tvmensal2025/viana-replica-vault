@@ -23,9 +23,11 @@ interface ConsultantRow {
 
 const SuperAdmin = () => {
   const [userId, setUserId] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [consultants, setConsultants] = useState<ConsultantRow[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const accessDeniedToastShownRef = useRef(false);
   const { isAdmin, loading: roleLoading } = useUserRole(userId);
   const navigate = useNavigate();
   const { toast } = useToast();
