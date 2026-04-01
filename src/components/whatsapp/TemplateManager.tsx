@@ -95,6 +95,19 @@ export function TemplateManager({ templates, isLoading, onCreateTemplate, onUpda
   const [isSaving, setIsSaving] = useState(false);
   const [previewTemplate, setPreviewTemplate] = useState<MessageTemplate | null>(null);
 
+  // Edit state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editContent, setEditContent] = useState("");
+  const [editMediaUrl, setEditMediaUrl] = useState("");
+  const [editImageUrl, setEditImageUrl] = useState("");
+  const [editMediaType, setEditMediaType] = useState<TemplateMediaType>("text");
+  const [isEditSaving, setIsEditSaving] = useState(false);
+  const [isEditUploading, setIsEditUploading] = useState(false);
+  const [editUploadProgress, setEditUploadProgress] = useState(0);
+  const editFileRef = useRef<HTMLInputElement>(null);
+  const editImageRef = useRef<HTMLInputElement>(null);
+
   // Upload state
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
