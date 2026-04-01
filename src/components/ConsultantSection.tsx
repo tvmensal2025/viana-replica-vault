@@ -25,7 +25,7 @@ const ConsultantSection = ({
   const CADASTRO = cadastroUrl || DEFAULT_CADASTRO_URL;
   const WHATSAPP = whatsappUrl || DEFAULT_WHATSAPP_URL;
   const photo = photoUrl || consultantDefault;
-  const displayId = igreenId || "126928";
+  const displayId = igreenId || "";
 
   const handleClick = (target: string) => {
     if (consultantId) trackClickEvent(consultantId, target, "client");
