@@ -26,7 +26,8 @@ import {
   Zap,
 } from "lucide-react";
 import { StageAutoMessageConfig } from "./StageAutoMessageConfig";
-import { sendTextMessage, sendMedia, sendAudio } from "@/services/evolutionApi";
+import { sendWhatsAppMessage, resolveRecipient } from "@/services/messageSender";
+import type { MediaCategory } from "@/services/messageSender";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 
 type KanbanStageRow = Tables<"kanban_stages">;
@@ -119,33 +120,35 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
     const hasContent = stage.auto_message_text || stage.auto_message_media_url || (stage as any).auto_message_image_url;
     if (!stage.auto_message_enabled || !hasContent || !instanceName || !deal.remote_jid) return;
 
-    const phone = deal.remote_jid.split("@")[0];
+    const phone = resolveRecipient(deal.remote_jid);
     const messageText = (stage.auto_message_text || "")
       .replace(/\{\{nome\}\}/g, phone)
       .replace(/\{\{telefone\}\}/g, phone);
-    
-    console.log("[KanbanBoard] sendAutoMessage:", { stage: stage.label, type: stage.auto_message_type, hasText: !!messageText, hasMedia: !!stage.auto_message_media_url, hasImage: !!(stage as any).auto_message_image_url, phone, instanceName });
 
     try {
       // Send optional image first
       const imageUrl = (stage as any).auto_message_image_url;
       if (imageUrl) {
-        await sendMedia(instanceName, phone, imageUrl, "", "image");
+        const imgResult = await sendWhatsAppMessage({ instanceName, phone, mediaCategory: "image", mediaUrl: imageUrl });
+        if (imgResult.status === "failed") throw new Error(imgResult.error);
       }
 
-      if (stage.auto_message_type === "text" || !stage.auto_message_type) {
-        await sendTextMessage(instanceName, phone, messageText);
-      } else if (stage.auto_message_type === "image" && stage.auto_message_media_url) {
-        await sendMedia(instanceName, phone, stage.auto_message_media_url, messageText, "image");
-      } else if (stage.auto_message_type === "video" && stage.auto_message_media_url) {
-        await sendMedia(instanceName, phone, stage.auto_message_media_url, messageText, "video");
-      } else if (stage.auto_message_type === "audio" && stage.auto_message_media_url) {
-        await sendAudio(instanceName, phone, stage.auto_message_media_url);
-        // For audio, send text as separate message if present
+      const mediaCategory: MediaCategory = (stage.auto_message_type as MediaCategory) || "text";
+
+      if (mediaCategory === "audio" && stage.auto_message_media_url) {
+        const audioResult = await sendWhatsAppMessage({ instanceName, phone, mediaCategory: "audio", mediaUrl: stage.auto_message_media_url });
+        if (audioResult.status === "failed") throw new Error(audioResult.error);
         if (messageText) {
-          await sendTextMessage(instanceName, phone, messageText);
+          await sendWhatsAppMessage({ instanceName, phone, mediaCategory: "text", text: messageText });
         }
+      } else if ((mediaCategory === "image" || mediaCategory === "video") && stage.auto_message_media_url) {
+        const mediaResult = await sendWhatsAppMessage({ instanceName, phone, mediaCategory, mediaUrl: stage.auto_message_media_url, text: messageText });
+        if (mediaResult.status === "failed") throw new Error(mediaResult.error);
+      } else {
+        const textResult = await sendWhatsAppMessage({ instanceName, phone, mediaCategory: "text", text: messageText });
+        if (textResult.status === "failed") throw new Error(textResult.error);
       }
+
       toast({ title: `✅ Msg automática enviada (${stage.label})` });
     } catch {
       toast({ title: "Erro ao enviar msg automática", variant: "destructive" });

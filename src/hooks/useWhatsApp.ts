@@ -73,6 +73,8 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
   const mountedRef = useRef(true);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lockRef = useRef(false);
+  const graceCountRef = useRef(0);
+  const instanceSavedRef = useRef(false);
 
   const addLog = useCallback((msg: string) => {
     setConnectionLog((prev) => [...prev.slice(-14), logEntry(sanitize(msg))]);
@@ -130,7 +132,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       if (!mountedRef.current) return;
 
       if (state === "open") {
-        // Connected! Update UI and keep polling at slow rate
+        graceCountRef.current = 0;
         setConnectionStatus((prev) => {
           if (prev !== "connected") {
             addLog("✅ WhatsApp conectado!");
@@ -140,40 +142,40 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
           }
           return "connected";
         });
-        await saveInstance(name);
-        pollRef.current = setTimeout(poll, 30000);
+        if (!instanceSavedRef.current) {
+          await saveInstance(name);
+          instanceSavedRef.current = true;
+        }
+        pollRef.current = setTimeout(poll, 60000);
         return;
       }
 
-      if (state === "connecting") {
-        // Instance exists but not fully connected — try to get QR
+      if (state === "connecting" || state === "unknown") {
+        // Grace period: if we were connected, tolerate 2 transient checks
+        if (connectionStatus === "connected" || graceCountRef.current < 2) {
+          graceCountRef.current++;
+          pollRef.current = setTimeout(poll, 5000);
+          return;
+        }
+        // After grace period, transition to connecting and try QR
         setConnectionStatus("connecting");
         const qr = await tryGetQr(name);
         if (!mountedRef.current) return;
-
         if (qr) {
           setQrCode(qr);
           setQrGeneratedAt(Date.now());
           setError(null);
           addLog("📱 QR Code gerado — escaneie com seu celular");
         }
-        // Keep polling fast
-        pollRef.current = setTimeout(poll, 3000);
-        return;
-      }
-
-      if (state === "unknown") {
-        // Timeout or network issue — don't change status, just retry
         pollRef.current = setTimeout(poll, 5000);
         return;
       }
 
-      // state === "close" — instance exists but disconnected
-      // Try to get QR to reconnect
+      // state === "close"
+      graceCountRef.current = 0;
       setConnectionStatus("connecting");
       const qr = await tryGetQr(name);
       if (!mountedRef.current) return;
-
       if (qr) {
         setQrCode(qr);
         setQrGeneratedAt(Date.now());

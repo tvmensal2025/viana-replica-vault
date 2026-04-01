@@ -95,6 +95,8 @@ interface PicCacheEntry {
   fetchedAt: number;
 }
 
+const GLOBAL_PIC_PAUSE_TTL = 5 * 60 * 1000; // 5 minutes
+
 export function useChats(instanceName: string | null) {
   const [chats, setChats] = useState<ChatItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -104,6 +106,7 @@ export function useChats(instanceName: string | null) {
   const profilePicCacheRef = useRef<Map<string, PicCacheEntry>>(new Map());
   const fetchingChatsRef = useRef(false);
   const fetchingPicsRef = useRef(false);
+  const globalPicPauseUntilRef = useRef(0);
 
   const fetchContacts = useCallback(async () => {
     if (!instanceName) return;
@@ -162,7 +165,7 @@ export function useChats(instanceName: string | null) {
         })
         .slice(0, 3);
 
-      if (missingPics.length > 0 && instanceName) {
+      if (missingPics.length > 0 && instanceName && now >= globalPicPauseUntilRef.current) {
         fetchingPicsRef.current = true;
         processWithConcurrency(missingPics, 1, async (chat) => {
           const targetJid = chat.sendTargetJid || chat.remoteJid;
@@ -182,6 +185,9 @@ export function useChats(instanceName: string | null) {
             setChats((prev) =>
               prev.map((c) => (picMap.has(c.remoteJid) ? { ...c, profilePicUrl: picMap.get(c.remoteJid) } : c))
             );
+          } else {
+            // All returned null — pause globally for 5 minutes
+            globalPicPauseUntilRef.current = Date.now() + GLOBAL_PIC_PAUSE_TTL;
           }
         }).catch(() => { /* non-critical */ })
           .finally(() => { fetchingPicsRef.current = false; });

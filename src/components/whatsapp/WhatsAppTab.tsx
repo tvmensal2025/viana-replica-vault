@@ -195,7 +195,7 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
     } catch {
       // silently handle
     }
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     fetchCustomers();
