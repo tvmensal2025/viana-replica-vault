@@ -14,15 +14,28 @@ const Auth = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  const checkAdminAndNavigate = async (userId: string) => {
+    try {
+      const { data } = await (supabase as any).rpc("has_role", { _user_id: userId, _role: "admin" });
+      if (data === true) {
+        navigate("/super-admin");
+      } else {
+        navigate("/admin");
+      }
+    } catch {
+      navigate("/admin");
+    }
+  };
+
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session) {
-        navigate("/admin");
+        checkAdminAndNavigate(session.user.id);
       }
     });
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
-        navigate("/admin");
+        checkAdminAndNavigate(session.user.id);
       }
     });
     return () => subscription.unsubscribe();
