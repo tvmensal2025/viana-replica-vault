@@ -1,0 +1,79 @@
+import { useRef, useState } from "react";
+import { Play } from "lucide-react";
+
+const MINIO_BASE = "https://igreen-minio.b099mi.easypanel.host/igreen";
+
+const videos = [
+  { src: `${MINIO_BASE}/noticia1.mp4`, label: "Reportagem 1" },
+  { src: `${MINIO_BASE}/noticia2.mp4`, label: "Reportagem 2" },
+  { src: `${MINIO_BASE}/noticia3.mp4`, label: "Reportagem 3" },
+  { src: `${MINIO_BASE}/noticia5.mp4`, label: "Reportagem 4" },
+  { src: `${MINIO_BASE}/noticia6.mp4`, label: "Reportagem 5" },
+  { src: `${MINIO_BASE}/noticia7.mp4`, label: "Reportagem 6" },
+  { src: `${MINIO_BASE}/noticia8.mp4`, label: "Reportagem 7" },
+];
+
+function NewsVideoCard({ src, label }: { src: string; label: string }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [playing, setPlaying] = useState(false);
+
+  const handlePlay = () => {
+    if (videoRef.current) {
+      videoRef.current.play();
+      setPlaying(true);
+    }
+  };
+
+  return (
+    <div className="group relative rounded-2xl overflow-hidden border border-primary/10 bg-card/50 backdrop-blur-sm transition-all duration-300 hover:border-primary/30 hover:scale-[1.02]" style={{ boxShadow: 'var(--shadow-card)' }}>
+      <div className="relative">
+        <video
+          ref={videoRef}
+          controls={playing}
+          preload="metadata"
+          className="w-full aspect-video object-cover"
+          onPlay={() => setPlaying(true)}
+          onPause={() => setPlaying(false)}
+        >
+          <source src={src} type="video/mp4" />
+        </video>
+        {!playing && (
+          <button
+            onClick={handlePlay}
+            className="absolute inset-0 flex items-center justify-center bg-black/30 transition-all duration-300 group-hover:bg-black/20"
+          >
+            <div className="w-14 h-14 rounded-full bg-primary/90 flex items-center justify-center shadow-lg transition-transform duration-300 group-hover:scale-110">
+              <Play className="w-6 h-6 text-primary-foreground ml-1" fill="currentColor" />
+            </div>
+          </button>
+        )}
+      </div>
+      <div className="px-3 py-2 text-center">
+        <span className="text-xs text-muted-foreground">{label}</span>
+      </div>
+    </div>
+  );
+}
+
+const NewsSection = () => (
+  <section className="section-gradient relative overflow-hidden">
+    <div className="absolute inset-0 pointer-events-none opacity-[0.03]" style={{ background: 'radial-gradient(circle at 50% 80%, hsl(130, 100%, 36%), transparent 50%)' }} />
+    <div className="section-container relative z-10">
+      <div className="badge-green mx-auto mb-6">Reportagens</div>
+      <h2 className="section-heading mb-4">
+        Reportagens sobre os descontos na conta de luz dos nossos clientes
+      </h2>
+      <p className="text-center text-muted-foreground text-lg mb-14">
+        Veja como a mídia tem falado sobre a economia na conta de luz proporcionada pela iGreen Energy
+      </p>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 max-w-7xl mx-auto">
+        {videos.map((v, i) => (
+          <NewsVideoCard key={i} src={v.src} label={v.label} />
+        ))}
+      </div>
+    </div>
+  </section>
+);
+
+export default NewsSection;
