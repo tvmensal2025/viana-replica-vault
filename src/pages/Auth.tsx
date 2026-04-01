@@ -51,6 +51,8 @@ const Auth = () => {
         if (error) throw error;
         toast({ title: "Login realizado com sucesso!" });
       } else {
+        await supabase.auth.signOut();
+
         const { error } = await supabase.auth.signUp({
           email,
           password,
@@ -59,7 +61,7 @@ const Auth = () => {
         if (error) throw error;
         toast({
           title: "Cadastro realizado!",
-          description: "Verifique seu email para confirmar a conta.",
+          description: "Conta criada. Aguarde a aprovação do Super Admin para acessar o painel.",
         });
       }
     } catch (error: unknown) {
