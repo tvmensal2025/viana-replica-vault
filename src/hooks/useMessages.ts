@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
   findMessages,
-  sendTextMessage,
   markAsRead,
   getBase64FromMediaMessage,
   type EvolutionMessage,
 } from "@/services/evolutionApi";
+import { sendWhatsAppMessage, resolveRecipient } from "@/services/messageSender";
 import { createLogger } from "@/lib/logger";
 
 const logger = createLogger("useMessages");
@@ -249,17 +249,28 @@ export function useMessages(
         throw new Error("Destinatário inválido para envio");
       }
 
-      const recipient = targetJid.endsWith("@s.whatsapp.net")
-        ? targetJid.split("@")[0]
-        : targetJid.endsWith("@lid")
-          ? targetJid
-          : targetJid;
+      const recipient = resolveRecipient(targetJid);
 
       logger.debug("sending to:", recipient, "targetJid:", targetJid, "instance:", instanceName, "text:", text.slice(0, 50));
 
       try {
-        await sendTextMessage(instanceName, recipient, text);
-        logger.debug("message sent successfully");
+        const result = await sendWhatsAppMessage({
+          instanceName,
+          phone: recipient,
+          mediaCategory: "text",
+          text,
+        });
+
+        if (result.status === "failed") {
+          throw new Error(result.error || "Falha no envio");
+        }
+
+        if (result.status === "timeout") {
+          logger.warn("message send pending confirmation", { recipient, remoteJid });
+        } else {
+          logger.debug("message sent successfully");
+        }
+
         setMessages((prev) => [
           ...prev,
           {
