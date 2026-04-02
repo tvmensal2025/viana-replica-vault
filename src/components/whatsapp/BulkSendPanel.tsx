@@ -33,7 +33,7 @@ function getRandomInterval(messageIndex: number): number {
   return Math.round(base + progressive);
 }
 
-type StatusFilter = "all" | "approved" | "rejected" | "pending" | "approved_devolutiva";
+type StatusFilter = "all" | "approved" | "rejected" | "pending";
 
 const DEVOLUTIVA_CATEGORIES = [
   { key: "fatura_ilegivel", label: "Fatura Ilegível", match: ["fatura ilegível", "fatura ilegivel"] },
@@ -84,9 +84,7 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
     if (statusFilter === "approved") list = list.filter(c => c.status === "approved");
     else if (statusFilter === "rejected") list = list.filter(c => c.status === "rejected");
     else if (statusFilter === "pending") list = list.filter(c => c.status === "pending");
-    else if (statusFilter === "approved_devolutiva") list = list.filter(c => c.status === "approved" && c.devolutiva && c.devolutiva.trim() !== "");
-
-    if (statusFilter === "approved_devolutiva" && devolutivaFilter !== "all") {
+    if (devolutivaFilter !== "all") {
       list = list.filter(c => matchDevolutiva(c.devolutiva, devolutivaFilter));
     }
 
@@ -234,10 +232,9 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
           </div>
           {[
             { key: "all", label: "Todos" },
-            { key: "approved", label: "Aprovados" },
-            { key: "rejected", label: "Reprovados" },
-            { key: "pending", label: "Pendentes" },
-            { key: "approved_devolutiva", label: "Aprovado + Devolutiva" },
+            { key: "approved", label: "Aprovado" },
+            { key: "rejected", label: "Reprovado" },
+            { key: "pending", label: "Pendente" },
           ].map(f => (
             <button
               key={f.key}
@@ -254,22 +251,6 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
           ))}
         </div>
 
-        {/* Devolutiva sub-filter */}
-        {statusFilter === "approved_devolutiva" && (
-          <div className="mb-3">
-            <Select value={devolutivaFilter} onValueChange={setDevolutivaFilter} disabled={isSending}>
-              <SelectTrigger className="rounded-xl bg-secondary/50 border-border/50 text-sm">
-                <SelectValue placeholder="Tipo de devolutiva..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas as devolutivas</SelectItem>
-                {DEVOLUTIVA_CATEGORIES.map(cat => (
-                  <SelectItem key={cat.key} value={cat.key}>{cat.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
 
         {/* Licenciado multi-select filter */}
         {licenciadoOptions.length > 0 && (
