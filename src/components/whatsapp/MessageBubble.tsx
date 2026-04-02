@@ -252,7 +252,7 @@ function StickerViewer({ message, onLoadMedia }: { message: ChatMessage; onLoadM
   }, [src, onLoadMedia, message.id]);
 
   useEffect(() => {
-    if (!src && message.fromMe && onLoadMedia) {
+    if (!src && onLoadMedia) {
       handleLoad();
     }
   }, []);
