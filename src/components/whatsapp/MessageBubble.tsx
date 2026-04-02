@@ -25,10 +25,16 @@ function StatusIcon({ status }: { status?: number }) {
   return null;
 }
 
+function isAccessibleUrl(url?: string): boolean {
+  if (!url) return false;
+  if (url.startsWith("data:")) return true;
+  if (url.startsWith("http") && !url.includes("mmg.whatsapp.net") && !url.includes("media-gru")) return true;
+  return false;
+}
+
 function AudioPlayer({ message, onLoadMedia }: { message: ChatMessage; onLoadMedia?: (id: string) => Promise<string | null> }) {
   const [audioSrc, setAudioSrc] = useState<string | null>(
-    message.mediaUrl?.startsWith("data:") || message.mediaUrl?.startsWith("http")
-      ? message.mediaUrl : null
+    isAccessibleUrl(message.mediaUrl) ? message.mediaUrl! : null
   );
   const [loading, setLoading] = useState(false);
 
@@ -41,7 +47,7 @@ function AudioPlayer({ message, onLoadMedia }: { message: ChatMessage; onLoadMed
   }, [audioSrc, onLoadMedia, message.id]);
 
   useEffect(() => {
-    if (!audioSrc && message.fromMe && onLoadMedia) {
+    if (!audioSrc && onLoadMedia) {
       handleLoad();
     }
   }, []);
@@ -75,8 +81,7 @@ function AudioPlayer({ message, onLoadMedia }: { message: ChatMessage; onLoadMed
 
 function ImageViewer({ message, onLoadMedia }: { message: ChatMessage; onLoadMedia?: (id: string) => Promise<string | null> }) {
   const [imgSrc, setImgSrc] = useState<string | null>(
-    message.mediaUrl?.startsWith("data:") || message.mediaUrl?.startsWith("http")
-      ? message.mediaUrl : null
+    isAccessibleUrl(message.mediaUrl) ? message.mediaUrl! : null
   );
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -92,7 +97,7 @@ function ImageViewer({ message, onLoadMedia }: { message: ChatMessage; onLoadMed
   }, [imgSrc, onLoadMedia, message.id, loadAttempted]);
 
   useEffect(() => {
-    if (!imgSrc && message.fromMe && onLoadMedia) {
+    if (!imgSrc && onLoadMedia) {
       handleLoad();
     }
   }, []);
@@ -144,8 +149,7 @@ function ImageViewer({ message, onLoadMedia }: { message: ChatMessage; onLoadMed
 
 function VideoPlayer({ message, onLoadMedia }: { message: ChatMessage; onLoadMedia?: (id: string) => Promise<string | null> }) {
   const [videoSrc, setVideoSrc] = useState<string | null>(
-    message.mediaUrl?.startsWith("data:") || message.mediaUrl?.startsWith("http")
-      ? message.mediaUrl : null
+    isAccessibleUrl(message.mediaUrl) ? message.mediaUrl! : null
   );
   const [loading, setLoading] = useState(false);
 
@@ -158,7 +162,7 @@ function VideoPlayer({ message, onLoadMedia }: { message: ChatMessage; onLoadMed
   }, [videoSrc, onLoadMedia, message.id]);
 
   useEffect(() => {
-    if (!videoSrc && message.fromMe && onLoadMedia) {
+    if (!videoSrc && onLoadMedia) {
       handleLoad();
     }
   }, []);
@@ -181,8 +185,7 @@ function VideoPlayer({ message, onLoadMedia }: { message: ChatMessage; onLoadMed
 
 function DocumentViewer({ message, onLoadMedia }: { message: ChatMessage; onLoadMedia?: (id: string) => Promise<string | null> }) {
   const [docSrc, setDocSrc] = useState<string | null>(
-    message.mediaUrl?.startsWith("data:") || message.mediaUrl?.startsWith("http")
-      ? message.mediaUrl : null
+    isAccessibleUrl(message.mediaUrl) ? message.mediaUrl! : null
   );
   const [loading, setLoading] = useState(false);
   const isPdf = message.mediaMimetype?.includes("pdf") || message.fileName?.endsWith(".pdf");
@@ -196,7 +199,7 @@ function DocumentViewer({ message, onLoadMedia }: { message: ChatMessage; onLoad
   }, [docSrc, onLoadMedia, message.id]);
 
   useEffect(() => {
-    if (!docSrc && message.fromMe && onLoadMedia) {
+    if (!docSrc && onLoadMedia) {
       handleLoad();
     }
   }, []);
@@ -236,8 +239,7 @@ function DocumentViewer({ message, onLoadMedia }: { message: ChatMessage; onLoad
 
 function StickerViewer({ message, onLoadMedia }: { message: ChatMessage; onLoadMedia?: (id: string) => Promise<string | null> }) {
   const [src, setSrc] = useState<string | null>(
-    message.mediaUrl?.startsWith("data:") || message.mediaUrl?.startsWith("http")
-      ? message.mediaUrl : null
+    isAccessibleUrl(message.mediaUrl) ? message.mediaUrl! : null
   );
   const [loading, setLoading] = useState(false);
 
@@ -250,7 +252,7 @@ function StickerViewer({ message, onLoadMedia }: { message: ChatMessage; onLoadM
   }, [src, onLoadMedia, message.id]);
 
   useEffect(() => {
-    if (!src && message.fromMe && onLoadMedia) {
+    if (!src && onLoadMedia) {
       handleLoad();
     }
   }, []);
