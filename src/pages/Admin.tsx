@@ -377,6 +377,7 @@ const Admin = () => {
 
       if (savedConsultant?.photo_url) {
         setPhotoPreview(savedConsultant.photo_url);
+        setPhotoFile(null);
       }
 
       toast({
