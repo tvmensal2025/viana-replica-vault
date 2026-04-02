@@ -97,7 +97,7 @@ function ImageViewer({ message, onLoadMedia }: { message: ChatMessage; onLoadMed
   }, [imgSrc, onLoadMedia, message.id, loadAttempted]);
 
   useEffect(() => {
-    if (!imgSrc && message.fromMe && onLoadMedia) {
+    if (!imgSrc && onLoadMedia) {
       handleLoad();
     }
   }, []);
