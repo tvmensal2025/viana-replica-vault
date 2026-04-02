@@ -44,10 +44,7 @@ function normalizeEvolutionBaseUrl(rawUrl: string | undefined): string {
 
   if (!sanitized) return "";
 
-  if (sanitized.startsWith("http://")) {
-    return `https://${sanitized.slice("http://".length)}`;
-  }
-
+  // Respect the protocol exactly as configured — do NOT force http->https
   return sanitized;
 }
 
@@ -279,16 +276,16 @@ Deno.serve(async (req) => {
       );
     }
 
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    const authHeader = (req.headers.get("Authorization") || "").trim();
+    if (!authHeader || !authHeader.toLowerCase().startsWith("bearer ")) {
       return new Response(
-        JSON.stringify({ error: "Token de autenticação inválido ou ausente" }),
+        JSON.stringify({ error: "Token de autenticação inválido ou ausente", code: "auth_missing" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
-    const token = authHeader.replace("Bearer ", "");
+    const token = authHeader.replace(/^bearer\s+/i, "").trim();
     const {
       data: { user },
       error: authError,
@@ -297,7 +294,7 @@ Deno.serve(async (req) => {
     if (authError || !user) {
       console.log("[evolution-proxy] Auth failed:", authError?.message);
       return new Response(
-        JSON.stringify({ error: "Token de autenticação inválido ou ausente" }),
+        JSON.stringify({ error: "Token de autenticação inválido ou ausente", code: "auth_invalid" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
