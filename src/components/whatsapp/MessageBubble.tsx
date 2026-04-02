@@ -162,7 +162,7 @@ function VideoPlayer({ message, onLoadMedia }: { message: ChatMessage; onLoadMed
   }, [videoSrc, onLoadMedia, message.id]);
 
   useEffect(() => {
-    if (!videoSrc && message.fromMe && onLoadMedia) {
+    if (!videoSrc && onLoadMedia) {
       handleLoad();
     }
   }, []);
