@@ -185,8 +185,7 @@ function VideoPlayer({ message, onLoadMedia }: { message: ChatMessage; onLoadMed
 
 function DocumentViewer({ message, onLoadMedia }: { message: ChatMessage; onLoadMedia?: (id: string) => Promise<string | null> }) {
   const [docSrc, setDocSrc] = useState<string | null>(
-    message.mediaUrl?.startsWith("data:") || message.mediaUrl?.startsWith("http")
-      ? message.mediaUrl : null
+    isAccessibleUrl(message.mediaUrl) ? message.mediaUrl! : null
   );
   const [loading, setLoading] = useState(false);
   const isPdf = message.mediaMimetype?.includes("pdf") || message.fileName?.endsWith(".pdf");
