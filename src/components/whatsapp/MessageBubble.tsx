@@ -47,7 +47,7 @@ function AudioPlayer({ message, onLoadMedia }: { message: ChatMessage; onLoadMed
   }, [audioSrc, onLoadMedia, message.id]);
 
   useEffect(() => {
-    if (!audioSrc && message.fromMe && onLoadMedia) {
+    if (!audioSrc && onLoadMedia) {
       handleLoad();
     }
   }, []);
