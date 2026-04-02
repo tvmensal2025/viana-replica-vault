@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Check, CheckCheck, Clock, FileText, Image, Mic, Video, Play, Download, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ChatMessage } from "@/hooks/useMessages";
@@ -27,7 +27,8 @@ function StatusIcon({ status }: { status?: number }) {
 
 function AudioPlayer({ message, onLoadMedia }: { message: ChatMessage; onLoadMedia?: (id: string) => Promise<string | null> }) {
   const [audioSrc, setAudioSrc] = useState<string | null>(
-    message.mediaUrl?.startsWith("data:") ? message.mediaUrl : null
+    message.mediaUrl?.startsWith("data:") || message.mediaUrl?.startsWith("http")
+      ? message.mediaUrl : null
   );
   const [loading, setLoading] = useState(false);
 
@@ -38,6 +39,12 @@ function AudioPlayer({ message, onLoadMedia }: { message: ChatMessage; onLoadMed
     if (src) setAudioSrc(src);
     setLoading(false);
   }, [audioSrc, onLoadMedia, message.id]);
+
+  useEffect(() => {
+    if (!audioSrc && message.fromMe && onLoadMedia) {
+      handleLoad();
+    }
+  }, []);
 
   if (audioSrc) {
     return (
@@ -68,13 +75,13 @@ function AudioPlayer({ message, onLoadMedia }: { message: ChatMessage; onLoadMed
 
 function ImageViewer({ message, onLoadMedia }: { message: ChatMessage; onLoadMedia?: (id: string) => Promise<string | null> }) {
   const [imgSrc, setImgSrc] = useState<string | null>(
-    message.mediaUrl?.startsWith("data:") ? message.mediaUrl : null
+    message.mediaUrl?.startsWith("data:") || message.mediaUrl?.startsWith("http")
+      ? message.mediaUrl : null
   );
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [loadAttempted, setLoadAttempted] = useState(false);
 
-  // Load on demand only (no auto-load)
   const handleLoad = useCallback(async () => {
     if (imgSrc || !onLoadMedia || loadAttempted) return;
     setLoadAttempted(true);
@@ -83,6 +90,12 @@ function ImageViewer({ message, onLoadMedia }: { message: ChatMessage; onLoadMed
     if (src) setImgSrc(src);
     setLoading(false);
   }, [imgSrc, onLoadMedia, message.id, loadAttempted]);
+
+  useEffect(() => {
+    if (!imgSrc && message.fromMe && onLoadMedia) {
+      handleLoad();
+    }
+  }, []);
 
   if (loading) {
     return (
@@ -131,7 +144,8 @@ function ImageViewer({ message, onLoadMedia }: { message: ChatMessage; onLoadMed
 
 function VideoPlayer({ message, onLoadMedia }: { message: ChatMessage; onLoadMedia?: (id: string) => Promise<string | null> }) {
   const [videoSrc, setVideoSrc] = useState<string | null>(
-    message.mediaUrl?.startsWith("data:") ? message.mediaUrl : null
+    message.mediaUrl?.startsWith("data:") || message.mediaUrl?.startsWith("http")
+      ? message.mediaUrl : null
   );
   const [loading, setLoading] = useState(false);
 
@@ -142,6 +156,12 @@ function VideoPlayer({ message, onLoadMedia }: { message: ChatMessage; onLoadMed
     if (src) setVideoSrc(src);
     setLoading(false);
   }, [videoSrc, onLoadMedia, message.id]);
+
+  useEffect(() => {
+    if (!videoSrc && message.fromMe && onLoadMedia) {
+      handleLoad();
+    }
+  }, []);
 
   if (videoSrc) {
     return (
@@ -161,7 +181,8 @@ function VideoPlayer({ message, onLoadMedia }: { message: ChatMessage; onLoadMed
 
 function DocumentViewer({ message, onLoadMedia }: { message: ChatMessage; onLoadMedia?: (id: string) => Promise<string | null> }) {
   const [docSrc, setDocSrc] = useState<string | null>(
-    message.mediaUrl?.startsWith("data:") ? message.mediaUrl : null
+    message.mediaUrl?.startsWith("data:") || message.mediaUrl?.startsWith("http")
+      ? message.mediaUrl : null
   );
   const [loading, setLoading] = useState(false);
   const isPdf = message.mediaMimetype?.includes("pdf") || message.fileName?.endsWith(".pdf");
@@ -173,6 +194,12 @@ function DocumentViewer({ message, onLoadMedia }: { message: ChatMessage; onLoad
     if (src) setDocSrc(src);
     setLoading(false);
   }, [docSrc, onLoadMedia, message.id]);
+
+  useEffect(() => {
+    if (!docSrc && message.fromMe && onLoadMedia) {
+      handleLoad();
+    }
+  }, []);
 
   if (docSrc && isPdf) {
     return (
@@ -209,7 +236,8 @@ function DocumentViewer({ message, onLoadMedia }: { message: ChatMessage; onLoad
 
 function StickerViewer({ message, onLoadMedia }: { message: ChatMessage; onLoadMedia?: (id: string) => Promise<string | null> }) {
   const [src, setSrc] = useState<string | null>(
-    message.mediaUrl?.startsWith("data:") ? message.mediaUrl : null
+    message.mediaUrl?.startsWith("data:") || message.mediaUrl?.startsWith("http")
+      ? message.mediaUrl : null
   );
   const [loading, setLoading] = useState(false);
 
@@ -220,6 +248,12 @@ function StickerViewer({ message, onLoadMedia }: { message: ChatMessage; onLoadM
     if (result) setSrc(result);
     setLoading(false);
   }, [src, onLoadMedia, message.id]);
+
+  useEffect(() => {
+    if (!src && message.fromMe && onLoadMedia) {
+      handleLoad();
+    }
+  }, []);
 
   if (src) {
     return <img src={src} alt="sticker" className="max-w-[150px] max-h-[150px]" />;
