@@ -150,6 +150,8 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       if (state === "close") return "close";
       return "unknown";
     } catch (err) {
+      // Auth errors during polling are non-fatal — treat as transient "unknown"
+      if (isAuthError(err)) return "unknown";
       const msg = err instanceof Error ? err.message : "";
       if (isNotFoundError(msg)) return "missing";
       return "unknown";
