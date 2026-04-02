@@ -48,6 +48,10 @@ function isNotFoundError(message: string): boolean {
   return /404|not found|does not exist|instance.*not|inst[âa]ncia.*n[ãa]o/i.test(message);
 }
 
+function isAuthError(err: unknown): boolean {
+  return err instanceof EvolutionAuthError;
+}
+
 function isRecoverableConnectionError(message: string): boolean {
   return /timeout|connection closed|temporariamente|inst[áa]vel|erro de conex[ãa]o/i.test(message);
 }
