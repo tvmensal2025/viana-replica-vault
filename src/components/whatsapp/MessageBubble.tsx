@@ -199,7 +199,7 @@ function DocumentViewer({ message, onLoadMedia }: { message: ChatMessage; onLoad
   }, [docSrc, onLoadMedia, message.id]);
 
   useEffect(() => {
-    if (!docSrc && message.fromMe && onLoadMedia) {
+    if (!docSrc && onLoadMedia) {
       handleLoad();
     }
   }, []);
