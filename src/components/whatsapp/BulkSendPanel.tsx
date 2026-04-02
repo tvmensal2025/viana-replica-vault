@@ -1,5 +1,5 @@
 import { useState, useRef, useMemo } from "react";
-import { Users, Send, CheckSquare, Loader2, Sparkles, Megaphone, Timer, Shield, Filter, Eye, Phone, Mail, MapPin, Zap, ChevronDown, X } from "lucide-react";
+import { Users, Send, CheckSquare, Loader2, Sparkles, Megaphone, Timer, Shield, Filter, Eye, Phone, Mail, MapPin, Zap, ChevronDown, X, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
