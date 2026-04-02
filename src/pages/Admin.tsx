@@ -126,10 +126,13 @@ const Admin = () => {
       statusMap.set(s, (statusMap.get(s) || 0) + 1);
     }
     const statusLabels: Record<string, string> = {
-      approved: "Aprovados", pending: "Pendentes", rejected: "Rejeitados", lead: "Leads",
+      approved: "Aprovados", pending: "Pendentes", rejected: "Reprovados", lead: "Leads",
+      devolutiva: "Devolutiva", awaiting_signature: "Falta Assinatura",
       data_complete: "Dados Completos", registered_igreen: "Cadastrado iGreen", contract_sent: "Contrato Enviado",
     };
+    const hiddenFromChart = new Set(["awaiting_signature"]);
     const customersByStatus = Array.from(statusMap.entries())
+      .filter(([status]) => !hiddenFromChart.has(status))
       .map(([status, count]) => ({
         status, count,
         label: statusLabels[status] || status.charAt(0).toUpperCase() + status.slice(1),
@@ -689,7 +692,8 @@ const Admin = () => {
                               const statusColors: Record<string, string> = {
                                 approved: "hsl(130, 100%, 36%)",
                                 pending: "hsl(45, 100%, 50%)",
-                                rejected: "hsl(0, 80%, 55%)",
+                                rejected: "hsl(0, 80%, 45%)",
+                                devolutiva: "hsl(0, 70%, 55%)",
                                 lead: "hsl(200, 100%, 50%)",
                                 data_complete: "hsl(180, 70%, 45%)",
                                 registered_igreen: "hsl(260, 60%, 55%)",
@@ -721,7 +725,8 @@ const Admin = () => {
                         const badgeColors: Record<string, string> = {
                           approved: "bg-green-500/20 text-green-400",
                           pending: "bg-yellow-500/20 text-yellow-400",
-                          rejected: "bg-red-500/20 text-red-400",
+                          rejected: "bg-red-800/30 text-red-300",
+                          devolutiva: "bg-red-500/20 text-red-400",
                           lead: "bg-blue-500/20 text-blue-400",
                           data_complete: "bg-teal-500/20 text-teal-400",
                           registered_igreen: "bg-purple-500/20 text-purple-400",
