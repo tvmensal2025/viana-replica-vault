@@ -181,7 +181,7 @@ const Admin = () => {
       }
 
       const uid = session.user.id;
-      if (loadingUidRef.current === uid) return;
+      if (loadingUidRef.current === uid || activeUidRef.current === uid) return;
 
       loadingUidRef.current = uid;
       activeUidRef.current = uid;
