@@ -1,5 +1,5 @@
 import { useState, useRef, useMemo } from "react";
-import { Users, Send, CheckSquare, Loader2, Sparkles, Megaphone, Timer, Shield, Filter, Eye, Phone, Mail, MapPin, Zap, ChevronDown, X } from "lucide-react";
+import { Users, Send, CheckSquare, Loader2, Sparkles, Megaphone, Timer, Shield, Filter, Eye, Phone, Mail, MapPin, Zap, ChevronDown, X, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
@@ -58,6 +58,7 @@ function matchDevolutiva(devolutiva: string | null | undefined, categoryKey: str
 
 export function BulkSendPanel({ instanceName, customers, templates, applyTemplate }: BulkSendPanelProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [sentIds, setSentIds] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState<MessageTemplate | null>(null);
   const [isSending, setIsSending] = useState(false);
@@ -180,7 +181,10 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
             if (r.status === "failed") allOk = false;
           }
         }
-        if (allOk) sent++; else failed++;
+        if (allOk) {
+          sent++;
+          setSentIds(prev => new Set(prev).add(selected[i].id));
+        } else { failed++; }
       } catch { failed++; }
 
       if (i < selected.length - 1) {
@@ -363,7 +367,10 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
             <div key={c.id} className={`w-full flex items-center gap-3 px-4 py-2.5 transition-all hover:bg-secondary/40 ${selectedIds.has(c.id) ? "bg-orange-500/5" : ""} ${isSending ? "pointer-events-none opacity-50" : ""}`}>
               <Checkbox checked={selectedIds.has(c.id)} onCheckedChange={() => toggleCustomer(c.id)} disabled={isSending} />
               <div className="min-w-0 flex-1 cursor-pointer" onClick={() => setViewingCustomer(c)}>
-                <p className="text-sm text-foreground truncate hover:underline">{c.name}</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm text-foreground truncate hover:underline">{c.name}</p>
+                  {sentIds.has(c.id) && <CheckCircle2 className="w-3.5 h-3.5 text-green-400 shrink-0" />}
+                </div>
                 <p className="text-xs text-muted-foreground/70">{c.phone_whatsapp}</p>
               </div>
               <div className="flex items-center gap-1.5">
