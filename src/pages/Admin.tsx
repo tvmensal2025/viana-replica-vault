@@ -1333,7 +1333,7 @@ const Admin = () => {
                 <span className="text-xs text-muted-foreground ml-2 truncate">{baseUrl}/{slug}</span>
               </div>
               <iframe
-                src={`/${slug}`}
+                src={`https://${baseUrl}/${slug}`}
                 className="w-full border-0"
                 style={{ height: "70vh", minHeight: "400px" }}
                 title="Preview da landing page"
