@@ -27,7 +27,8 @@ function StatusIcon({ status }: { status?: number }) {
 
 function AudioPlayer({ message, onLoadMedia }: { message: ChatMessage; onLoadMedia?: (id: string) => Promise<string | null> }) {
   const [audioSrc, setAudioSrc] = useState<string | null>(
-    message.mediaUrl?.startsWith("data:") ? message.mediaUrl : null
+    message.mediaUrl?.startsWith("data:") || message.mediaUrl?.startsWith("http")
+      ? message.mediaUrl : null
   );
   const [loading, setLoading] = useState(false);
 
@@ -38,6 +39,12 @@ function AudioPlayer({ message, onLoadMedia }: { message: ChatMessage; onLoadMed
     if (src) setAudioSrc(src);
     setLoading(false);
   }, [audioSrc, onLoadMedia, message.id]);
+
+  useEffect(() => {
+    if (!audioSrc && message.fromMe && onLoadMedia) {
+      handleLoad();
+    }
+  }, []);
 
   if (audioSrc) {
     return (
