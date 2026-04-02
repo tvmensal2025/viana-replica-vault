@@ -5,6 +5,7 @@ import {
   connectInstance,
   getConnectionState,
   logoutInstance,
+  EvolutionAuthError,
 } from "@/services/evolutionApi";
 import type { ConnectionStatus } from "@/types/whatsapp";
 
