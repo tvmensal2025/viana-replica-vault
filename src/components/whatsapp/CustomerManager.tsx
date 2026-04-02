@@ -107,7 +107,9 @@ function getInitials(name: string | null): string {
 function getStatusBadge(status: string | null | undefined) {
   switch (status) {
     case "approved": return { label: "Aprovado", className: "bg-green-500/15 text-green-400 border-green-500/20" };
-    case "rejected": return { label: "Reprovado", className: "bg-red-500/15 text-red-400 border-red-500/20" };
+    case "rejected": return { label: "Reprovado", className: "bg-red-900/20 text-red-300 border-red-800/30" };
+    case "devolutiva": return { label: "Devolutiva", className: "bg-red-500/15 text-red-400 border-red-500/20" };
+    case "awaiting_signature": return { label: "Falta Assinatura", className: "bg-orange-500/15 text-orange-400 border-orange-500/20" };
     case "pending": return { label: "Pendente", className: "bg-yellow-500/15 text-yellow-400 border-yellow-500/20" };
     case "lead": return { label: "Lead", className: "bg-blue-500/15 text-blue-400 border-blue-500/20" };
     default: return { label: status || "Novo", className: "bg-muted text-muted-foreground border-border" };
