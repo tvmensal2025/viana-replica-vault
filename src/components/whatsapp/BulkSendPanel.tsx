@@ -366,9 +366,11 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
           ) : filteredCustomers.map((c) => (
             <div key={c.id} className={`w-full flex items-center gap-3 px-4 py-2.5 transition-all hover:bg-secondary/40 ${selectedIds.has(c.id) ? "bg-orange-500/5" : ""} ${isSending ? "pointer-events-none opacity-50" : ""}`}>
               <Checkbox checked={selectedIds.has(c.id)} onCheckedChange={() => toggleCustomer(c.id)} disabled={isSending} />
-              <div className="min-w-0 flex-1 cursor-pointer" onClick={() => setViewingCustomer(c)}>
+              <div className="min-w-0 flex-1 cursor-pointer flex items-center gap-1.5" onClick={() => setViewingCustomer(c)}>
                 <p className="text-sm text-foreground truncate hover:underline">{c.name}</p>
-                <p className="text-xs text-muted-foreground/70">{c.phone_whatsapp}</p>
+                {sentIds.has(c.id) && <CheckCircle2 className="w-3.5 h-3.5 text-green-400 shrink-0" />}
+              </div>
+              <p className="text-xs text-muted-foreground/70 pl-7">{c.phone_whatsapp}</p>
               </div>
               <div className="flex items-center gap-1.5">
                 {c.status === "approved" && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/15 text-green-400 font-medium">Aprovado</span>}
