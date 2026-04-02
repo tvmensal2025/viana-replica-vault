@@ -44,10 +44,7 @@ function normalizeEvolutionBaseUrl(rawUrl: string | undefined): string {
 
   if (!sanitized) return "";
 
-  if (sanitized.startsWith("http://")) {
-    return `https://${sanitized.slice("http://".length)}`;
-  }
-
+  // Respect the protocol exactly as configured — do NOT force http->https
   return sanitized;
 }
 
