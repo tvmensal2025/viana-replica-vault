@@ -239,8 +239,7 @@ function DocumentViewer({ message, onLoadMedia }: { message: ChatMessage; onLoad
 
 function StickerViewer({ message, onLoadMedia }: { message: ChatMessage; onLoadMedia?: (id: string) => Promise<string | null> }) {
   const [src, setSrc] = useState<string | null>(
-    message.mediaUrl?.startsWith("data:") || message.mediaUrl?.startsWith("http")
-      ? message.mediaUrl : null
+    isAccessibleUrl(message.mediaUrl) ? message.mediaUrl! : null
   );
   const [loading, setLoading] = useState(false);
 
