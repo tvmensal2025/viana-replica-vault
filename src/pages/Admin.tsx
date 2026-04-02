@@ -286,7 +286,7 @@ const Admin = () => {
         const { error: uploadError } = await supabase.storage.from("consultant-photos").upload(path, photoFile, { upsert: true });
         if (uploadError) throw uploadError;
         const { data: urlData } = supabase.storage.from("consultant-photos").getPublicUrl(path);
-        photo_url = urlData.publicUrl;
+        photo_url = `${urlData.publicUrl}?t=${Date.now()}`;
       }
 
       const normalizedLicense = normalizeLicenseValue(form.license, userId);
