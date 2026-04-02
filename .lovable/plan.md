@@ -1,56 +1,104 @@
 
 
-## Problema
+## Diagnóstico
 
-Mensagens de áudio e imagem enviadas pelo CRM (mensagens automáticas do kanban) aparecem como botões "Áudio" e "Carregar imagem" em vez de carregar automaticamente. Isso ocorre porque:
+Consultei os dados reais no banco. Os status atuais dos 295 clientes sincronizados:
 
-1. **`MessageBubble`** só considera mídia pré-carregada se `mediaUrl` começa com `data:` — URLs normais (Supabase Storage / MinIO) são ignoradas
-2. **`AudioPlayer` e `ImageViewer`** exigem clique manual para carregar via `getBase64FromMediaMessage`
-3. Mensagens `fromMe` enviadas pelo CRM têm URLs de mídia válidas mas não são renderizadas diretamente
+```text
+andamento_igreen          → status no CRM    | qtd
+─────────────────────────────────────────────────
+Validado                  → approved          | 106
+Devolutiva                → rejected          | 74
+Falta assinatura cliente  → pending           | 106
+Aguardando validação      → pending           |   7
+(null)                    → pending           |   2
+```
 
-## Plano
+**Nenhum cliente com andamento "Reprovado" está sendo marcado como "Pendente"** — o mapeamento `reprovado → rejected` funciona. O que acontece é:
 
-### 1. Aceitar URLs HTTP diretas no MessageBubble (ImageViewer, AudioPlayer, VideoPlayer)
+1. **"Falta assinatura cliente"** (106 clientes) está mapeado como `pending`, mas na prática é uma devolutiva/pendência ativa que precisa de ação do cliente
+2. O filtro "Pendentes" mistura clientes aguardando validação com clientes que faltam assinar — são situações diferentes
 
-**Arquivo: `src/components/whatsapp/MessageBubble.tsx`**
+## Fluxo atual de sincronização com iGreen
 
-Modificar os componentes `AudioPlayer`, `ImageViewer`, `VideoPlayer` e `DocumentViewer` para aceitar URLs HTTP como fontes válidas (não apenas `data:` URLs):
+```text
+1. Edge Function "sync-igreen-customers" é chamada (manual ou agendada)
+2. Faz login na API iGreen (email/senha do portal)
+3. Busca dados via GET /customer-map/{consultorId}
+4. Mapeia campos (nome, celular, andamento, devolutiva, etc.)
+5. Upsert na tabela "customers" usando phone_whatsapp como chave
+6. Status é derivado do campo "andamento" via mapStatus()
+```
 
-- Inicializar `audioSrc`/`imgSrc`/`videoSrc` com `mediaUrl` se ele começa com `http` OU `data:`
-- Isso faz com que mídias com URLs diretas (enviadas pelo CRM via Supabase Storage) renderizem automaticamente sem necessidade de clique
-- Mídias sem URL continuam mostrando o botão de carregar sob demanda via `getBase64FromMediaMessage`
+## Plano de Melhoria
 
-### 2. Auto-carregar mídia para mensagens `fromMe` no ImageViewer
+### 1. Refinar mapeamento de status — mais granular
 
-Para mensagens enviadas pelo próprio usuário (`fromMe`), auto-carregar a imagem/áudio ao montar o componente se nenhuma URL direta estiver disponível mas `onLoadMedia` existir.
+Criar status intermediário `awaiting_signature` para "Falta assinatura cliente" em vez de agrupar tudo como `pending`:
+
+| andamento iGreen | status no CRM | label na UI |
+|---|---|---|
+| Validado / Aprovado / Ativo | approved | Aprovado |
+| Devolutiva | rejected | Devolutiva |
+| Reprovado / Cancelado | rejected | Reprovado |
+| Falta assinatura cliente | awaiting_signature | Falta Assinatura |
+| Aguardando validação | pending | Pendente |
+| (outros/null) | pending | Pendente |
+
+### 2. Atualizar filtros do CustomerManager
+
+Adicionar aba "Falta Assinatura" nos filtros de status, separando dos pendentes genéricos.
+
+### 3. Separar "Devolutiva" de "Reprovado" no mapeamento
+
+Atualmente ambos mapeiam para `rejected`. Criar status `devolutiva` para diferenciar (devolutiva = precisa corrigir algo, reprovado = definitivo).
+
+| andamento | status |
+|---|---|
+| Devolutiva | devolutiva |
+| Reprovado / Cancelado | rejected |
+
+### 4. Adicionar campo `andamento_igreen` visível na listagem
+
+O campo já é salvo no banco mas pode ser exibido de forma mais proeminente para o consultor ver o status real do iGreen.
+
+### Arquivos a modificar
+
+1. **`supabase/functions/sync-igreen-customers/index.ts`** — atualizar `mapStatus()` com novos status (`awaiting_signature`, `devolutiva`)
+2. **`src/components/whatsapp/CustomerManager.tsx`** — adicionar novos filtros, badges e labels para os status granulares
+3. **Migração SQL** — re-sincronizar status dos clientes existentes com o novo mapeamento
 
 ### Detalhes Técnicos
 
-Na condição de inicialização do state de cada media viewer, mudar:
+Nova função `mapStatus`:
 ```typescript
-// Antes:
-const [src, setSrc] = useState<string | null>(
-  message.mediaUrl?.startsWith("data:") ? message.mediaUrl : null
-);
-
-// Depois:
-const [src, setSrc] = useState<string | null>(
-  message.mediaUrl?.startsWith("data:") || message.mediaUrl?.startsWith("http")
-    ? message.mediaUrl
-    : null
-);
+function mapStatus(andamento: string | undefined): string {
+  if (!andamento) return "pending";
+  const lower = andamento.toLowerCase().trim();
+  if (lower === "validado" || lower === "aprovado" || lower === "ativo") return "approved";
+  if (lower === "devolutiva") return "devolutiva";
+  if (lower === "reprovado" || lower === "cancelado") return "rejected";
+  if (lower.includes("falta assinatura")) return "awaiting_signature";
+  if (lower.includes("aguardando")) return "pending";
+  if (lower === "pendente" || lower === "em análise") return "pending";
+  if (lower === "lead" || lower === "novo") return "lead";
+  if (lower === "dados completos") return "data_complete";
+  if (lower === "registrado") return "registered_igreen";
+  if (lower === "contrato enviado") return "contract_sent";
+  return "pending";
+}
 ```
 
-Adicionar `useEffect` para auto-carregar mídias de mensagens enviadas (`fromMe`) que não tenham URL direta:
-```typescript
-useEffect(() => {
-  if (!src && message.fromMe && onLoadMedia) {
-    handleLoad();
-  }
-}, []);
+Migração SQL para atualizar registros existentes:
+```sql
+UPDATE customers SET status = 'awaiting_signature' 
+  WHERE andamento_igreen ILIKE '%falta assinatura%';
+UPDATE customers SET status = 'devolutiva' 
+  WHERE andamento_igreen ILIKE 'devolutiva';
 ```
 
-Arquivos modificados: `src/components/whatsapp/MessageBubble.tsx` (apenas)
-
-Nenhum componente externo ou hook precisa mudar — a interface `ChatMessage` já possui `mediaUrl` com URLs HTTP.
+Novos badges no CustomerManager:
+- `awaiting_signature` → "Falta Assinatura" (laranja)
+- `devolutiva` → "Devolutiva" (vermelho)
+- `rejected` → "Reprovado" (vermelho escuro)
 
