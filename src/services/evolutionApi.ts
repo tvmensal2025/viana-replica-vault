@@ -50,7 +50,7 @@ async function request<T>(
     });
 
     if (res.status === 401) {
-      throw new Error("Erro de autenticação com a API do WhatsApp");
+      throw new EvolutionAuthError("Erro de autenticação com a API do WhatsApp");
     }
 
     if (!res.ok) {
