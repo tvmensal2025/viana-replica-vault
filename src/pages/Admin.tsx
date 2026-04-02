@@ -126,9 +126,11 @@ const Admin = () => {
       statusMap.set(s, (statusMap.get(s) || 0) + 1);
     }
     const statusLabels: Record<string, string> = {
-      approved: "Aprovados", pending: "Pendentes", rejected: "Rejeitados", lead: "Leads",
+      approved: "Aprovados", pending: "Pendentes", rejected: "Reprovados", lead: "Leads",
+      devolutiva: "Devolutiva", awaiting_signature: "Falta Assinatura",
       data_complete: "Dados Completos", registered_igreen: "Cadastrado iGreen", contract_sent: "Contrato Enviado",
     };
+    const hiddenFromChart = new Set(["awaiting_signature"]);
     const customersByStatus = Array.from(statusMap.entries())
       .map(([status, count]) => ({
         status, count,
