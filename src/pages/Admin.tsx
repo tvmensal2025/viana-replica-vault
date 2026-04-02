@@ -130,9 +130,12 @@ const Admin = () => {
       devolutiva: "Devolutiva", awaiting_signature: "Falta Assinatura",
       data_complete: "Dados Completos", registered_igreen: "Cadastrado iGreen", contract_sent: "Contrato Enviado",
     };
-    const hiddenFromChart = new Set(["awaiting_signature"]);
+    const chartOnlyStatuses = ["approved", "devolutiva", "rejected"];
+    for (const s of chartOnlyStatuses) {
+      if (!statusMap.has(s)) statusMap.set(s, 0);
+    }
     const customersByStatus = Array.from(statusMap.entries())
-      .filter(([status]) => !hiddenFromChart.has(status))
+      .filter(([status]) => chartOnlyStatuses.includes(status))
       .map(([status, count]) => ({
         status, count,
         label: statusLabels[status] || status.charAt(0).toUpperCase() + status.slice(1),
