@@ -75,13 +75,13 @@ function AudioPlayer({ message, onLoadMedia }: { message: ChatMessage; onLoadMed
 
 function ImageViewer({ message, onLoadMedia }: { message: ChatMessage; onLoadMedia?: (id: string) => Promise<string | null> }) {
   const [imgSrc, setImgSrc] = useState<string | null>(
-    message.mediaUrl?.startsWith("data:") ? message.mediaUrl : null
+    message.mediaUrl?.startsWith("data:") || message.mediaUrl?.startsWith("http")
+      ? message.mediaUrl : null
   );
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [loadAttempted, setLoadAttempted] = useState(false);
 
-  // Load on demand only (no auto-load)
   const handleLoad = useCallback(async () => {
     if (imgSrc || !onLoadMedia || loadAttempted) return;
     setLoadAttempted(true);
@@ -90,6 +90,12 @@ function ImageViewer({ message, onLoadMedia }: { message: ChatMessage; onLoadMed
     if (src) setImgSrc(src);
     setLoading(false);
   }, [imgSrc, onLoadMedia, message.id, loadAttempted]);
+
+  useEffect(() => {
+    if (!imgSrc && message.fromMe && onLoadMedia) {
+      handleLoad();
+    }
+  }, []);
 
   if (loading) {
     return (
