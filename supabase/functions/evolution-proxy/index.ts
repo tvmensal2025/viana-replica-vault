@@ -276,16 +276,16 @@ Deno.serve(async (req) => {
       );
     }
 
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    const authHeader = (req.headers.get("Authorization") || "").trim();
+    if (!authHeader || !authHeader.toLowerCase().startsWith("bearer ")) {
       return new Response(
-        JSON.stringify({ error: "Token de autenticação inválido ou ausente" }),
+        JSON.stringify({ error: "Token de autenticação inválido ou ausente", code: "auth_missing" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
-    const token = authHeader.replace("Bearer ", "");
+    const token = authHeader.replace(/^bearer\s+/i, "").trim();
     const {
       data: { user },
       error: authError,
