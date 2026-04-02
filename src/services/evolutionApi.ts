@@ -27,7 +27,12 @@ async function request<T>(
 ): Promise<T> {
   try {
     const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token || "";
+    const token = session?.access_token;
+
+    // Skip request entirely when there's no valid token — session is refreshing
+    if (!token) {
+      throw new EvolutionAuthError();
+    }
 
     const proxyBody: Record<string, unknown> = { path, method };
     if (body !== undefined) {
