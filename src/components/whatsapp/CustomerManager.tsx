@@ -83,7 +83,7 @@ interface ParsedCustomer {
   isNew: boolean;
 }
 
-type StatusFilter = "all" | "approved" | "pending" | "devolutiva" | "lead" | "rejected";
+type StatusFilter = "all" | "approved" | "pending" | "devolutiva" | "awaiting_signature" | "lead" | "rejected";
 
 function formatPhoneDisplay(phone: string): string {
   const d = phone.replace(/\D/g, "");
@@ -107,7 +107,9 @@ function getInitials(name: string | null): string {
 function getStatusBadge(status: string | null | undefined) {
   switch (status) {
     case "approved": return { label: "Aprovado", className: "bg-green-500/15 text-green-400 border-green-500/20" };
-    case "rejected": return { label: "Reprovado", className: "bg-red-500/15 text-red-400 border-red-500/20" };
+    case "rejected": return { label: "Reprovado", className: "bg-red-900/20 text-red-300 border-red-800/30" };
+    case "devolutiva": return { label: "Devolutiva", className: "bg-red-500/15 text-red-400 border-red-500/20" };
+    case "awaiting_signature": return { label: "Falta Assinatura", className: "bg-orange-500/15 text-orange-400 border-orange-500/20" };
     case "pending": return { label: "Pendente", className: "bg-yellow-500/15 text-yellow-400 border-yellow-500/20" };
     case "lead": return { label: "Lead", className: "bg-blue-500/15 text-blue-400 border-blue-500/20" };
     default: return { label: status || "Novo", className: "bg-muted text-muted-foreground border-border" };
@@ -128,8 +130,9 @@ function mapStatus(andamento: string | undefined): string {
   if (!andamento) return "pending";
   const lower = andamento.toLowerCase().trim();
   if (lower === "validado" || lower === "aprovado" || lower === "ativo") return "approved";
-  if (lower === "devolutiva" || lower === "reprovado" || lower === "cancelado") return "rejected";
-  if (lower.includes("falta assinatura")) return "pending";
+  if (lower === "devolutiva") return "devolutiva";
+  if (lower === "reprovado" || lower === "cancelado") return "rejected";
+  if (lower.includes("falta assinatura")) return "awaiting_signature";
   if (lower.includes("aguardando")) return "pending";
   if (lower === "pendente" || lower === "em análise" || lower === "em analise") return "pending";
   if (lower === "lead" || lower === "novo") return "lead";
@@ -267,7 +270,7 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
   const filtered = statusFilter === "all"
     ? licenciadoFiltered
     : statusFilter === "devolutiva"
-    ? licenciadoFiltered.filter((c) => isDevolutiva(c))
+    ? licenciadoFiltered.filter((c) => c.status === "devolutiva" || isDevolutiva(c))
     : licenciadoFiltered.filter((c) => c.status === statusFilter);
 
   // Stats
@@ -586,8 +589,10 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
   const filterButtons: { key: StatusFilter; label: string; count: number; color: string }[] = [
     { key: "all", label: "Todos", count: customers.length, color: "text-foreground" },
     { key: "approved", label: "Aprovados", count: customers.filter((c) => c.status === "approved").length, color: "text-green-400" },
+    { key: "awaiting_signature", label: "Falta Assinatura", count: customers.filter((c) => c.status === "awaiting_signature").length, color: "text-orange-400" },
     { key: "pending", label: "Pendentes", count: customers.filter((c) => c.status === "pending").length, color: "text-yellow-400" },
-    { key: "devolutiva", label: "Devolutiva", count: devolutivaCount, color: "text-red-400" },
+    { key: "devolutiva", label: "Devolutiva", count: customers.filter((c) => c.status === "devolutiva" || isDevolutiva(c)).length, color: "text-red-400" },
+    { key: "rejected", label: "Reprovados", count: customers.filter((c) => c.status === "rejected").length, color: "text-red-300" },
     { key: "lead", label: "Leads", count: customers.filter((c) => c.status === "lead").length, color: "text-blue-400" },
   ];
 
