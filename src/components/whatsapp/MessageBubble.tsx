@@ -25,10 +25,16 @@ function StatusIcon({ status }: { status?: number }) {
   return null;
 }
 
+function isAccessibleUrl(url?: string): boolean {
+  if (!url) return false;
+  if (url.startsWith("data:")) return true;
+  if (url.startsWith("http") && !url.includes("mmg.whatsapp.net") && !url.includes("media-gru")) return true;
+  return false;
+}
+
 function AudioPlayer({ message, onLoadMedia }: { message: ChatMessage; onLoadMedia?: (id: string) => Promise<string | null> }) {
   const [audioSrc, setAudioSrc] = useState<string | null>(
-    message.mediaUrl?.startsWith("data:") || message.mediaUrl?.startsWith("http")
-      ? message.mediaUrl : null
+    isAccessibleUrl(message.mediaUrl) ? message.mediaUrl! : null
   );
   const [loading, setLoading] = useState(false);
 
