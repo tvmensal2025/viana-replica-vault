@@ -729,7 +729,7 @@ const Admin = () => {
                           approved: "bg-green-500/20 text-green-400",
                           pending: "bg-yellow-500/20 text-yellow-400",
                           rejected: "bg-red-800/30 text-red-300",
-                          devolutiva: "bg-red-500/20 text-red-400",
+                          devolutiva: "bg-orange-500/20 text-orange-400",
                           lead: "bg-blue-500/20 text-blue-400",
                           data_complete: "bg-teal-500/20 text-teal-400",
                           registered_igreen: "bg-purple-500/20 text-purple-400",
