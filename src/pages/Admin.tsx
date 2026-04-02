@@ -132,6 +132,7 @@ const Admin = () => {
     };
     const hiddenFromChart = new Set(["awaiting_signature"]);
     const customersByStatus = Array.from(statusMap.entries())
+      .filter(([status]) => !hiddenFromChart.has(status))
       .map(([status, count]) => ({
         status, count,
         label: statusLabels[status] || status.charAt(0).toUpperCase() + status.slice(1),
