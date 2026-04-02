@@ -83,7 +83,7 @@ interface ParsedCustomer {
   isNew: boolean;
 }
 
-type StatusFilter = "all" | "approved" | "pending" | "devolutiva" | "lead" | "rejected";
+type StatusFilter = "all" | "approved" | "pending" | "devolutiva" | "awaiting_signature" | "lead" | "rejected";
 
 function formatPhoneDisplay(phone: string): string {
   const d = phone.replace(/\D/g, "");
