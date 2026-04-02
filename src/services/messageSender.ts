@@ -54,6 +54,12 @@ function isUnavailableResponse(result: unknown): boolean {
 export async function sendWhatsAppMessage(payload: SendPayload): Promise<SendResult> {
   const { instanceName, phone, mediaCategory, text, mediaUrl, fileName } = payload;
 
+  // Block invalid placeholder phones before hitting the API
+  if (!phone || /sem_celular/i.test(phone) || phone.replace(/\D/g, "").length < 8) {
+    logger.warn("Número inválido ignorado:", phone);
+    return { status: "failed", error: `Número inválido: ${phone}` };
+  }
+
   try {
     let result: unknown;
 
