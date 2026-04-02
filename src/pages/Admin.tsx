@@ -696,7 +696,7 @@ const Admin = () => {
                                 approved: "hsl(130, 100%, 36%)",
                                 pending: "hsl(45, 100%, 50%)",
                                 rejected: "hsl(0, 80%, 45%)",
-                                devolutiva: "hsl(0, 70%, 55%)",
+                                devolutiva: "hsl(30, 100%, 50%)",
                                 lead: "hsl(200, 100%, 50%)",
                                 data_complete: "hsl(180, 70%, 45%)",
                                 registered_igreen: "hsl(260, 60%, 55%)",
