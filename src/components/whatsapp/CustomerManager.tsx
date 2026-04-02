@@ -270,7 +270,7 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
   const filtered = statusFilter === "all"
     ? licenciadoFiltered
     : statusFilter === "devolutiva"
-    ? licenciadoFiltered.filter((c) => isDevolutiva(c))
+    ? licenciadoFiltered.filter((c) => c.status === "devolutiva" || isDevolutiva(c))
     : licenciadoFiltered.filter((c) => c.status === statusFilter);
 
   // Stats
