@@ -33,7 +33,7 @@ function getRandomInterval(messageIndex: number): number {
   return Math.round(base + progressive);
 }
 
-type StatusFilter = "all" | "approved" | "rejected" | "pending" | "approved_devolutiva";
+type StatusFilter = "all" | "approved" | "rejected" | "pending";
 
 const DEVOLUTIVA_CATEGORIES = [
   { key: "fatura_ilegivel", label: "Fatura Ilegível", match: ["fatura ilegível", "fatura ilegivel"] },
