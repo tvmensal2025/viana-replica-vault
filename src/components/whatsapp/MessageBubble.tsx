@@ -144,7 +144,8 @@ function ImageViewer({ message, onLoadMedia }: { message: ChatMessage; onLoadMed
 
 function VideoPlayer({ message, onLoadMedia }: { message: ChatMessage; onLoadMedia?: (id: string) => Promise<string | null> }) {
   const [videoSrc, setVideoSrc] = useState<string | null>(
-    message.mediaUrl?.startsWith("data:") ? message.mediaUrl : null
+    message.mediaUrl?.startsWith("data:") || message.mediaUrl?.startsWith("http")
+      ? message.mediaUrl : null
   );
   const [loading, setLoading] = useState(false);
 
@@ -155,6 +156,12 @@ function VideoPlayer({ message, onLoadMedia }: { message: ChatMessage; onLoadMed
     if (src) setVideoSrc(src);
     setLoading(false);
   }, [videoSrc, onLoadMedia, message.id]);
+
+  useEffect(() => {
+    if (!videoSrc && message.fromMe && onLoadMedia) {
+      handleLoad();
+    }
+  }, []);
 
   if (videoSrc) {
     return (
