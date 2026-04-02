@@ -22,8 +22,9 @@ function mapStatus(andamento: string | undefined): string {
   if (!andamento) return "pending";
   const lower = andamento.toLowerCase().trim();
   if (lower === "validado" || lower === "aprovado" || lower === "ativo") return "approved";
-  if (lower === "devolutiva" || lower === "reprovado" || lower === "cancelado") return "rejected";
-  if (lower.includes("falta assinatura")) return "pending";
+  if (lower === "devolutiva") return "devolutiva";
+  if (lower === "reprovado" || lower === "cancelado") return "rejected";
+  if (lower.includes("falta assinatura")) return "awaiting_signature";
   if (lower.includes("aguardando")) return "pending";
   if (lower === "pendente" || lower === "em análise" || lower === "em analise") return "pending";
   if (lower === "lead" || lower === "novo") return "lead";
