@@ -1,53 +1,56 @@
 
 
-# Corrigir nomes dos contatos na sidebar do WhatsApp
+## Problema
 
-## Problemas identificados
+Mensagens de áudio e imagem enviadas pelo CRM (mensagens automáticas do kanban) aparecem como botões "Áudio" e "Carregar imagem" em vez de carregar automaticamente. Isso ocorre porque:
 
-1. **"Voce" aparece em varios contatos**: Quando `lastMessage.key.fromMe === true`, o `pushName` da ultima mensagem e o nome do proprio usuario. O codigo usa `chat.lastMessage?.pushName` como fonte de nome, entao quando a ultima mensagem foi enviada por voce, o nome do contato vira "Voce" (seu pushName).
+1. **`MessageBubble`** só considera mídia pré-carregada se `mediaUrl` começa com `data:` — URLs normais (Supabase Storage / MinIO) são ignoradas
+2. **`AudioPlayer` e `ImageViewer`** exigem clique manual para carregar via `getBase64FromMediaMessage`
+3. Mensagens `fromMe` enviadas pelo CRM têm URLs de mídia válidas mas não são renderizadas diretamente
 
-2. **Numeros sem formatacao**: Contatos sem nome salvo mostram numeros longos sem formatacao (ex: `271313319006255`). Esses parecem ser numeros internacionais sem o padrao BR esperado pela funcao `formatPhoneNumber`.
+## Plano
 
-## Solucao
+### 1. Aceitar URLs HTTP diretas no MessageBubble (ImageViewer, AudioPlayer, VideoPlayer)
 
-### Arquivo: `src/hooks/useChats.ts` — funcao `mapChat`
+**Arquivo: `src/components/whatsapp/MessageBubble.tsx`**
 
-**Correcao 1: Ignorar pushName de mensagens enviadas por voce**
-- O `chat.lastMessage?.pushName` so deve ser usado quando `fromMe === false`, pois quando `fromMe === true` o pushName e do proprio usuario, nao do contato.
+Modificar os componentes `AudioPlayer`, `ImageViewer`, `VideoPlayer` e `DocumentViewer` para aceitar URLs HTTP como fontes válidas (não apenas `data:` URLs):
 
-**Correcao 2: Melhorar formatacao de numeros internacionais**
-- Expandir `formatPhoneNumber` para formatar numeros com DDI (55) e tambem exibir numeros internacionais de forma mais legivel com espacos.
+- Inicializar `audioSrc`/`imgSrc`/`videoSrc` com `mediaUrl` se ele começa com `http` OU `data:`
+- Isso faz com que mídias com URLs diretas (enviadas pelo CRM via Supabase Storage) renderizem automaticamente sem necessidade de clique
+- Mídias sem URL continuam mostrando o botão de carregar sob demanda via `getBase64FromMediaMessage`
 
-### Mudancas especificas
+### 2. Auto-carregar mídia para mensagens `fromMe` no ImageViewer
 
+Para mensagens enviadas pelo próprio usuário (`fromMe`), auto-carregar a imagem/áudio ao montar o componente se nenhuma URL direta estiver disponível mas `onLoadMedia` existir.
+
+### Detalhes Técnicos
+
+Na condição de inicialização do state de cada media viewer, mudar:
 ```typescript
-// Linha 62 — nao usar pushName da lastMessage se fromMe === true
-const lastMsgPushName = chat.lastMessage?.key?.fromMe 
-  ? undefined 
-  : chat.lastMessage?.pushName;
+// Antes:
+const [src, setSrc] = useState<string | null>(
+  message.mediaUrl?.startsWith("data:") ? message.mediaUrl : null
+);
 
-const nameSource = chat.pushName || lastMsgPushName || contact?.pushName || chat.name;
+// Depois:
+const [src, setSrc] = useState<string | null>(
+  message.mediaUrl?.startsWith("data:") || message.mediaUrl?.startsWith("http")
+    ? message.mediaUrl
+    : null
+);
 ```
 
+Adicionar `useEffect` para auto-carregar mídias de mensagens enviadas (`fromMe`) que não tenham URL direta:
 ```typescript
-// formatPhoneNumber — suportar numeros internacionais
-function formatPhoneNumber(raw: string): string {
-  // Numeros BR
-  if (/^55\d{10,11}$/.test(raw)) {
-    const ddd = raw.slice(2, 4);
-    const number = raw.slice(4);
-    if (number.length === 9) return `(${ddd}) ${number.slice(0,5)}-${number.slice(5)}`;
-    if (number.length === 8) return `(${ddd}) ${number.slice(0,4)}-${number.slice(4)}`;
+useEffect(() => {
+  if (!src && message.fromMe && onLoadMedia) {
+    handleLoad();
   }
-  // Outros numeros longos — inserir espacos para legibilidade
-  if (raw.length > 8) {
-    return `+${raw.slice(0, 2)} ${raw.slice(2)}`;
-  }
-  return raw;
-}
+}, []);
 ```
 
-## Resultado esperado
-- Contatos com nome salvo mostrarao o nome correto (nao "Voce")
-- Contatos sem nome mostrarao o numero formatado de forma legivel
+Arquivos modificados: `src/components/whatsapp/MessageBubble.tsx` (apenas)
+
+Nenhum componente externo ou hook precisa mudar — a interface `ChatMessage` já possui `mediaUrl` com URLs HTTP.
 
