@@ -58,6 +58,7 @@ function matchDevolutiva(devolutiva: string | null | undefined, categoryKey: str
 
 export function BulkSendPanel({ instanceName, customers, templates, applyTemplate }: BulkSendPanelProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [sentIds, setSentIds] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState<MessageTemplate | null>(null);
   const [isSending, setIsSending] = useState(false);
