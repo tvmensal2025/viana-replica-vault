@@ -8,15 +8,81 @@ const PROXY_URL = `${SUPABASE_URL}/functions/v1/evolution-proxy`;
 /** Custom error class for auth failures — hooks can check this to avoid crashing */
 export class EvolutionAuthError extends Error {
   public readonly code = "auth_error";
-  constructor(message = "Sessão expirada. Aguarde a reconexão automática.") {
+  public readonly requiresRelogin: boolean;
+
+  constructor(
+    message = "Sessão expirada. Faça login novamente.",
+    options?: { requiresRelogin?: boolean }
+  ) {
     super(message);
     this.name = "EvolutionAuthError";
+    this.requiresRelogin = options?.requiresRelogin ?? false;
   }
 }
 
 function normalizeQrBase64(value: unknown): string | null {
   if (typeof value !== "string" || !value.trim()) return null;
   return value;
+}
+
+async function readJsonSafe(response: Response): Promise<Record<string, unknown> | null> {
+  try {
+    const parsed = await response.json();
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+async function signOutSilently() {
+  try {
+    await supabase.auth.signOut();
+  } catch {
+    // best-effort only
+  }
+}
+
+async function getAccessToken(forceRefresh = false): Promise<string> {
+  const sessionResult = forceRefresh
+    ? await supabase.auth.refreshSession()
+    : await supabase.auth.getSession();
+
+  const token = sessionResult.data.session?.access_token;
+  if (token) return token;
+
+  if (!forceRefresh) {
+    const refreshResult = await supabase.auth.refreshSession();
+    const refreshedToken = refreshResult.data.session?.access_token;
+    if (refreshedToken) return refreshedToken;
+  }
+
+  throw new EvolutionAuthError("Sessão expirada. Faça login novamente.", {
+    requiresRelogin: true,
+  });
+}
+
+async function executeProxyRequest(
+  token: string,
+  path: string,
+  method: string,
+  body?: unknown
+): Promise<Response> {
+  const proxyBody: Record<string, unknown> = { path, method };
+  if (body !== undefined) {
+    proxyBody.body = body;
+  }
+
+  return fetch(PROXY_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      apikey: SUPABASE_PUBLISHABLE_KEY,
+    },
+    body: JSON.stringify(proxyBody),
+  });
 }
 
 async function request<T>(
@@ -26,66 +92,65 @@ async function request<T>(
   options?: { gracefulTimeout?: boolean }
 ): Promise<T> {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token;
+    let token = await getAccessToken();
+    let retriedAfterAuthFailure = false;
 
-    // Skip request entirely when there's no valid token — session is refreshing
-    if (!token) {
-      throw new EvolutionAuthError();
-    }
+    while (true) {
+      const res = await executeProxyRequest(token, path, method, body);
 
-    const proxyBody: Record<string, unknown> = { path, method };
-    if (body !== undefined) {
-      proxyBody.body = body;
-    }
+      if (res.status === 401) {
+        if (retriedAfterAuthFailure) {
+          await signOutSilently();
+          throw new EvolutionAuthError("Sessão expirada. Faça login novamente.", {
+            requiresRelogin: true,
+          });
+        }
 
-    const res = await fetch(PROXY_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-        apikey: SUPABASE_PUBLISHABLE_KEY,
-      },
-      body: JSON.stringify(proxyBody),
-    });
+        token = await getAccessToken(true);
+        retriedAfterAuthFailure = true;
+        continue;
+      }
 
-    if (res.status === 401) {
-      throw new EvolutionAuthError("Erro de autenticação com a API do WhatsApp");
-    }
-
-    if (!res.ok) {
-      let detail = res.statusText || "Erro na API";
-      try {
-        const json = await res.json();
+      if (!res.ok) {
+        let detail = res.statusText || "Erro na API";
+        const json = await readJsonSafe(res);
         const msg =
-          json?.response?.message?.[0] ||
-          json?.response?.message ||
-          json?.error ||
-          json?.message;
-        if (msg) detail = typeof msg === "string" ? msg : JSON.stringify(msg);
-      } catch { /* not json */ }
-      throw new Error(detail);
-    }
+          json?.response && typeof json.response === "object" && !Array.isArray(json.response)
+            ? (json.response as Record<string, unknown>).message
+            : json?.error || json?.message;
 
-    const json = await res.json();
-
-    // Detect graceful timeout/error responses from proxy (200 with error payload)
-    if (json && typeof json === "object" && !Array.isArray(json)) {
-      if ((json as Record<string, unknown>).timeout === true) {
-        if (options?.gracefulTimeout) {
-          return json as T;
+        if (Array.isArray(msg) && typeof msg[0] === "string") {
+          detail = msg[0];
+        } else if (typeof msg === "string") {
+          detail = msg;
         }
-        throw new Error("Timeout ao processar requisição");
-      }
-      if ((json as Record<string, unknown>).unavailable === true) {
-        if (options?.gracefulTimeout) {
-          return json as T;
-        }
-        throw new Error((json as Record<string, unknown>).message as string || "Serviço temporariamente indisponível");
-      }
-    }
 
-    return json;
+        throw new Error(detail);
+      }
+
+      const json = await res.json();
+
+      // Detect graceful timeout/error responses from proxy (200 with error payload)
+      if (json && typeof json === "object" && !Array.isArray(json)) {
+        if ((json as Record<string, unknown>).timeout === true) {
+          if (options?.gracefulTimeout) {
+            return json as T;
+          }
+          throw new Error("Timeout ao processar requisição");
+        }
+        if ((json as Record<string, unknown>).unavailable === true) {
+          if (options?.gracefulTimeout) {
+            return json as T;
+          }
+          throw new Error(
+            ((json as Record<string, unknown>).message as string) ||
+              "Serviço temporariamente indisponível"
+          );
+        }
+      }
+
+      return json;
+    }
   } catch (err) {
     if (err instanceof TypeError) {
       throw new Error("Erro de conexão. Verifique sua internet.");
@@ -131,7 +196,8 @@ export async function connectInstance(instanceName: string) {
 
 export async function getConnectionState(instanceName: string) {
   const response = await request<{ instance?: { state: string }; state?: string }>(
-    `instance/connectionState/${instanceName}`, "GET"
+    `instance/connectionState/${instanceName}`,
+    "GET"
   );
   const state = response?.instance?.state || response?.state;
   return { state: (state as "open" | "close" | "connecting") || "close" };
@@ -147,7 +213,8 @@ export async function logoutInstance(instanceName: string) {
 
 export async function fetchInstances() {
   return request<{ instance: { instanceName: string; status: string } }[]>(
-    "instance/fetchInstances", "GET"
+    "instance/fetchInstances",
+    "GET"
   );
 }
 
