@@ -692,7 +692,8 @@ const Admin = () => {
                               const statusColors: Record<string, string> = {
                                 approved: "hsl(130, 100%, 36%)",
                                 pending: "hsl(45, 100%, 50%)",
-                                rejected: "hsl(0, 80%, 55%)",
+                                rejected: "hsl(0, 80%, 45%)",
+                                devolutiva: "hsl(0, 70%, 55%)",
                                 lead: "hsl(200, 100%, 50%)",
                                 data_complete: "hsl(180, 70%, 45%)",
                                 registered_igreen: "hsl(260, 60%, 55%)",
