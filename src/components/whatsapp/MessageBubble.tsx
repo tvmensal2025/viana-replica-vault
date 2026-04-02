@@ -236,7 +236,8 @@ function DocumentViewer({ message, onLoadMedia }: { message: ChatMessage; onLoad
 
 function StickerViewer({ message, onLoadMedia }: { message: ChatMessage; onLoadMedia?: (id: string) => Promise<string | null> }) {
   const [src, setSrc] = useState<string | null>(
-    message.mediaUrl?.startsWith("data:") ? message.mediaUrl : null
+    message.mediaUrl?.startsWith("data:") || message.mediaUrl?.startsWith("http")
+      ? message.mediaUrl : null
   );
   const [loading, setLoading] = useState(false);
 
@@ -247,6 +248,12 @@ function StickerViewer({ message, onLoadMedia }: { message: ChatMessage; onLoadM
     if (result) setSrc(result);
     setLoading(false);
   }, [src, onLoadMedia, message.id]);
+
+  useEffect(() => {
+    if (!src && message.fromMe && onLoadMedia) {
+      handleLoad();
+    }
+  }, []);
 
   if (src) {
     return <img src={src} alt="sticker" className="max-w-[150px] max-h-[150px]" />;
