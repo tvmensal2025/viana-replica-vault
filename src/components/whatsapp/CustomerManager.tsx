@@ -589,8 +589,10 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
   const filterButtons: { key: StatusFilter; label: string; count: number; color: string }[] = [
     { key: "all", label: "Todos", count: customers.length, color: "text-foreground" },
     { key: "approved", label: "Aprovados", count: customers.filter((c) => c.status === "approved").length, color: "text-green-400" },
+    { key: "awaiting_signature", label: "Falta Assinatura", count: customers.filter((c) => c.status === "awaiting_signature").length, color: "text-orange-400" },
     { key: "pending", label: "Pendentes", count: customers.filter((c) => c.status === "pending").length, color: "text-yellow-400" },
-    { key: "devolutiva", label: "Devolutiva", count: devolutivaCount, color: "text-red-400" },
+    { key: "devolutiva", label: "Devolutiva", count: customers.filter((c) => c.status === "devolutiva" || isDevolutiva(c)).length, color: "text-red-400" },
+    { key: "rejected", label: "Reprovados", count: customers.filter((c) => c.status === "rejected").length, color: "text-red-300" },
     { key: "lead", label: "Leads", count: customers.filter((c) => c.status === "lead").length, color: "text-blue-400" },
   ];
 
