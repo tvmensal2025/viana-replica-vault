@@ -208,8 +208,8 @@ export function useChats(instanceName: string | null) {
         }).catch(() => { /* non-critical */ })
           .finally(() => { fetchingPicsRef.current = false; });
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao buscar conversas");
+    } catch {
+      // Silently ignore auth / transient errors on polling — next interval will retry
     } finally {
       fetchingChatsRef.current = false;
       setIsLoading(false);

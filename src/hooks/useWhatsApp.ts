@@ -432,35 +432,43 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
   /* ── Refresh QR ── */
   const refreshQr = useCallback(async () => {
     const name = instanceName || getFixedInstanceName(consultantId);
-    addLog("📱 Renovando QR Code...");
 
-    // First check if already connected
-    const state = await checkState(name);
-    if (state === "open") {
-      await markConnected(name, "✅ WhatsApp já está conectado!");
-      startPolling(name);
-      return;
-    }
+    try {
+      addLog("📱 Renovando QR Code...");
 
-    const qrAttempt = await tryGetQr(name);
-    const recoveredConnection = qrAttempt.alreadyConnected || (
-      !qrAttempt.qr && await confirmConnectedState(name, 2, 1000)
-    );
+      // First check if already connected
+      const state = await checkState(name);
+      if (state === "open") {
+        await markConnected(name, "✅ WhatsApp já está conectado!");
+        startPolling(name);
+        return;
+      }
 
-    if (recoveredConnection) {
-      await markConnected(name, "✅ WhatsApp já está conectado!");
-      startPolling(name);
-      return;
-    }
+      const qrAttempt = await tryGetQr(name);
+      const recoveredConnection = qrAttempt.alreadyConnected || (
+        !qrAttempt.qr && await confirmConnectedState(name, 2, 1000)
+      );
 
-    if (qrAttempt.qr) {
-      setQrCode(qrAttempt.qr);
-      setQrGeneratedAt(Date.now());
-      setStatus("connecting");
-      setError(null);
-      addLog("📱 Novo QR Code gerado");
-    } else {
-      addLog("⏳ QR Code ainda não disponível. Tentando novamente...");
+      if (recoveredConnection) {
+        await markConnected(name, "✅ WhatsApp já está conectado!");
+        startPolling(name);
+        return;
+      }
+
+      if (qrAttempt.qr) {
+        setQrCode(qrAttempt.qr);
+        setQrGeneratedAt(Date.now());
+        setStatus("connecting");
+        setError(null);
+        addLog("📱 Novo QR Code gerado");
+      } else {
+        addLog("⏳ QR Code ainda não disponível. Tentando novamente...");
+      }
+    } catch (err) {
+      // Swallow auth errors silently — session is refreshing
+      if (isAuthError(err)) return;
+      // Swallow other transient errors to avoid crashing the UI
+      console.warn("[useWhatsApp] refreshQr error:", err);
     }
   }, [instanceName, consultantId, addLog, checkState, confirmConnectedState, markConnected, setStatus, startPolling, tryGetQr]);
 

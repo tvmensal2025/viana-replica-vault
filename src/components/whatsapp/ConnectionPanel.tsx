@@ -137,9 +137,9 @@ export function ConnectionPanel({
 
   const handleQrExpired = () => {
     setQrExpired(true);
-    // Auto-refresh if handler available
+    // Auto-refresh if handler available — catch to prevent unhandled promise rejection
     if (onRefreshQr) {
-      onRefreshQr();
+      onRefreshQr().catch(() => { /* swallowed */ });
     }
   };
 
