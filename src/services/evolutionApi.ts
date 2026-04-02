@@ -5,6 +5,15 @@ const SUPABASE_URL = "https://zlzasfhcxcznaprrragl.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpsemFzZmhjeGN6bmFwcnJyYWdsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyNzQ1NzAsImV4cCI6MjA4Njg1MDU3MH0.OJzRdi_Z_1TFZjQXmK8rJofBeHVZc27VSo2vMMw9Spo";
 const PROXY_URL = `${SUPABASE_URL}/functions/v1/evolution-proxy`;
 
+/** Custom error class for auth failures — hooks can check this to avoid crashing */
+export class EvolutionAuthError extends Error {
+  public readonly code = "auth_error";
+  constructor(message = "Sessão expirada. Aguarde a reconexão automática.") {
+    super(message);
+    this.name = "EvolutionAuthError";
+  }
+}
+
 function normalizeQrBase64(value: unknown): string | null {
   if (typeof value !== "string" || !value.trim()) return null;
   return value;
