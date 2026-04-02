@@ -294,7 +294,7 @@ Deno.serve(async (req) => {
     if (authError || !user) {
       console.log("[evolution-proxy] Auth failed:", authError?.message);
       return new Response(
-        JSON.stringify({ error: "Token de autenticação inválido ou ausente" }),
+        JSON.stringify({ error: "Token de autenticação inválido ou ausente", code: "auth_invalid" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
