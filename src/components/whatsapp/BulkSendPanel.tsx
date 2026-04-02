@@ -253,22 +253,6 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
           ))}
         </div>
 
-        {/* Devolutiva sub-filter */}
-        {statusFilter === "approved_devolutiva" && (
-          <div className="mb-3">
-            <Select value={devolutivaFilter} onValueChange={setDevolutivaFilter} disabled={isSending}>
-              <SelectTrigger className="rounded-xl bg-secondary/50 border-border/50 text-sm">
-                <SelectValue placeholder="Tipo de devolutiva..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas as devolutivas</SelectItem>
-                {DEVOLUTIVA_CATEGORIES.map(cat => (
-                  <SelectItem key={cat.key} value={cat.key}>{cat.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
 
         {/* Licenciado multi-select filter */}
         {licenciadoOptions.length > 0 && (
