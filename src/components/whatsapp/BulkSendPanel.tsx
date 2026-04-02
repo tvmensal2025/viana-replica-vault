@@ -181,7 +181,10 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
             if (r.status === "failed") allOk = false;
           }
         }
-        if (allOk) sent++; else failed++;
+        if (allOk) {
+          sent++;
+          setSentIds(prev => new Set(prev).add(selected[i].id));
+        } else { failed++; }
       } catch { failed++; }
 
       if (i < selected.length - 1) {
