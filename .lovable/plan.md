@@ -1,78 +1,89 @@
 
 
-# Melhorias no Kanban: Adicionar Leads + Múltiplas Mensagens Automáticas + Progressão de Reprovados
+# Motivos de Reprovação + Preview de Mensagem ao Arrastar
 
-## 1. Botão "Adicionar Lead" no Kanban
+## Sobre a dúvida "como sabe se é para reprovado ou aprovado"
 
-**Arquivo:** `KanbanBoard.tsx`
+Cada coluna do Kanban tem seu proprio `stage_id`. As mensagens automaticas na tabela `stage_auto_messages` sao vinculadas por `stage_id`, entao a coluna "Reprovado" tem suas proprias mensagens e "Aprovado" tem as dela. Nao ha confusao -- ja funciona assim.
 
-Dialog com duas opções:
-- **Clientes existentes**: Lista dos clientes já salvos na tabela `customers` (filtrados pelo `consultant_id`), com busca por nome/telefone e seleção múltipla. Ao confirmar, cria um `crm_deal` para cada cliente selecionado com `remote_jid` formatado e `customer_id` vinculado.
-- **Novo contato**: Campo para digitar número WhatsApp + nome manualmente (para leads que ainda não são clientes).
-- Seletor de estágio inicial (default: "novo_lead").
-- Campo de notas opcional.
-- Se estágio = "aprovado", seta `approved_at = now()` automaticamente.
+O problema real e mais interessante: **reprovados tem motivos diferentes e precisam de mensagens diferentes por motivo**.
 
-## 2. Múltiplas Mensagens Automáticas por Estágio
+## Proposta
 
-**Problema atual:** Cada estágio do Kanban suporta apenas 1 mensagem automática (1 texto + 1 mídia + 1 imagem). Limitado para réguas de comunicação mais completas.
+### 1. Motivos de reprovacao pre-definidos
 
-**Solução:** Criar tabela `stage_auto_messages` para suportar N mensagens por estágio.
+Criar uma lista fixa de motivos:
+- **Baixa renda**
+- **ICMS baixo**
+- **Emprestimo na conta de energia**
+- **Outro** (campo livre)
 
-### Nova tabela: `stage_auto_messages`
+### 2. Dialog de confirmacao ao arrastar para "Reprovado"
+
+Quando o usuario arrastar um deal para a coluna "Reprovado", em vez de mover direto, abrir um **dialog intermediario** com:
+- Seletor do motivo de reprovacao (obrigatorio)
+- Preview da mensagem automatica que sera enviada (texto, midia, imagem)
+- Botao "Confirmar e Enviar" / "Confirmar sem Enviar"
+
+### 3. Mensagens automaticas por motivo
+
+Em vez de uma unica configuracao de auto-mensagem para "Reprovado", permitir configurar **uma mensagem diferente por motivo de reprovacao**.
+
+**Mudanca na tabela `stage_auto_messages`:** adicionar coluna `rejection_reason TEXT NULL` -- quando preenchida, a mensagem so dispara se o motivo do deal bater. Quando NULL, dispara para qualquer motivo (comportamento atual).
+
+**Mudanca na tabela `crm_deals`:** adicionar coluna `rejection_reason TEXT NULL`.
+
+### 4. Preview ao arrastar para QUALQUER coluna
+
+Para todas as colunas (nao so reprovado), ao soltar o deal, mostrar um **mini-preview** das mensagens automaticas configuradas antes de confirmar o envio. Isso resolve a pergunta do usuario de "saber qual mensagem sera enviada".
+
+## Implementacao
+
+### Migration SQL
+- `ALTER TABLE crm_deals ADD COLUMN rejection_reason TEXT NULL`
+- `ALTER TABLE stage_auto_messages ADD COLUMN rejection_reason TEXT NULL`
+
+### KanbanBoard.tsx
+- Modificar `handleDrop`: em vez de mover direto, setar um estado `pendingDrop` com `{ dealId, targetStage }`
+- Abrir um **Dialog de confirmacao** que:
+  - Se a coluna for "reprovado": mostra seletor de motivo + preview das mensagens filtradas por motivo
+  - Para qualquer coluna: mostra preview das mensagens automaticas configuradas
+  - Botoes: "Confirmar e Enviar", "Mover sem Enviar", "Cancelar"
+- Ao confirmar, salvar `rejection_reason` no deal e enviar mensagens filtradas
+
+### StageAutoMessageConfig.tsx
+- Para colunas com `stage_key === "reprovado"`: adicionar campo de seletor de motivo em cada mensagem
+- Permitir criar mensagens especificas por motivo (ex: mensagem X so para "baixa_renda", mensagem Y so para "icms_baixo")
+
+## Fluxo do Usuario
+
+```text
+Arrasta deal → Coluna "Reprovado"
+    ↓
+Dialog aparece:
+  ┌──────────────────────────────┐
+  │ Mover para Reprovado         │
+  │                              │
+  │ Motivo: [Baixa renda     ▾]  │
+  │                              │
+  │ Mensagens que serao enviadas:│
+  │ ┌──────────────────────────┐ │
+  │ │ 🖼 imagem.jpg            │ │
+  │ │ 🔊 audio.ogg             │ │
+  │ │ Infelizmente seu cadastro│ │
+  │ │ nao foi aprovado...      │ │
+  │ └──────────────────────────┘ │
+  │                              │
+  │ [Cancelar] [Sem msg] [Enviar]│
+  └──────────────────────────────┘
 ```
-id (uuid PK)
-stage_id (uuid FK → kanban_stages.id)
-consultant_id (uuid)
-position (integer) — ordem de envio
-message_type (text) — text/image/video/audio
-message_text (text nullable)
-media_url (text nullable)
-image_url (text nullable)
-delay_seconds (integer default 0) — delay entre mensagens
-created_at (timestamptz)
-```
 
-**RLS:** `consultant_id = auth.uid()`
+## Arquivos alterados
 
-### Mudanças nos arquivos:
-- **`StageAutoMessageConfig.tsx`**: Refatorar para gerenciar uma lista de mensagens (adicionar/remover/reordenar). Cada item tem tipo, texto, mídia e delay.
-- **`KanbanBoard.tsx`**: Adaptar `handleSaveAutoMessage` para salvar na nova tabela em vez das colunas diretas do `kanban_stages`.
-- **`crm-auto-progress/index.ts`**: Buscar mensagens da tabela `stage_auto_messages` ordenadas por `position` e enviar sequencialmente com delays.
-
-## 3. Auto-progressão para Reprovados
-
-**Problema atual:** A Edge Function `crm-auto-progress` só progride deals com estágio "aprovado" e derivados (30/60/90/120 dias). Reprovados ficam parados para sempre.
-
-**Solução:** Adicionar progressão separada para reprovados.
-
-### Nova coluna em `crm_deals`:
-- `rejected_at (timestamptz nullable)` — setada quando deal move para "reprovado"
-
-### Novos estágios default:
-- `reprovado_60_dias` — "Reprovado 60 Dias" (posição após 120_dias)
-
-### Mudanças na Edge Function `crm-auto-progress`:
-- Buscar deals com `stage = 'reprovado'` e `rejected_at` preenchido
-- Se `daysSinceRejection >= 60`, mover para `reprovado_60_dias`
-- Enviar mensagem automática configurada nesse estágio (ex: "Olá, gostaríamos de tentar novamente...")
-- Extensível para mais estágios de reprovado no futuro
-
-### Mudanças no `KanbanBoard.tsx`:
-- Quando um deal é movido para "reprovado", setar `rejected_at = now()` automaticamente (similar ao `approved_at`)
-
-## Resumo de Arquivos
-
-| Arquivo | Mudança |
+| Arquivo | Mudanca |
 |---------|---------|
-| `KanbanBoard.tsx` | Botão adicionar lead + setar `rejected_at` + usar `stage_auto_messages` |
-| `StageAutoMessageConfig.tsx` | Gerenciar lista de N mensagens por estágio |
-| `crm-auto-progress/index.ts` | Progressão de reprovados + buscar `stage_auto_messages` |
-| Migration SQL | Tabela `stage_auto_messages` + coluna `rejected_at` em `crm_deals` |
-
-## Ordem de Implementação
-1. Migration (tabela + coluna)
-2. Botão adicionar lead no Kanban
-3. Múltiplas mensagens automáticas (UI + Edge Function)
-4. Progressão de reprovados (Edge Function + lógica de `rejected_at`)
+| Migration SQL | `rejection_reason` em `crm_deals` e `stage_auto_messages` |
+| `KanbanBoard.tsx` | Dialog de confirmacao com preview + motivo |
+| `StageAutoMessageConfig.tsx` | Filtro por motivo nas mensagens do estagio "reprovado" |
+| `crm-auto-progress/index.ts` | Filtrar mensagens por `rejection_reason` ao enviar automaticamente |
 
