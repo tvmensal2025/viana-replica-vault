@@ -420,6 +420,7 @@ export function StageAutoMessageConfig({
               onChange={(updated) => updateMessage(i, updated)}
               onRemove={() => removeMessage(i)}
               showRejectionReason={stageKey === "reprovado"}
+              showDealOrigin={["30_dias", "60_dias", "90_dias", "120_dias"].includes(stageKey)}
             />
           ))}
         </div>
