@@ -1040,6 +1040,16 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
                 </div>
               </div>
 
+              <SectionLabel icon={Users} title="Indicação" />
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Indicado por (nome)</Label>
+                <Input value={editForm.customer_referred_by_name || ""} onChange={(e) => updateEdit("customer_referred_by_name", e.target.value)} placeholder="Quem indicou este cliente" className="h-9 text-xs mt-1 bg-secondary/30 border-border/50" />
+              </div>
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Telefone do indicador</Label>
+                <Input value={editForm.customer_referred_by_phone || ""} onChange={(e) => updateEdit("customer_referred_by_phone", e.target.value)} placeholder="(00) 00000-0000" className="h-9 text-xs mt-1 bg-secondary/30 border-border/50" />
+              </div>
+
               <SectionLabel icon={Zap} title="Dados de Energia" />
               <div>
                 <Label className="text-[11px] text-muted-foreground">Nº Instalação</Label>
