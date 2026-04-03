@@ -227,6 +227,23 @@ function MessageItem({
         </div>
       )}
 
+      {/* Deal origin (for time-based stages like 30, 60, 90, 120 dias) */}
+      {showDealOrigin && (
+        <div className="space-y-1">
+          <p className="text-[9px] text-muted-foreground">🔄 Origem (só dispara para leads desta origem):</p>
+          <Select value={msg.deal_origin || "all"} onValueChange={(v) => onChange({ ...msg, deal_origin: v === "all" ? "" : v })}>
+            <SelectTrigger className="h-7 text-[10px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {DEAL_ORIGIN_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value} className="text-[10px]">{o.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       {/* Text */}
       <Textarea
         value={msg.message_text}
