@@ -846,6 +846,12 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
                               Ind: {c.customer_referred_by_name}
                             </span>
                           )}
+                          {c.cashback && (
+                            <span className="text-[11px] text-emerald-400 flex items-center gap-1">
+                              <CreditCard className="h-2.5 w-2.5" />
+                              CB: {c.cashback}
+                            </span>
+                          )}
                         </div>
                       </div>
 
