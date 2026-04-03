@@ -55,6 +55,7 @@ export function DropConfirmDialog({
   stageId,
   consultantId,
   dealName,
+  dealOrigin,
 }: DropConfirmDialogProps) {
   const [allMessages, setAllMessages] = useState<AutoMessagePreview[]>([]);
   const [rejectionReason, setRejectionReason] = useState("");
