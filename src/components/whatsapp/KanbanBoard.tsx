@@ -46,7 +46,7 @@ const DEFAULT_STAGES: Omit<KanbanStageInsert, "consultant_id">[] = [
   { stage_key: "60_dias", label: "60 DIAS", color: "bg-cyan-500/20 text-cyan-400", position: 4, auto_message_text: "Olá *{{nome}}*! 🌱\n\nJá são *60 dias* desde sua aprovação!\n\nEstamos acompanhando seu progresso.", auto_message_type: "text", auto_message_media_url: null, auto_message_enabled: true },
   { stage_key: "90_dias", label: "90 DIAS", color: "bg-yellow-500/20 text-yellow-400", position: 5, auto_message_text: "Olá *{{nome}}*! ☀️\n\n*90 dias* de aprovação!\n\nComo está a economia na sua conta de luz?", auto_message_type: "text", auto_message_media_url: null, auto_message_enabled: true },
   { stage_key: "120_dias", label: "120 DIAS", color: "bg-orange-500/20 text-orange-400", position: 6, auto_message_text: "Olá *{{nome}}*! 🏆\n\n*120 dias* de aprovação!\n\nQue tal indicar um amigo e ganhar benefícios?", auto_message_type: "text", auto_message_media_url: null, auto_message_enabled: true },
-  { stage_key: "reprovado_60_dias", label: "Reprovado 60 Dias", color: "bg-red-800/20 text-red-300", position: 7, auto_message_text: null, auto_message_type: "text", auto_message_media_url: null, auto_message_enabled: true },
+  
 ];
 
 const COLOR_OPTIONS = [

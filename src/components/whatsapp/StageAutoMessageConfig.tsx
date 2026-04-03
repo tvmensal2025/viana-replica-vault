@@ -122,6 +122,11 @@ function MessageItem({
             {REJECTION_REASONS.find((r) => r.value === msg.rejection_reason)?.label || msg.rejection_reason}
           </Badge>
         )}
+        {msg.deal_origin && (
+          <Badge variant="outline" className="text-[8px]">
+            {DEAL_ORIGIN_OPTIONS.find((o) => o.value === msg.deal_origin)?.label || msg.deal_origin}
+          </Badge>
+        )}
 
         {/* Delay */}
         {index > 0 && (
