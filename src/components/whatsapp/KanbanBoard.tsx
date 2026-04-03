@@ -133,9 +133,13 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
 
     const phone = resolveRecipient(deal.remote_jid);
 
-    // If no multi-messages, fall back to legacy single message
-    const messagesToSend = autoMsgs && autoMsgs.length > 0
-      ? autoMsgs
+    // Filter by rejection_reason if applicable, then fall back to legacy
+    let filteredMsgs = autoMsgs && autoMsgs.length > 0
+      ? autoMsgs.filter((m: any) => !m.rejection_reason || m.rejection_reason === rejectionReason)
+      : [];
+
+    const messagesToSend = filteredMsgs.length > 0
+      ? filteredMsgs
       : (stage.auto_message_text || stage.auto_message_media_url || (stage as any).auto_message_image_url)
         ? [{
             message_type: stage.auto_message_type || "text",
