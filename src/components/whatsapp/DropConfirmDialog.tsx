@@ -32,6 +32,7 @@ interface AutoMessagePreview {
   image_url: string | null;
   delay_seconds: number;
   rejection_reason: string | null;
+  deal_origin: string | null;
 }
 
 interface DropConfirmDialogProps {
