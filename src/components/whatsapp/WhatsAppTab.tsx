@@ -253,6 +253,7 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
       <div className="flex border-x border-border bg-card overflow-x-auto">
         {SUB_TABS.map((tab) => {
           const Icon = tab.icon;
+          const showBadge = tab.key === "conversas" && totalUnread > 0;
           return (
             <button
               key={tab.key}
@@ -265,6 +266,11 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
             >
               <Icon className="h-3.5 w-3.5" />
               {tab.label}
+              {showBadge && (
+                <span className="bg-primary text-primary-foreground text-[9px] rounded-full h-4 min-w-[16px] flex items-center justify-center px-1 font-bold">
+                  {totalUnread > 99 ? "99+" : totalUnread}
+                </span>
+              )}
             </button>
           );
         })}
