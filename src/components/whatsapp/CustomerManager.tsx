@@ -441,6 +441,12 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
     const linkAssinatura = safeString(findColumnValue(row, "Link Assinatura", "link_assinatura"));
     if (linkAssinatura) data.link_assinatura = linkAssinatura;
 
+    const indicador = safeString(findColumnValue(row, "Indicador", "indicador", "Indicado Por", "indicado_por", "Quem Indicou", "Referido Por"));
+    if (indicador) data.customer_referred_by_name = indicador;
+
+    const indicadorPhone = safeString(findColumnValue(row, "Telefone Indicador", "telefone_indicador", "Celular Indicador"));
+    if (indicadorPhone) data.customer_referred_by_phone = indicadorPhone;
+
     return data;
   }
 
