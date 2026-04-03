@@ -90,10 +90,12 @@ async function sendAutoMessages(
     .eq("stage_id", stageData.id)
     .order("position", { ascending: true });
 
-  // Filter by rejection_reason: include messages with no reason or matching reason
-  const filtered = multiMsgs?.filter((m: any) =>
-    !m.rejection_reason || m.rejection_reason === rejectionReason
-  ) || [];
+  // Filter by rejection_reason and deal_origin
+  const filtered = multiMsgs?.filter((m: any) => {
+    const reasonMatch = !m.rejection_reason || m.rejection_reason === rejectionReason;
+    const originMatch = !m.deal_origin || m.deal_origin === dealOrigin;
+    return reasonMatch && originMatch;
+  }) || [];
 
   if (filtered.length > 0) {
     for (let i = 0; i < filtered.length; i++) {

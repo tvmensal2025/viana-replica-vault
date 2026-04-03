@@ -68,7 +68,7 @@ export function DropConfirmDialog({
     (async () => {
       const { data } = await supabase
         .from("stage_auto_messages")
-        .select("message_type, message_text, media_url, image_url, delay_seconds, rejection_reason")
+        .select("message_type, message_text, media_url, image_url, delay_seconds, rejection_reason, deal_origin")
         .eq("stage_id", stageId)
         .eq("consultant_id", consultantId)
         .order("position", { ascending: true });

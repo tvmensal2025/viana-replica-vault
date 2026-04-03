@@ -665,6 +665,7 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
           dealName={
             deals.find((d) => d.id === pendingDrop.dealId)?.remote_jid?.split("@")[0] || "Lead"
           }
+          dealOrigin={(deals.find((d) => d.id === pendingDrop.dealId) as any)?.deal_origin}
         />
       )}
     </div>
