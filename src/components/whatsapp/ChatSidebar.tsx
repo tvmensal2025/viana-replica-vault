@@ -137,13 +137,39 @@ export function ChatSidebar({ chats, isLoading, selectedJid, onSelectChat, consu
         <div className="relative">
           <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
           <Input
-            placeholder="Buscar conversa..."
+            placeholder="Buscar conversa ou cliente..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-8 h-8 text-xs bg-secondary border-none"
           />
         </div>
       </div>
+
+      {/* Customer search results from DB */}
+      {customerResults.length > 0 && (
+        <div className="border-b border-border">
+          <p className="text-[10px] text-muted-foreground px-3 pt-1.5 pb-1 flex items-center gap-1">
+            <Users className="h-3 w-3" /> Clientes encontrados
+          </p>
+          {customerResults.map((cr) => (
+            <button
+              key={cr.phone_whatsapp}
+              onClick={() => handleStartChatFromCustomer(cr.phone_whatsapp)}
+              className="w-full flex items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-secondary/80"
+            >
+              <Avatar className="h-8 w-8 shrink-0">
+                <AvatarFallback className="bg-accent/20 text-accent text-[10px]">
+                  {(cr.name || "?").slice(0, 2).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <div className="min-w-0">
+                <span className="text-xs font-medium text-foreground truncate block">{cr.name || cr.phone_whatsapp}</span>
+                <span className="text-[10px] text-muted-foreground">{cr.phone_whatsapp}</span>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Chat list */}
       <ScrollArea className="flex-1">
