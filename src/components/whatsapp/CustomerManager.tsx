@@ -667,6 +667,8 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
                 Status: c.status || "", Cidade: c.address_city || "", Estado: c.address_state || "",
                 Distribuidora: c.distribuidora || "", "Consumo Médio (kW)": c.media_consumo ?? "",
                 "Valor Conta (R$)": c.electricity_bill_value ?? "", Licenciado: c.registered_by_name || "",
+                "Indicado Por": c.customer_referred_by_name || "", "Telefone Indicador": c.customer_referred_by_phone || "",
+                Cashback: c.cashback || "",
                 "Código iGreen": c.igreen_code || "", Andamento: c.andamento_igreen || "",
                 Devolutiva: c.devolutiva || "", Observação: c.observacao || "",
                 "Data Cadastro": c.data_cadastro || c.created_at || "",
