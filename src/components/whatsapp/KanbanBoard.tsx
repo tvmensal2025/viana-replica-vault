@@ -218,9 +218,11 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
     const updateData: CrmDealUpdate = { stage: stageKey };
     if (stageKey === "aprovado" && !deal.approved_at) {
       updateData.approved_at = new Date().toISOString();
+      (updateData as any).deal_origin = "aprovado";
     }
     if (stageKey === "reprovado" && !deal.rejected_at) {
       (updateData as any).rejected_at = new Date().toISOString();
+      (updateData as any).deal_origin = "reprovado";
     }
     if (rejectionReason) {
       (updateData as any).rejection_reason = rejectionReason;
