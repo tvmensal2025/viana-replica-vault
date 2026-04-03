@@ -78,6 +78,7 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
   const [addingNew, setAddingNew] = useState(false);
   const [draggedStageId, setDraggedStageId] = useState<string | null>(null);
   const [dragOverStageId, setDragOverStageId] = useState<string | null>(null);
+  const [pendingDrop, setPendingDrop] = useState<{ dealId: string; stageKey: string; stageId: string; stageLabel: string } | null>(null);
   const { toast } = useToast();
 
   const fetchStages = useCallback(async () => {
