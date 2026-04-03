@@ -445,8 +445,8 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
               </DialogHeader>
               <p className="text-[11px] text-muted-foreground -mt-1">
                 Leads aprovados progridem automaticamente para 30 → 60 → 90 → 120 DIAS.
-                Reprovados progridem para "Reprovado 60 Dias" após 60 dias.
-                Cada coluna pode ter múltiplas mensagens automáticas.
+                Reprovados progridem para 60 DIAS após 60 dias.
+                Nas colunas de tempo, configure mensagens por origem (aprovado/reprovado).
               </p>
               <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
                 {stages.map((stage) => (
