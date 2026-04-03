@@ -326,6 +326,7 @@ export function StageAutoMessageConfig({
         image_url: "",
         delay_seconds: prev.length > 0 ? 5 : 0,
         rejection_reason: "",
+        deal_origin: "",
       },
     ]);
   };
