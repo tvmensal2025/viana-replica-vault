@@ -196,6 +196,7 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [selectedLicenciado, setSelectedLicenciado] = useState("all");
   const [syncing, setSyncing] = useState(false);
+  const [syncCooldown, setSyncCooldown] = useState(0);
   const [lastSync, setLastSync] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -208,11 +209,36 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
       if (data?.value) setLastSync(data.value);
     });
   }, []);
+  // Cooldown timer
+  useEffect(() => {
+    const stored = localStorage.getItem("sync_cooldown_until");
+    if (stored) {
+      const remaining = Math.ceil((parseInt(stored) - Date.now()) / 1000);
+      if (remaining > 0) setSyncCooldown(remaining);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (syncCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setSyncCooldown((prev) => {
+        if (prev <= 1) { clearInterval(timer); return 0; }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [syncCooldown]);
+
+  const startCooldown = () => {
+    const seconds = 60;
+    setSyncCooldown(seconds);
+    localStorage.setItem("sync_cooldown_until", String(Date.now() + seconds * 1000));
+  };
 
   async function handleSyncIgreen() {
     setSyncing(true);
+    startCooldown();
     try {
-      // Fetch consultant's portal credentials
       const { data: consultant } = await supabase.from("consultants").select("igreen_portal_email, igreen_portal_password").eq("id", consultantId).maybeSingle();
       const portalEmail = (consultant as any)?.igreen_portal_email;
       const portalPassword = (consultant as any)?.igreen_portal_password;
@@ -619,9 +645,9 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button onClick={handleSyncIgreen} size="sm" variant="outline" className="gap-2 rounded-xl font-semibold h-9 px-4 border-green-500/20 text-green-600 hover:bg-green-500/10" disabled={syncing}>
+            <Button onClick={handleSyncIgreen} size="sm" variant="outline" className="gap-2 rounded-xl font-semibold h-9 px-4 border-green-500/20 text-green-600 hover:bg-green-500/10" disabled={syncing || syncCooldown > 0}>
               {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-              Sincronizar iGreen
+              {syncing ? "Sincronizando..." : syncCooldown > 0 ? `Aguarde ${syncCooldown}s` : "Sincronizar iGreen"}
             </Button>
             <Button onClick={() => {
               const exportData = filtered.map((c) => ({

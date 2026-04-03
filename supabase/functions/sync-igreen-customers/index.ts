@@ -212,29 +212,45 @@ Deno.serve(async (req) => {
       "Origin": "https://escritorio.igreenenergy.com.br",
       "Referer": "https://escritorio.igreenenergy.com.br/",
     };
-    const loginRes = await fetch(`${API_BASE}/login`, {
-      method: "POST",
-      headers: browserHeaders,
-      body: JSON.stringify({ email: portalEmail, password: portalPassword }),
-    });
+    async function attemptLogin(): Promise<Response> {
+      return await fetch(`${API_BASE}/login`, {
+        method: "POST",
+        headers: browserHeaders,
+        body: JSON.stringify({ email: portalEmail, password: portalPassword }),
+      });
+    }
+
+    let loginRes = await attemptLogin();
+
+    // If rate-limited, wait 30s and retry once
+    if (loginRes.status === 429 || (await loginRes.clone().text()).toLowerCase().includes("muitas tentativas")) {
+      console.log("Rate limited (429). Waiting 30s before retry...");
+      await new Promise((r) => setTimeout(r, 30000));
+      loginRes = await attemptLogin();
+    }
 
     if (!loginRes.ok) {
       const errText = await loginRes.text();
       console.error(`Login failed: ${loginRes.status} - ${errText}`);
 
-      // Parse Firebase error for a friendlier message
       let friendlyError = "Login no portal iGreen falhou. Verifique email e senha informados na aba Dados.";
-      try {
-        const errJson = JSON.parse(errText);
-        const fbMsg = errJson?.error?.message || "";
-        if (fbMsg.includes("wrong-password")) {
-          friendlyError = `Senha incorreta para o email ${portalEmail}. Verifique a senha do portal iGreen na aba Dados.`;
-        } else if (fbMsg.includes("user-not-found")) {
-          friendlyError = `Email ${portalEmail} não encontrado no portal iGreen. Verifique o email na aba Dados.`;
-        } else if (fbMsg.includes("too-many-requests")) {
-          friendlyError = "Muitas tentativas de login. Aguarde alguns minutos e tente novamente.";
-        }
-      } catch { /* not JSON */ }
+
+      // Check for rate limit BEFORE trying JSON parse
+      if (loginRes.status === 429 || errText.toLowerCase().includes("muitas tentativas")) {
+        friendlyError = "Muitas tentativas de login no portal iGreen. Aguarde 10 minutos e tente novamente.";
+      } else {
+        try {
+          const errJson = JSON.parse(errText);
+          const fbMsg = errJson?.error?.message || "";
+          if (fbMsg.includes("wrong-password")) {
+            friendlyError = `Senha incorreta para o email ${portalEmail}. Verifique a senha do portal iGreen na aba Dados.`;
+          } else if (fbMsg.includes("user-not-found")) {
+            friendlyError = `Email ${portalEmail} não encontrado no portal iGreen. Verifique o email na aba Dados.`;
+          } else if (fbMsg.includes("too-many-requests")) {
+            friendlyError = "Muitas tentativas de login. Aguarde alguns minutos e tente novamente.";
+          }
+        } catch { /* not JSON */ }
+      }
 
       return new Response(
         JSON.stringify({ success: false, error: friendlyError }),

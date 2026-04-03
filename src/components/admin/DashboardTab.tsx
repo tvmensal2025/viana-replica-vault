@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, AreaChart, Area, PieChart, Pie, Cell, Legend,
 } from "recharts";
@@ -28,10 +28,37 @@ export function DashboardTab({ userId, form, onFormUpdate, periodDays, onPeriodC
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [syncingDashboard, setSyncingDashboard] = useState(false);
+  const [syncCooldown, setSyncCooldown] = useState(0);
   const [selectedLicenciado, setSelectedLicenciado] = useState("all");
   const [showCredentialsDialog, setShowCredentialsDialog] = useState(false);
   const [credForm, setCredForm] = useState({ email: "", password: "" });
   const [showCredPassword, setShowCredPassword] = useState(false);
+
+  // Cooldown timer: restore from localStorage on mount
+  useEffect(() => {
+    const stored = localStorage.getItem("sync_cooldown_until");
+    if (stored) {
+      const remaining = Math.ceil((parseInt(stored) - Date.now()) / 1000);
+      if (remaining > 0) setSyncCooldown(remaining);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (syncCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setSyncCooldown((prev) => {
+        if (prev <= 1) { clearInterval(timer); return 0; }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [syncCooldown]);
+
+  const startCooldown = () => {
+    const seconds = 60;
+    setSyncCooldown(seconds);
+    localStorage.setItem("sync_cooldown_until", String(Date.now() + seconds * 1000));
+  };
 
   const licenciadoOptions = useMemo(() => {
     if (!analytics?.allCustomers) return [];
@@ -102,6 +129,7 @@ export function DashboardTab({ userId, form, onFormUpdate, periodDays, onPeriodC
 
   const runSync = async (email: string, password: string) => {
     setSyncingDashboard(true);
+    startCooldown();
     try {
       const { data, error } = await supabase.functions.invoke("sync-igreen-customers", {
         body: { portal_email: email, portal_password: password, consultant_id: userId },
@@ -194,9 +222,9 @@ export function DashboardTab({ userId, form, onFormUpdate, periodDays, onPeriodC
               ))}
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm" onClick={handleDashboardSync} disabled={syncingDashboard} className="h-8 text-xs gap-1.5">
+          <Button variant="outline" size="sm" onClick={handleDashboardSync} disabled={syncingDashboard || syncCooldown > 0} className="h-8 text-xs gap-1.5">
             {syncingDashboard ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-            {syncingDashboard ? "Sincronizando..." : "Sincronizar iGreen"}
+            {syncingDashboard ? "Sincronizando..." : syncCooldown > 0 ? `Aguarde ${syncCooldown}s` : "Sincronizar iGreen"}
           </Button>
         </div>
       </div>
