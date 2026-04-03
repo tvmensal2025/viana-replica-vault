@@ -43,6 +43,7 @@ interface DropConfirmDialogProps {
   stageId: string;
   consultantId: string;
   dealName: string;
+  dealOrigin?: string | null;
 }
 
 export function DropConfirmDialog({
