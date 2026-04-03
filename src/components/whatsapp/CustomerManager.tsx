@@ -65,6 +65,8 @@ interface Customer {
   assinatura_cliente?: string | null;
   assinatura_igreen?: string | null;
   link_assinatura?: string | null;
+  customer_referred_by_name?: string | null;
+  customer_referred_by_phone?: string | null;
 }
 
 interface CustomerManagerProps {
