@@ -390,6 +390,7 @@ export function StageAutoMessageConfig({
               index={i}
               onChange={(updated) => updateMessage(i, updated)}
               onRemove={() => removeMessage(i)}
+              showRejectionReason={stageKey === "reprovado"}
             />
           ))}
         </div>
