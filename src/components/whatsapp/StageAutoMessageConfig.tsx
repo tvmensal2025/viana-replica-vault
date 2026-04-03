@@ -67,12 +67,14 @@ function MessageItem({
   onChange,
   onRemove,
   showRejectionReason,
+  showDealOrigin,
 }: {
   msg: AutoMessage;
   index: number;
   onChange: (updated: AutoMessage) => void;
   onRemove: () => void;
   showRejectionReason: boolean;
+  showDealOrigin: boolean;
 }) {
   const [uploading, setUploading] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
