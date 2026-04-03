@@ -120,7 +120,7 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
   const handleDragStart = (id: string) => setDraggedId(id);
 
   // Send auto-messages when deal moves to a stage (now supports multiple)
-  const sendAutoMessages = async (stage: KanbanStageRow, deal: CrmDealRow) => {
+  const sendAutoMessages = async (stage: KanbanStageRow, deal: CrmDealRow, rejectionReason?: string) => {
     if (!stage.auto_message_enabled || !instanceName || !deal.remote_jid) return;
 
     // Fetch multi-messages from stage_auto_messages
