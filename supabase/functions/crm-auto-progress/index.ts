@@ -81,7 +81,8 @@ async function sendAutoMessages(
   stageData: any,
   apiUrl: string,
   apiKey: string,
-  rejectionReason?: string | null
+  rejectionReason?: string | null,
+  dealOrigin?: string | null
 ) {
   // Try multi-message table first
   const { data: multiMsgs } = await supabase
