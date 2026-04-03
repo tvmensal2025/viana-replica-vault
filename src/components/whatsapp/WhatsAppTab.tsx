@@ -278,6 +278,10 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
 
       {/* Content area */}
       <div className="flex-1 border border-t-0 border-border rounded-b-lg overflow-hidden bg-background">
+        {activeSubTab === "dashboard" && (
+          <WhatsAppDashboard consultantId={userId} />
+        )}
+
         {activeSubTab === "conversas" && (
           isConnected && instanceName ? (
             <div className="flex h-full">
