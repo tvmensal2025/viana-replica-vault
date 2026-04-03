@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useWhatsApp } from "@/hooks/useWhatsApp";
 import { useTemplates } from "@/hooks/useTemplates";
@@ -12,7 +12,8 @@ import { ChatSidebar } from "./ChatSidebar";
 import { ChatView } from "./ChatView";
 import { KanbanBoard } from "./KanbanBoard";
 import { SchedulePanel } from "./SchedulePanel";
-import { MessageSquare, LayoutGrid, Send, FileText, Clock, Users } from "lucide-react";
+import { WhatsAppDashboard } from "./WhatsAppDashboard";
+import { BarChart3, MessageSquare, LayoutGrid, Send, FileText, Clock, Users } from "lucide-react";
 
 interface Customer {
   id: string;
@@ -25,9 +26,10 @@ interface WhatsAppTabProps {
   userId: string;
 }
 
-type SubTab = "conversas" | "crm" | "envio_massa" | "templates" | "agendamentos" | "clientes";
+type SubTab = "dashboard" | "conversas" | "crm" | "envio_massa" | "templates" | "agendamentos" | "clientes";
 
 const SUB_TABS: { key: SubTab; label: string; icon: React.ElementType }[] = [
+  { key: "dashboard", label: "Dashboard", icon: BarChart3 },
   { key: "conversas", label: "Conversas", icon: MessageSquare },
   { key: "crm", label: "CRM", icon: LayoutGrid },
   { key: "envio_massa", label: "Envio em Massa", icon: Send },
@@ -66,7 +68,7 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
   );
 
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [activeSubTab, setActiveSubTab] = useState<SubTab>("conversas");
+  const [activeSubTab, setActiveSubTab] = useState<SubTab>("dashboard");
   const [selectedChatJid, setSelectedChatJid] = useState<string | null>(null);
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const [pendingMessageKey, setPendingMessageKey] = useState(0);
@@ -202,6 +204,7 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
     fetchCustomers();
   }, [fetchCustomers]);
 
+  const totalUnread = useMemo(() => chats.reduce((sum, c) => sum + c.unreadCount, 0), [chats]);
   const isConnected = connectionStatus === "connected";
 
   return (
@@ -250,6 +253,7 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
       <div className="flex border-x border-border bg-card overflow-x-auto">
         {SUB_TABS.map((tab) => {
           const Icon = tab.icon;
+          const showBadge = tab.key === "conversas" && totalUnread > 0;
           return (
             <button
               key={tab.key}
@@ -262,6 +266,11 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
             >
               <Icon className="h-3.5 w-3.5" />
               {tab.label}
+              {showBadge && (
+                <span className="bg-primary text-primary-foreground text-[9px] rounded-full h-4 min-w-[16px] flex items-center justify-center px-1 font-bold">
+                  {totalUnread > 99 ? "99+" : totalUnread}
+                </span>
+              )}
             </button>
           );
         })}
@@ -269,6 +278,10 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
 
       {/* Content area */}
       <div className="flex-1 border border-t-0 border-border rounded-b-lg overflow-hidden bg-background">
+        {activeSubTab === "dashboard" && (
+          <WhatsAppDashboard consultantId={userId} />
+        )}
+
         {activeSubTab === "conversas" && (
           isConnected && instanceName ? (
             <div className="flex h-full">
@@ -278,6 +291,7 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
                   isLoading={chatsLoading}
                   selectedJid={selectedChatJid}
                   onSelectChat={handleSelectChat}
+                  consultantId={userId}
                 />
               </div>
               <ChatView
