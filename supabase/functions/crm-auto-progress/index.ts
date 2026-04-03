@@ -212,7 +212,7 @@ Deno.serve(async (req) => {
           .limit(1)
           .single();
         if (instance) {
-          await sendAutoMessages(supabase, instance.instance_name, deal.remote_jid.split("@")[0], stageData, evolutionUrl, evolutionKey, deal.rejection_reason);
+          await sendAutoMessages(supabase, instance.instance_name, deal.remote_jid.split("@")[0], stageData, evolutionUrl, evolutionKey, deal.rejection_reason, deal.deal_origin || "reprovado");
         }
       }
     }
