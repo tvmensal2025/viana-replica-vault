@@ -478,6 +478,7 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
                         <StageAutoMessageConfig
                           stageId={stage.id}
                           stageLabel={stage.label}
+                          stageKey={stage.stage_key}
                           consultantId={consultantId}
                           autoMessageText={stage.auto_message_text}
                           autoMessageType={stage.auto_message_type || "text"}

@@ -234,6 +234,7 @@ function MessageItem({
 export function StageAutoMessageConfig({
   stageId,
   stageLabel,
+  stageKey,
   consultantId,
   autoMessageText,
   autoMessageType,
