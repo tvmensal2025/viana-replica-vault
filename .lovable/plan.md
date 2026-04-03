@@ -1,72 +1,66 @@
 
 
-# Análise: Pessoa responsável pelo cashback (indicador) vs Licenciado
+# Melhorias no Painel de Envio em Massa
 
-## Situação atual
+## Analise do estado atual
 
-O sistema já captura do portal iGreen dois campos relevantes:
-- **`registered_by_name`** — nome do licenciado que cadastrou o cliente
-- **`registered_by_igreen_id`** — código do licenciado no iGreen
+O painel atual tem: filtros por status (Todos/Aprovado/Reprovado/Pendente), filtro por licenciado, seletor de template, textarea de mensagem, e lista de clientes com checkboxes. Funciona, mas falta refinamento em areas-chave comparado com ferramentas como WATI, Interakt, e Brevo.
 
-Porém, no modelo de cashback da iGreen, quem **indicou** o cliente (e recebe o cashback) nem sempre é o mesmo licenciado que fez o cadastro. Essa informação hoje não é rastreada separadamente.
+## Melhorias propostas (baseadas em analise de mercado)
 
-## O que a API iGreen fornece
+### 1. Barra de busca na lista de clientes
+Todas as ferramentas de mercado tem busca por nome/telefone na lista. Hoje o usuario precisa rolar a lista inteira para encontrar alguem.
 
-Olhando o sync (`sync-igreen-customers`), os campos extraídos são:
-- `licenciado` / `codigoLicenciado` → salvos como `registered_by_name` / `registered_by_igreen_id`
-- `cashback` → salvo como texto
+### 2. Preview da mensagem antes de enviar
+Ferramentas como WATI mostram um "preview do WhatsApp" com a mensagem renderizada (com variaveis substituidas) antes do envio. Adicionar um mockup de celular ou card mostrando como a mensagem final ficara com os dados do primeiro cliente selecionado.
 
-A API iGreen pode ou não fornecer um campo separado para o **indicador**. Precisamos verificar.
+### 3. Contador de clientes validos vs invalidos
+Na screenshot, varios clientes tem "sem_celular_XXXXX". O sistema ja filtra na hora do envio, mas o usuario nao sabe quantos vao falhar. Mostrar: "9 filtrados (6 validos, 3 sem numero)".
 
-## Opções de implementação
+### 4. Agendamento de envio
+Permitir agendar o envio em massa para uma data/hora futura em vez de enviar imediatamente. Muito comum em WATI e Interakt.
 
-### Opção A: Campo manual "Indicado por"
+### 5. Filtro por devolutiva visivel
+O filtro de devolutiva existe no codigo mas nao aparece na UI quando status = "rejected". Tornar visivel.
 
-Adicionar dois campos na tabela `customers`:
-- `referred_by_name TEXT` — nome de quem indicou
-- `referred_by_phone TEXT` — telefone de quem indicou (para vincular)
+### 6. Excluir automaticamente numeros invalidos da selecao
+Quando o usuario clica "Selecionar Todos", excluir automaticamente clientes com telefone invalido (sem_celular, etc). Hoje eles sao selecionados mas falham silenciosamente.
 
-**Prós:** Simples, funciona mesmo sem dados da API
-**Contras:** Preenchimento manual
+### 7. Estimativa de tempo de envio
+Mostrar antes de enviar: "Tempo estimado: ~8 minutos" baseado na quantidade selecionada e nos intervalos anti-bloqueio.
 
-### Opção B: Vincular a outro consultor do sistema
+### 8. Historico de envios em massa
+Registrar cada campanha (data, template, qtd enviada, qtd falha) para consulta posterior.
 
-Se o indicador também é um licenciado cadastrado no sistema, podemos usar:
-- `referred_by_consultant_id UUID` → referência a `consultants.id`
+## Prioridade de implementacao
 
-Isso permitiria um **dashboard de indicações** mostrando quantos clientes cada pessoa trouxe e o cashback gerado.
+| # | Melhoria | Impacto | Esforco |
+|---|----------|---------|---------|
+| 1 | Busca na lista | Alto | Baixo |
+| 2 | Excluir invalidos do "Selecionar Todos" | Alto | Baixo |
+| 3 | Contador validos/invalidos | Alto | Baixo |
+| 4 | Estimativa de tempo | Medio | Baixo |
+| 5 | Preview da mensagem | Alto | Medio |
+| 6 | Filtro devolutiva visivel | Medio | Baixo |
+| 7 | Agendamento | Alto | Alto |
+| 8 | Historico de campanhas | Medio | Alto |
 
-**Prós:** Relatórios automáticos, rastreabilidade
-**Contras:** Só funciona se o indicador estiver cadastrado no sistema
+## Plano de implementacao (itens 1-6, rapidos)
 
-### Opção C: Híbrido (recomendado)
+### Arquivos alterados
 
-Combinar ambos:
-- `referred_by_name TEXT` — sempre preenchido (manual ou via sync)
-- `referred_by_phone TEXT` — telefone do indicador
-- `referred_by_consultant_id UUID NULL` — preenchido automaticamente se o telefone/nome bater com um consultor cadastrado
+| Arquivo | Mudanca |
+|---------|---------|
+| `BulkSendPanel.tsx` | Busca, contador, filtro invalidos, estimativa de tempo, filtro devolutiva, preview |
 
-Na tabela de clientes (CustomerManager), adicionar:
-1. Coluna "Indicado por" na tabela
-2. No modal de detalhes, campo editável para informar quem indicou
-3. No sync iGreen, tentar extrair o campo de indicação se a API fornecer
+### Detalhes tecnicos
 
-### Visualização proposta
+- **Busca**: Input com `useState<string>` filtrando `filteredCustomers` por nome ou telefone
+- **Invalidos**: Funcao `isValidPhone(phone)` que exclui "sem_celular" e telefones < 10 digitos; badge mostrando quantos sao invalidos; "Selecionar Todos" ignora invalidos
+- **Contador**: Ao lado de "X selecionados", mostrar "Y validos / Z sem numero"
+- **Estimativa**: Calcular `selectedIds.size * avgInterval` e mostrar "~X min"
+- **Preview**: Card com fundo verde WhatsApp mostrando mensagem com variaveis substituidas do primeiro selecionado
+- **Filtro devolutiva**: Mostrar dropdown de categorias de devolutiva quando status = "rejected"
 
-Na tela de clientes (screenshot que você enviou), adicionar uma coluna **"Indicado por"** ao lado de "Licenciado". No Kanban e nos relatórios, permitir filtrar por indicador.
-
-Também seria possível criar uma **aba de Indicações/Cashback** no admin mostrando:
-- Ranking de indicadores
-- Total de clientes por indicador
-- Valor estimado de cashback por indicador
-
-## Próximos passos sugeridos
-
-1. Verificar se a API iGreen retorna algum campo de "indicador" ou "quem trouxe" separado do licenciado
-2. Escolher entre as opções A, B ou C
-3. Implementar os campos e a UI
-
-## Pergunta-chave
-
-A informação de "quem trouxe o cliente" vem do portal iGreen (algum campo que ainda não estamos capturando) ou é algo que o licenciado preenche manualmente no seu sistema?
+Os itens 7 e 8 (agendamento e historico) exigem tabelas no banco e Edge Functions, podem ser feitos em uma fase posterior.
 
