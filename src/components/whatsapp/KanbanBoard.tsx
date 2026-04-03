@@ -135,7 +135,11 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
 
     // Filter by rejection_reason if applicable, then fall back to legacy
     let filteredMsgs = autoMsgs && autoMsgs.length > 0
-      ? autoMsgs.filter((m: any) => !m.rejection_reason || m.rejection_reason === rejectionReason)
+      ? autoMsgs.filter((m: any) => {
+          const reasonMatch = !m.rejection_reason || m.rejection_reason === rejectionReason;
+          const originMatch = !m.deal_origin || m.deal_origin === (deal as any).deal_origin;
+          return reasonMatch && originMatch;
+        })
       : [];
 
     const messagesToSend = filteredMsgs.length > 0
