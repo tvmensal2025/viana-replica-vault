@@ -11,9 +11,17 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { MessageSquare, Image, Video, Mic, X, Check, Bold, Upload, Loader2, Plus, Trash2, GripVertical } from "lucide-react";
 import { uploadMedia, getAcceptString, formatFileSize } from "@/services/minioUpload";
 import { useToast } from "@/hooks/use-toast";
+import { REJECTION_REASONS } from "./DropConfirmDialog";
 
 interface StageAutoMessageConfigProps {
   stageId: string;
