@@ -26,6 +26,7 @@ import {
   Zap,
 } from "lucide-react";
 import { StageAutoMessageConfig } from "./StageAutoMessageConfig";
+import { AddLeadDialog } from "./AddLeadDialog";
 import { sendWhatsAppMessage, resolveRecipient } from "@/services/messageSender";
 import type { MediaCategory } from "@/services/messageSender";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
@@ -44,6 +45,7 @@ const DEFAULT_STAGES: Omit<KanbanStageInsert, "consultant_id">[] = [
   { stage_key: "60_dias", label: "60 DIAS", color: "bg-cyan-500/20 text-cyan-400", position: 4, auto_message_text: "Olá *{{nome}}*! 🌱\n\nJá são *60 dias* desde sua aprovação!\n\nEstamos acompanhando seu progresso.", auto_message_type: "text", auto_message_media_url: null, auto_message_enabled: true },
   { stage_key: "90_dias", label: "90 DIAS", color: "bg-yellow-500/20 text-yellow-400", position: 5, auto_message_text: "Olá *{{nome}}*! ☀️\n\n*90 dias* de aprovação!\n\nComo está a economia na sua conta de luz?", auto_message_type: "text", auto_message_media_url: null, auto_message_enabled: true },
   { stage_key: "120_dias", label: "120 DIAS", color: "bg-orange-500/20 text-orange-400", position: 6, auto_message_text: "Olá *{{nome}}*! 🏆\n\n*120 dias* de aprovação!\n\nQue tal indicar um amigo e ganhar benefícios?", auto_message_type: "text", auto_message_media_url: null, auto_message_enabled: true },
+  { stage_key: "reprovado_60_dias", label: "Reprovado 60 Dias", color: "bg-red-800/20 text-red-300", position: 7, auto_message_text: null, auto_message_type: "text", auto_message_media_url: null, auto_message_enabled: true },
 ];
 
 const COLOR_OPTIONS = [
@@ -115,58 +117,66 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
 
   const handleDragStart = (id: string) => setDraggedId(id);
 
-  // Send auto-message when deal moves to a stage
-  const sendAutoMessage = async (stage: KanbanStageRow, deal: CrmDealRow) => {
-    const hasContent = stage.auto_message_text || stage.auto_message_media_url || (stage as any).auto_message_image_url;
-    if (!stage.auto_message_enabled || !hasContent || !instanceName || !deal.remote_jid) return;
+  // Send auto-messages when deal moves to a stage (now supports multiple)
+  const sendAutoMessages = async (stage: KanbanStageRow, deal: CrmDealRow) => {
+    if (!stage.auto_message_enabled || !instanceName || !deal.remote_jid) return;
+
+    // Fetch multi-messages from stage_auto_messages
+    const { data: autoMsgs } = await supabase
+      .from("stage_auto_messages")
+      .select("*")
+      .eq("stage_id", stage.id)
+      .eq("consultant_id", consultantId)
+      .order("position", { ascending: true });
 
     const phone = resolveRecipient(deal.remote_jid);
-    const messageText = (stage.auto_message_text || "")
-      .replace(/\{\{nome\}\}/g, phone)
-      .replace(/\{\{telefone\}\}/g, phone);
+
+    // If no multi-messages, fall back to legacy single message
+    const messagesToSend = autoMsgs && autoMsgs.length > 0
+      ? autoMsgs
+      : (stage.auto_message_text || stage.auto_message_media_url || (stage as any).auto_message_image_url)
+        ? [{
+            message_type: stage.auto_message_type || "text",
+            message_text: stage.auto_message_text,
+            media_url: stage.auto_message_media_url,
+            image_url: (stage as any).auto_message_image_url,
+            delay_seconds: 0,
+          }]
+        : [];
+
+    if (messagesToSend.length === 0) return;
 
     try {
-      const mediaCategory: MediaCategory = (stage.auto_message_type as MediaCategory) || "text";
-      const imageUrl = (stage as any).auto_message_image_url;
-
-      // 1) Audio first (if type is audio)
-      if (mediaCategory === "audio" && stage.auto_message_media_url) {
-        const audioResult = await sendWhatsAppMessage({ instanceName, phone, mediaCategory: "audio", mediaUrl: stage.auto_message_media_url });
-        if (audioResult.status === "failed") throw new Error(audioResult.error);
-
-        // 2) Then optional image
-        if (imageUrl) {
-          await new Promise((r) => setTimeout(r, 2500));
-          const imgResult = await sendWhatsAppMessage({ instanceName, phone, mediaCategory: "image", mediaUrl: imageUrl });
-          if (imgResult.status === "failed") throw new Error(imgResult.error);
+      for (let i = 0; i < messagesToSend.length; i++) {
+        const msg = messagesToSend[i];
+        if (i > 0 && msg.delay_seconds > 0) {
+          await new Promise((r) => setTimeout(r, msg.delay_seconds * 1000));
         }
 
-        // 3) Then text
-        if (messageText) {
+        const messageText = (msg.message_text || "")
+          .replace(/\{\{nome\}\}/g, phone)
+          .replace(/\{\{telefone\}\}/g, phone);
+        const mediaCategory: MediaCategory = (msg.message_type as MediaCategory) || "text";
+
+        // Send optional image first
+        if (msg.image_url && mediaCategory !== "image") {
+          await sendWhatsAppMessage({ instanceName, phone, mediaCategory: "image", mediaUrl: msg.image_url });
           await new Promise((r) => setTimeout(r, 1500));
+        }
+
+        if (mediaCategory === "audio" && msg.media_url) {
+          await sendWhatsAppMessage({ instanceName, phone, mediaCategory: "audio", mediaUrl: msg.media_url });
+          if (messageText) {
+            await new Promise((r) => setTimeout(r, 1500));
+            await sendWhatsAppMessage({ instanceName, phone, mediaCategory: "text", text: messageText });
+          }
+        } else if ((mediaCategory === "image" || mediaCategory === "video") && msg.media_url) {
+          await sendWhatsAppMessage({ instanceName, phone, mediaCategory, mediaUrl: msg.media_url, text: messageText });
+        } else if (messageText) {
           await sendWhatsAppMessage({ instanceName, phone, mediaCategory: "text", text: messageText });
         }
-      } else if ((mediaCategory === "image" || mediaCategory === "video") && stage.auto_message_media_url) {
-        // Send optional image first, then media with caption
-        if (imageUrl && mediaCategory !== "image") {
-          const imgResult = await sendWhatsAppMessage({ instanceName, phone, mediaCategory: "image", mediaUrl: imageUrl });
-          if (imgResult.status === "failed") throw new Error(imgResult.error);
-          await new Promise((r) => setTimeout(r, 1500));
-        }
-        const mediaResult = await sendWhatsAppMessage({ instanceName, phone, mediaCategory, mediaUrl: stage.auto_message_media_url, text: messageText });
-        if (mediaResult.status === "failed") throw new Error(mediaResult.error);
-      } else {
-        // Text-only: send optional image first, then text
-        if (imageUrl) {
-          const imgResult = await sendWhatsAppMessage({ instanceName, phone, mediaCategory: "image", mediaUrl: imageUrl });
-          if (imgResult.status === "failed") throw new Error(imgResult.error);
-          await new Promise((r) => setTimeout(r, 1500));
-        }
-        const textResult = await sendWhatsAppMessage({ instanceName, phone, mediaCategory: "text", text: messageText });
-        if (textResult.status === "failed") throw new Error(textResult.error);
       }
-
-      toast({ title: `✅ Msg automática enviada (${stage.label})` });
+      toast({ title: `✅ ${messagesToSend.length} msg(s) automática(s) enviada(s) (${stage.label})` });
     } catch {
       toast({ title: "Erro ao enviar msg automática", variant: "destructive" });
     }
@@ -180,10 +190,12 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
       return;
     }
 
-    // Set approved_at when moving to "aprovado"
     const updateData: CrmDealUpdate = { stage: stageKey };
     if (stageKey === "aprovado" && !deal.approved_at) {
       updateData.approved_at = new Date().toISOString();
+    }
+    if (stageKey === "reprovado" && !(deal as any).rejected_at) {
+      (updateData as any).rejected_at = new Date().toISOString();
     }
 
     setDeals((prev) =>
@@ -202,7 +214,7 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
     } else {
       const targetStage = stages.find((s) => s.stage_key === stageKey);
       if (targetStage) {
-        sendAutoMessage(targetStage, deal);
+        sendAutoMessages(targetStage, deal);
       }
     }
   };
@@ -309,7 +321,6 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
             : s
         )
       );
-      toast({ title: "Mensagem automática salva!" });
     }
   };
 
@@ -356,13 +367,11 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
     const [moved] = reordered.splice(fromIndex, 1);
     reordered.splice(toIndex, 0, moved);
 
-    // Update positions
     const updated = reordered.map((s, i) => ({ ...s, position: i }));
     setStages(updated);
     setDraggedStageId(null);
     setDragOverStageId(null);
 
-    // Persist to DB
     for (const s of updated) {
       await supabase
         .from("kanban_stages")
@@ -383,147 +392,157 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
             Auto-progressão ativa
           </Badge>
         </div>
-        <Dialog open={showSettings} onOpenChange={setShowSettings}>
-          <DialogTrigger asChild>
-            <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5">
-              <Settings2 className="h-3.5 w-3.5" />
-              Configurar Colunas
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle className="text-sm">Configurar Colunas do Kanban</DialogTitle>
-            </DialogHeader>
-            <p className="text-[11px] text-muted-foreground -mt-1">
-              Leads aprovados progridem automaticamente para 30 → 60 → 90 → 120 DIAS.
-              Cada coluna pode ter uma mensagem automática.
-            </p>
-            <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
-              {stages.map((stage) => (
-                <div
-                  key={stage.id}
-                  draggable={!editingStage}
-                  onDragStart={() => handleStageDragStart(stage.id)}
-                  onDragOver={(e) => handleStageDragOver(e, stage.id)}
-                  onDrop={() => handleStageDrop(stage.id)}
-                  onDragEnd={() => { setDraggedStageId(null); setDragOverStageId(null); }}
-                  className={`flex items-center gap-2 p-2.5 rounded-lg bg-secondary/50 transition-all ${
-                    draggedStageId === stage.id ? "opacity-50 scale-95" : ""
-                  } ${dragOverStageId === stage.id ? "border-2 border-primary/40 border-dashed" : ""} ${
-                    !editingStage ? "cursor-grab active:cursor-grabbing" : ""
-                  }`}
-                >
-                  {!editingStage && (
-                    <GripVertical className="h-4 w-4 text-muted-foreground/50 shrink-0" />
-                  )}
-                  {editingStage?.id === stage.id ? (
-                    <>
-                      <Input
-                        value={editingStage.label}
-                        onChange={(e) =>
-                          setEditingStage({ ...editingStage, label: e.target.value })
-                        }
-                        className="h-7 text-xs flex-1"
-                      />
-                      <select
-                        value={editingStage.color}
-                        onChange={(e) =>
-                          setEditingStage({ ...editingStage, color: e.target.value })
-                        }
-                        className="h-7 text-xs bg-background border border-border rounded px-1"
-                      >
-                        {COLOR_OPTIONS.map((c) => (
-                          <option key={c.value} value={c.value}>
-                            {c.label}
-                          </option>
-                        ))}
-                      </select>
-                      <Button size="icon" variant="ghost" className="h-6 w-6 text-primary" onClick={() => handleUpdateStage(editingStage)}>
-                        <Check className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground" onClick={() => setEditingStage(null)}>
-                        <X className="h-3.5 w-3.5" />
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <Badge variant="secondary" className={`text-[10px] ${stage.color}`}>
-                        {stage.label}
-                      </Badge>
-
-                      {/* Auto-message toggle */}
-                      <Switch
-                        checked={stage.auto_message_enabled}
-                        onCheckedChange={(checked) => handleToggleAutoMessage(stage.id, checked)}
-                        className="h-4 w-7 data-[state=checked]:bg-primary"
-                      />
-
-                      {/* Auto-message config */}
-                      <StageAutoMessageConfig
-                        stageLabel={stage.label}
-                        autoMessageText={stage.auto_message_text}
-                        autoMessageType={stage.auto_message_type || "text"}
-                        autoMessageMediaUrl={stage.auto_message_media_url}
-                        autoMessageImageUrl={(stage as any).auto_message_image_url}
-                        onSave={(text, type, mediaUrl, imageUrl) =>
-                          handleSaveAutoMessage(stage.id, text, type, mediaUrl, imageUrl)
-                        }
-                      />
-
-                      <span className="flex-1" />
-                      <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:text-primary" onClick={() => setEditingStage({ ...stage })}>
-                        <Pencil className="h-3 w-3" />
-                      </Button>
-                      <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => handleDeleteStage(stage.id, stage.stage_key)}>
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </>
-                  )}
-                </div>
-              ))}
-
-              {addingNew ? (
-                <div className="flex items-center gap-2 p-2 rounded-lg bg-secondary/50 border border-dashed border-primary/30">
-                  <Input
-                    value={newLabel}
-                    onChange={(e) => setNewLabel(e.target.value)}
-                    placeholder="Nome da coluna"
-                    className="h-7 text-xs flex-1"
-                    autoFocus
-                    onKeyDown={(e) => e.key === "Enter" && handleAddStage()}
-                  />
-                  <select
-                    value={newColor}
-                    onChange={(e) => setNewColor(e.target.value)}
-                    className="h-7 text-xs bg-background border border-border rounded px-1"
+        <div className="flex items-center gap-2">
+          <AddLeadDialog
+            consultantId={consultantId}
+            stages={stages.map((s) => ({ stage_key: s.stage_key, label: s.label, color: s.color }))}
+            onLeadAdded={fetchDeals}
+          />
+          <Dialog open={showSettings} onOpenChange={setShowSettings}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5">
+                <Settings2 className="h-3.5 w-3.5" />
+                Configurar Colunas
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle className="text-sm">Configurar Colunas do Kanban</DialogTitle>
+              </DialogHeader>
+              <p className="text-[11px] text-muted-foreground -mt-1">
+                Leads aprovados progridem automaticamente para 30 → 60 → 90 → 120 DIAS.
+                Reprovados progridem para "Reprovado 60 Dias" após 60 dias.
+                Cada coluna pode ter múltiplas mensagens automáticas.
+              </p>
+              <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+                {stages.map((stage) => (
+                  <div
+                    key={stage.id}
+                    draggable={!editingStage}
+                    onDragStart={() => handleStageDragStart(stage.id)}
+                    onDragOver={(e) => handleStageDragOver(e, stage.id)}
+                    onDrop={() => handleStageDrop(stage.id)}
+                    onDragEnd={() => { setDraggedStageId(null); setDragOverStageId(null); }}
+                    className={`flex items-center gap-2 p-2.5 rounded-lg bg-secondary/50 transition-all ${
+                      draggedStageId === stage.id ? "opacity-50 scale-95" : ""
+                    } ${dragOverStageId === stage.id ? "border-2 border-primary/40 border-dashed" : ""} ${
+                      !editingStage ? "cursor-grab active:cursor-grabbing" : ""
+                    }`}
                   >
-                    {COLOR_OPTIONS.map((c) => (
-                      <option key={c.value} value={c.value}>
-                        {c.label}
-                      </option>
-                    ))}
-                  </select>
-                  <Button size="icon" variant="ghost" className="h-6 w-6 text-primary" onClick={handleAddStage}>
-                    <Check className="h-3.5 w-3.5" />
+                    {!editingStage && (
+                      <GripVertical className="h-4 w-4 text-muted-foreground/50 shrink-0" />
+                    )}
+                    {editingStage?.id === stage.id ? (
+                      <>
+                        <Input
+                          value={editingStage.label}
+                          onChange={(e) =>
+                            setEditingStage({ ...editingStage, label: e.target.value })
+                          }
+                          className="h-7 text-xs flex-1"
+                        />
+                        <select
+                          value={editingStage.color}
+                          onChange={(e) =>
+                            setEditingStage({ ...editingStage, color: e.target.value })
+                          }
+                          className="h-7 text-xs bg-background border border-border rounded px-1"
+                        >
+                          {COLOR_OPTIONS.map((c) => (
+                            <option key={c.value} value={c.value}>
+                              {c.label}
+                            </option>
+                          ))}
+                        </select>
+                        <Button size="icon" variant="ghost" className="h-6 w-6 text-primary" onClick={() => handleUpdateStage(editingStage)}>
+                          <Check className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground" onClick={() => setEditingStage(null)}>
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Badge variant="secondary" className={`text-[10px] ${stage.color}`}>
+                          {stage.label}
+                        </Badge>
+
+                        {/* Auto-message toggle */}
+                        <Switch
+                          checked={stage.auto_message_enabled}
+                          onCheckedChange={(checked) => handleToggleAutoMessage(stage.id, checked)}
+                          className="h-4 w-7 data-[state=checked]:bg-primary"
+                        />
+
+                        {/* Auto-message config - now multi-message */}
+                        <StageAutoMessageConfig
+                          stageId={stage.id}
+                          stageLabel={stage.label}
+                          consultantId={consultantId}
+                          autoMessageText={stage.auto_message_text}
+                          autoMessageType={stage.auto_message_type || "text"}
+                          autoMessageMediaUrl={stage.auto_message_media_url}
+                          autoMessageImageUrl={(stage as any).auto_message_image_url}
+                          onSave={(text, type, mediaUrl, imageUrl) =>
+                            handleSaveAutoMessage(stage.id, text, type, mediaUrl, imageUrl)
+                          }
+                        />
+
+                        <span className="flex-1" />
+                        <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:text-primary" onClick={() => setEditingStage({ ...stage })}>
+                          <Pencil className="h-3 w-3" />
+                        </Button>
+                        <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => handleDeleteStage(stage.id, stage.stage_key)}>
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                ))}
+
+                {addingNew ? (
+                  <div className="flex items-center gap-2 p-2 rounded-lg bg-secondary/50 border border-dashed border-primary/30">
+                    <Input
+                      value={newLabel}
+                      onChange={(e) => setNewLabel(e.target.value)}
+                      placeholder="Nome da coluna"
+                      className="h-7 text-xs flex-1"
+                      autoFocus
+                      onKeyDown={(e) => e.key === "Enter" && handleAddStage()}
+                    />
+                    <select
+                      value={newColor}
+                      onChange={(e) => setNewColor(e.target.value)}
+                      className="h-7 text-xs bg-background border border-border rounded px-1"
+                    >
+                      {COLOR_OPTIONS.map((c) => (
+                        <option key={c.value} value={c.value}>
+                          {c.label}
+                        </option>
+                      ))}
+                    </select>
+                    <Button size="icon" variant="ghost" className="h-6 w-6 text-primary" onClick={handleAddStage}>
+                      <Check className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground" onClick={() => { setAddingNew(false); setNewLabel(""); }}>
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full h-8 text-xs gap-1.5 border-dashed"
+                    onClick={() => setAddingNew(true)}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Adicionar Coluna
                   </Button>
-                  <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground" onClick={() => { setAddingNew(false); setNewLabel(""); }}>
-                    <X className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full h-8 text-xs gap-1.5 border-dashed"
-                  onClick={() => setAddingNew(true)}
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Adicionar Coluna
-                </Button>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Kanban columns */}
@@ -569,6 +588,11 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
                           {deal.approved_at && (
                             <p className="text-[9px] text-muted-foreground mt-0.5">
                               Aprovado: {new Date(deal.approved_at).toLocaleDateString("pt-BR")}
+                            </p>
+                          )}
+                          {(deal as any).rejected_at && (
+                            <p className="text-[9px] text-muted-foreground mt-0.5">
+                              Reprovado: {new Date((deal as any).rejected_at).toLocaleDateString("pt-BR")}
                             </p>
                           )}
                           {deal.notes && (
