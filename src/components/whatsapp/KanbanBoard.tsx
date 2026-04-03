@@ -192,31 +192,53 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
       return;
     }
 
+    const targetStage = stages.find((s) => s.stage_key === stageKey);
+    if (!targetStage) { setDraggedId(null); return; }
+
+    // Show confirmation dialog
+    setPendingDrop({
+      dealId: draggedId,
+      stageKey,
+      stageId: targetStage.id,
+      stageLabel: targetStage.label,
+    });
+    setDraggedId(null);
+  };
+
+  const confirmDrop = async (sendMessages: boolean, rejectionReason?: string) => {
+    if (!pendingDrop) return;
+    const { dealId, stageKey } = pendingDrop;
+    const deal = deals.find((d) => d.id === dealId);
+    if (!deal) { setPendingDrop(null); return; }
+
     const updateData: CrmDealUpdate = { stage: stageKey };
     if (stageKey === "aprovado" && !deal.approved_at) {
       updateData.approved_at = new Date().toISOString();
     }
-    if (stageKey === "reprovado" && !(deal as any).rejected_at) {
+    if (stageKey === "reprovado" && !deal.rejected_at) {
       (updateData as any).rejected_at = new Date().toISOString();
+    }
+    if (rejectionReason) {
+      (updateData as any).rejection_reason = rejectionReason;
     }
 
     setDeals((prev) =>
-      prev.map((d) => (d.id === draggedId ? { ...d, ...updateData } : d))
+      prev.map((d) => (d.id === dealId ? { ...d, ...updateData } : d))
     );
-    setDraggedId(null);
+    setPendingDrop(null);
 
     const { error } = await supabase
       .from("crm_deals")
       .update(updateData)
-      .eq("id", draggedId);
+      .eq("id", dealId);
 
     if (error) {
       toast({ title: "Erro ao mover deal", variant: "destructive" });
       fetchDeals();
-    } else {
+    } else if (sendMessages) {
       const targetStage = stages.find((s) => s.stage_key === stageKey);
       if (targetStage) {
-        sendAutoMessages(targetStage, deal);
+        sendAutoMessages(targetStage, { ...deal, ...updateData } as CrmDealRow, rejectionReason);
       }
     }
   };
