@@ -1,89 +1,68 @@
 
 
-# Motivos de Reprovação + Preview de Mensagem ao Arrastar
+# Mensagens separadas por origem (Aprovado vs Reprovado) na coluna 60 Dias
 
-## Sobre a dúvida "como sabe se é para reprovado ou aprovado"
+## Problema atual
 
-Cada coluna do Kanban tem seu proprio `stage_id`. As mensagens automaticas na tabela `stage_auto_messages` sao vinculadas por `stage_id`, entao a coluna "Reprovado" tem suas proprias mensagens e "Aprovado" tem as dela. Nao ha confusao -- ja funciona assim.
+A coluna "60 DIAS" recebe leads de dois caminhos diferentes:
+- Aprovados que completaram 60 dias
+- Reprovados que completaram 60 dias (via `reprovado_60_dias`)
 
-O problema real e mais interessante: **reprovados tem motivos diferentes e precisam de mensagens diferentes por motivo**.
+O usuario quer que na coluna de 60 dias existam **duas mensagens distintas**: uma para quem veio de aprovado e outra para quem veio de reprovado.
 
-## Proposta
+## Solucao
 
-### 1. Motivos de reprovacao pre-definidos
+Adicionar um campo `deal_origin` na tabela `stage_auto_messages` (valores: `aprovado`, `reprovado`, ou NULL para todos). Unificar as colunas `60_dias` e `reprovado_60_dias` em uma so, e usar o `deal_origin` para filtrar qual mensagem enviar.
 
-Criar uma lista fixa de motivos:
-- **Baixa renda**
-- **ICMS baixo**
-- **Emprestimo na conta de energia**
-- **Outro** (campo livre)
+Tambem adicionar `deal_origin` em `crm_deals` para rastrear se o lead veio do fluxo aprovado ou reprovado.
 
-### 2. Dialog de confirmacao ao arrastar para "Reprovado"
+### 1. Migration SQL
+- `ALTER TABLE crm_deals ADD COLUMN deal_origin TEXT NULL` (preenchido com "aprovado" ou "reprovado" quando o deal entra nessas colunas)
+- `ALTER TABLE stage_auto_messages ADD COLUMN deal_origin TEXT NULL`
 
-Quando o usuario arrastar um deal para a coluna "Reprovado", em vez de mover direto, abrir um **dialog intermediario** com:
-- Seletor do motivo de reprovacao (obrigatorio)
-- Preview da mensagem automatica que sera enviada (texto, midia, imagem)
-- Botao "Confirmar e Enviar" / "Confirmar sem Enviar"
+### 2. KanbanBoard.tsx
+- Ao mover deal para "aprovado", setar `deal_origin = 'aprovado'`
+- Ao mover deal para "reprovado", setar `deal_origin = 'reprovado'`
+- Remover o estagio padrao `reprovado_60_dias` (unificar no `60_dias`)
 
-### 3. Mensagens automaticas por motivo
+### 3. StageAutoMessageConfig.tsx
+- Para colunas de tempo (30, 60, 90, 120 dias), mostrar um seletor de **origem**: "Todos", "Aprovados", "Reprovados"
+- Cada mensagem pode ser configurada para disparar apenas para uma origem especifica
 
-Em vez de uma unica configuracao de auto-mensagem para "Reprovado", permitir configurar **uma mensagem diferente por motivo de reprovacao**.
+### 4. Edge Function (crm-auto-progress)
+- Reprovados com 60 dias tambem vao para `60_dias` (em vez de `reprovado_60_dias`)
+- Ao enviar mensagens, filtrar por `deal_origin` do deal alem do `rejection_reason`
 
-**Mudanca na tabela `stage_auto_messages`:** adicionar coluna `rejection_reason TEXT NULL` -- quando preenchida, a mensagem so dispara se o motivo do deal bater. Quando NULL, dispara para qualquer motivo (comportamento atual).
+### 5. DropConfirmDialog.tsx
+- Preview de mensagens tambem considera o `deal_origin` ao filtrar
 
-**Mudanca na tabela `crm_deals`:** adicionar coluna `rejection_reason TEXT NULL`.
-
-### 4. Preview ao arrastar para QUALQUER coluna
-
-Para todas as colunas (nao so reprovado), ao soltar o deal, mostrar um **mini-preview** das mensagens automaticas configuradas antes de confirmar o envio. Isso resolve a pergunta do usuario de "saber qual mensagem sera enviada".
-
-## Implementacao
-
-### Migration SQL
-- `ALTER TABLE crm_deals ADD COLUMN rejection_reason TEXT NULL`
-- `ALTER TABLE stage_auto_messages ADD COLUMN rejection_reason TEXT NULL`
-
-### KanbanBoard.tsx
-- Modificar `handleDrop`: em vez de mover direto, setar um estado `pendingDrop` com `{ dealId, targetStage }`
-- Abrir um **Dialog de confirmacao** que:
-  - Se a coluna for "reprovado": mostra seletor de motivo + preview das mensagens filtradas por motivo
-  - Para qualquer coluna: mostra preview das mensagens automaticas configuradas
-  - Botoes: "Confirmar e Enviar", "Mover sem Enviar", "Cancelar"
-- Ao confirmar, salvar `rejection_reason` no deal e enviar mensagens filtradas
-
-### StageAutoMessageConfig.tsx
-- Para colunas com `stage_key === "reprovado"`: adicionar campo de seletor de motivo em cada mensagem
-- Permitir criar mensagens especificas por motivo (ex: mensagem X so para "baixa_renda", mensagem Y so para "icms_baixo")
-
-## Fluxo do Usuario
+## Fluxo visual no StageAutoMessageConfig
 
 ```text
-Arrasta deal → Coluna "Reprovado"
-    ↓
-Dialog aparece:
-  ┌──────────────────────────────┐
-  │ Mover para Reprovado         │
-  │                              │
-  │ Motivo: [Baixa renda     ▾]  │
-  │                              │
-  │ Mensagens que serao enviadas:│
-  │ ┌──────────────────────────┐ │
-  │ │ 🖼 imagem.jpg            │ │
-  │ │ 🔊 audio.ogg             │ │
-  │ │ Infelizmente seu cadastro│ │
-  │ │ nao foi aprovado...      │ │
-  │ └──────────────────────────┘ │
-  │                              │
-  │ [Cancelar] [Sem msg] [Enviar]│
-  └──────────────────────────────┘
+Mensagens Automáticas [60 DIAS]
+
+  ┌────────────────────────────┐
+  │ Msg 1  Origem: [Aprovados] │
+  │ 🔊 audio_aprovado.ogg     │
+  │ 📷 imagem_aprovado.jpg     │
+  │ "Parabéns, 60 dias..."    │
+  └────────────────────────────┘
+
+  ┌────────────────────────────┐
+  │ Msg 2  Origem: [Reprovados]│
+  │ 🔊 audio_reprovado.ogg    │
+  │ 📷 imagem_reprovado.jpg    │
+  │ "Gostaríamos de tentar..." │
+  └────────────────────────────┘
 ```
 
 ## Arquivos alterados
 
 | Arquivo | Mudanca |
 |---------|---------|
-| Migration SQL | `rejection_reason` em `crm_deals` e `stage_auto_messages` |
-| `KanbanBoard.tsx` | Dialog de confirmacao com preview + motivo |
-| `StageAutoMessageConfig.tsx` | Filtro por motivo nas mensagens do estagio "reprovado" |
-| `crm-auto-progress/index.ts` | Filtrar mensagens por `rejection_reason` ao enviar automaticamente |
+| Migration SQL | `deal_origin` em `crm_deals` e `stage_auto_messages` |
+| `KanbanBoard.tsx` | Setar `deal_origin` ao aprovar/reprovar, remover `reprovado_60_dias` |
+| `StageAutoMessageConfig.tsx` | Seletor de origem (aprovado/reprovado) por mensagem |
+| `DropConfirmDialog.tsx` | Filtrar preview por `deal_origin` |
+| `crm-auto-progress/index.ts` | Unificar progressao para `60_dias`, filtrar por `deal_origin` |
 
