@@ -130,6 +130,7 @@ export type Database = {
           id: string
           notes: string | null
           rejected_at: string | null
+          rejection_reason: string | null
           remote_jid: string | null
           stage: string
           updated_at: string
@@ -142,6 +143,7 @@ export type Database = {
           id?: string
           notes?: string | null
           rejected_at?: string | null
+          rejection_reason?: string | null
           remote_jid?: string | null
           stage?: string
           updated_at?: string
@@ -154,6 +156,7 @@ export type Database = {
           id?: string
           notes?: string | null
           rejected_at?: string | null
+          rejection_reason?: string | null
           remote_jid?: string | null
           stage?: string
           updated_at?: string
@@ -614,6 +617,7 @@ export type Database = {
           message_text: string | null
           message_type: string
           position: number
+          rejection_reason: string | null
           stage_id: string
         }
         Insert: {
@@ -626,6 +630,7 @@ export type Database = {
           message_text?: string | null
           message_type?: string
           position?: number
+          rejection_reason?: string | null
           stage_id: string
         }
         Update: {
@@ -638,6 +643,7 @@ export type Database = {
           message_text?: string | null
           message_type?: string
           position?: number
+          rejection_reason?: string | null
           stage_id?: string
         }
         Relationships: [
