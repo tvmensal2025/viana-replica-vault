@@ -619,9 +619,10 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
                               Aprovado: {new Date(deal.approved_at).toLocaleDateString("pt-BR")}
                             </p>
                           )}
-                          {(deal as any).rejected_at && (
+                          {deal.rejected_at && (
                             <p className="text-[9px] text-muted-foreground mt-0.5">
-                              Reprovado: {new Date((deal as any).rejected_at).toLocaleDateString("pt-BR")}
+                              Reprovado: {new Date(deal.rejected_at).toLocaleDateString("pt-BR")}
+                              {deal.rejection_reason && ` (${deal.rejection_reason.replace(/_/g, " ")})`}
                             </p>
                           )}
                           {deal.notes && (
