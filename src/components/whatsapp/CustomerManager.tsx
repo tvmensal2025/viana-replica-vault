@@ -209,11 +209,36 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
       if (data?.value) setLastSync(data.value);
     });
   }, []);
+  // Cooldown timer
+  useEffect(() => {
+    const stored = localStorage.getItem("sync_cooldown_until");
+    if (stored) {
+      const remaining = Math.ceil((parseInt(stored) - Date.now()) / 1000);
+      if (remaining > 0) setSyncCooldown(remaining);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (syncCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setSyncCooldown((prev) => {
+        if (prev <= 1) { clearInterval(timer); return 0; }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [syncCooldown]);
+
+  const startCooldown = () => {
+    const seconds = 60;
+    setSyncCooldown(seconds);
+    localStorage.setItem("sync_cooldown_until", String(Date.now() + seconds * 1000));
+  };
 
   async function handleSyncIgreen() {
     setSyncing(true);
+    startCooldown();
     try {
-      // Fetch consultant's portal credentials
       const { data: consultant } = await supabase.from("consultants").select("igreen_portal_email, igreen_portal_password").eq("id", consultantId).maybeSingle();
       const portalEmail = (consultant as any)?.igreen_portal_email;
       const portalPassword = (consultant as any)?.igreen_portal_password;

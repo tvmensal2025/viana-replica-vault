@@ -222,9 +222,9 @@ export function DashboardTab({ userId, form, onFormUpdate, periodDays, onPeriodC
               ))}
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm" onClick={handleDashboardSync} disabled={syncingDashboard} className="h-8 text-xs gap-1.5">
+          <Button variant="outline" size="sm" onClick={handleDashboardSync} disabled={syncingDashboard || syncCooldown > 0} className="h-8 text-xs gap-1.5">
             {syncingDashboard ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-            {syncingDashboard ? "Sincronizando..." : "Sincronizar iGreen"}
+            {syncingDashboard ? "Sincronizando..." : syncCooldown > 0 ? `Aguarde ${syncCooldown}s` : "Sincronizar iGreen"}
           </Button>
         </div>
       </div>
