@@ -325,6 +325,8 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
       address_city: c.address_city || "", address_state: c.address_state || "",
       numero_instalacao: c.numero_instalacao || "", electricity_bill_value: c.electricity_bill_value?.toString() || "",
       status: c.status || "pending",
+      customer_referred_by_name: c.customer_referred_by_name || "",
+      customer_referred_by_phone: c.customer_referred_by_phone || "",
     });
   }
 
