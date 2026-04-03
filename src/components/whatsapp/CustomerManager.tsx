@@ -645,9 +645,9 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button onClick={handleSyncIgreen} size="sm" variant="outline" className="gap-2 rounded-xl font-semibold h-9 px-4 border-green-500/20 text-green-600 hover:bg-green-500/10" disabled={syncing}>
+            <Button onClick={handleSyncIgreen} size="sm" variant="outline" className="gap-2 rounded-xl font-semibold h-9 px-4 border-green-500/20 text-green-600 hover:bg-green-500/10" disabled={syncing || syncCooldown > 0}>
               {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-              Sincronizar iGreen
+              {syncing ? "Sincronizando..." : syncCooldown > 0 ? `Aguarde ${syncCooldown}s` : "Sincronizar iGreen"}
             </Button>
             <Button onClick={() => {
               const exportData = filtered.map((c) => ({
