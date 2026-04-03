@@ -1,35 +1,78 @@
 
 
-# Correção: Sincronização iGreen com proteção contra rate limit
+# Melhorias no Kanban: Adicionar Leads + Múltiplas Mensagens Automáticas + Progressão de Reprovados
 
-## Problema
-O portal iGreen retorna erro 429 com texto simples "Muitas tentativas de login, tente novamente mais tarde." — mas o código tenta fazer `JSON.parse` desse texto, falha silenciosamente, e mostra uma mensagem genérica. Além disso, não há proteção no frontend para evitar cliques repetidos.
+## 1. Botão "Adicionar Lead" no Kanban
 
-## Correções
+**Arquivo:** `KanbanBoard.tsx`
 
-### 1. Edge Function — Detectar 429 antes do JSON parse
-**Arquivo:** `supabase/functions/sync-igreen-customers/index.ts` (linhas 221-237)
+Dialog com duas opções:
+- **Clientes existentes**: Lista dos clientes já salvos na tabela `customers` (filtrados pelo `consultant_id`), com busca por nome/telefone e seleção múltipla. Ao confirmar, cria um `crm_deal` para cada cliente selecionado com `remote_jid` formatado e `customer_id` vinculado.
+- **Novo contato**: Campo para digitar número WhatsApp + nome manualmente (para leads que ainda não são clientes).
+- Seletor de estágio inicial (default: "novo_lead").
+- Campo de notas opcional.
+- Se estágio = "aprovado", seta `approved_at = now()` automaticamente.
 
-Adicionar check para status 429 e texto "Muitas tentativas" ANTES do try/catch JSON:
+## 2. Múltiplas Mensagens Automáticas por Estágio
 
-```typescript
-if (loginRes.status === 429 || errText.toLowerCase().includes("muitas tentativas")) {
-  friendlyError = "Muitas tentativas de login no portal iGreen. Aguarde 10 minutos e tente novamente.";
-} else {
-  try { ... JSON parse ... } catch { }
-}
+**Problema atual:** Cada estágio do Kanban suporta apenas 1 mensagem automática (1 texto + 1 mídia + 1 imagem). Limitado para réguas de comunicação mais completas.
+
+**Solução:** Criar tabela `stage_auto_messages` para suportar N mensagens por estágio.
+
+### Nova tabela: `stage_auto_messages`
+```
+id (uuid PK)
+stage_id (uuid FK → kanban_stages.id)
+consultant_id (uuid)
+position (integer) — ordem de envio
+message_type (text) — text/image/video/audio
+message_text (text nullable)
+media_url (text nullable)
+image_url (text nullable)
+delay_seconds (integer default 0) — delay entre mensagens
+created_at (timestamptz)
 ```
 
-### 2. Edge Function — Retry automático com delay
-Se receber 429 na primeira tentativa, aguardar 30 segundos e tentar uma vez mais antes de retornar erro.
+**RLS:** `consultant_id = auth.uid()`
 
-### 3. Frontend — Cooldown de 60s no botão
-**Arquivos:** `DashboardTab.tsx` e `CustomerManager.tsx`
+### Mudanças nos arquivos:
+- **`StageAutoMessageConfig.tsx`**: Refatorar para gerenciar uma lista de mensagens (adicionar/remover/reordenar). Cada item tem tipo, texto, mídia e delay.
+- **`KanbanBoard.tsx`**: Adaptar `handleSaveAutoMessage` para salvar na nova tabela em vez das colunas diretas do `kanban_stages`.
+- **`crm-auto-progress/index.ts`**: Buscar mensagens da tabela `stage_auto_messages` ordenadas por `position` e enviar sequencialmente com delays.
 
-Após clicar em sincronizar, desabilitar o botão por 60 segundos com countdown visual ("Aguarde 45s...") usando `localStorage` para persistir entre reloads.
+## 3. Auto-progressão para Reprovados
 
-## Resultado
-- Mensagem de erro clara quando o portal bloqueia
-- Retry automático evita erros por timing
-- Cooldown impede o usuário de disparar múltiplas tentativas
+**Problema atual:** A Edge Function `crm-auto-progress` só progride deals com estágio "aprovado" e derivados (30/60/90/120 dias). Reprovados ficam parados para sempre.
+
+**Solução:** Adicionar progressão separada para reprovados.
+
+### Nova coluna em `crm_deals`:
+- `rejected_at (timestamptz nullable)` — setada quando deal move para "reprovado"
+
+### Novos estágios default:
+- `reprovado_60_dias` — "Reprovado 60 Dias" (posição após 120_dias)
+
+### Mudanças na Edge Function `crm-auto-progress`:
+- Buscar deals com `stage = 'reprovado'` e `rejected_at` preenchido
+- Se `daysSinceRejection >= 60`, mover para `reprovado_60_dias`
+- Enviar mensagem automática configurada nesse estágio (ex: "Olá, gostaríamos de tentar novamente...")
+- Extensível para mais estágios de reprovado no futuro
+
+### Mudanças no `KanbanBoard.tsx`:
+- Quando um deal é movido para "reprovado", setar `rejected_at = now()` automaticamente (similar ao `approved_at`)
+
+## Resumo de Arquivos
+
+| Arquivo | Mudança |
+|---------|---------|
+| `KanbanBoard.tsx` | Botão adicionar lead + setar `rejected_at` + usar `stage_auto_messages` |
+| `StageAutoMessageConfig.tsx` | Gerenciar lista de N mensagens por estágio |
+| `crm-auto-progress/index.ts` | Progressão de reprovados + buscar `stage_auto_messages` |
+| Migration SQL | Tabela `stage_auto_messages` + coluna `rejected_at` em `crm_deals` |
+
+## Ordem de Implementação
+1. Migration (tabela + coluna)
+2. Botão adicionar lead no Kanban
+3. Múltiplas mensagens automáticas (UI + Edge Function)
+4. Progressão de reprovados (Edge Function + lógica de `rejected_at`)
 
