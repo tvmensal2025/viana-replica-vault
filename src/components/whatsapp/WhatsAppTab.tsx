@@ -204,6 +204,7 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
     fetchCustomers();
   }, [fetchCustomers]);
 
+  const totalUnread = useMemo(() => chats.reduce((sum, c) => sum + c.unreadCount, 0), [chats]);
   const isConnected = connectionStatus === "connected";
 
   return (
