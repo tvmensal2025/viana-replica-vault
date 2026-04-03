@@ -127,6 +127,7 @@ export type Database = {
           consultant_id: string
           created_at: string
           customer_id: string | null
+          deal_origin: string | null
           id: string
           notes: string | null
           rejected_at: string | null
@@ -140,6 +141,7 @@ export type Database = {
           consultant_id: string
           created_at?: string
           customer_id?: string | null
+          deal_origin?: string | null
           id?: string
           notes?: string | null
           rejected_at?: string | null
@@ -153,6 +155,7 @@ export type Database = {
           consultant_id?: string
           created_at?: string
           customer_id?: string | null
+          deal_origin?: string | null
           id?: string
           notes?: string | null
           rejected_at?: string | null
@@ -610,6 +613,7 @@ export type Database = {
         Row: {
           consultant_id: string
           created_at: string
+          deal_origin: string | null
           delay_seconds: number
           id: string
           image_url: string | null
@@ -623,6 +627,7 @@ export type Database = {
         Insert: {
           consultant_id: string
           created_at?: string
+          deal_origin?: string | null
           delay_seconds?: number
           id?: string
           image_url?: string | null
@@ -636,6 +641,7 @@ export type Database = {
         Update: {
           consultant_id?: string
           created_at?: string
+          deal_origin?: string | null
           delay_seconds?: number
           id?: string
           image_url?: string | null

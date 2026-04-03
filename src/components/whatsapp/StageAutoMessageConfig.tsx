@@ -45,7 +45,14 @@ interface AutoMessage {
   image_url: string;
   delay_seconds: number;
   rejection_reason: string;
+  deal_origin: string;
 }
+
+const DEAL_ORIGIN_OPTIONS = [
+  { value: "all", label: "Todos" },
+  { value: "aprovado", label: "Aprovados" },
+  { value: "reprovado", label: "Reprovados" },
+];
 
 const MESSAGE_TYPES = [
   { key: "text", label: "Texto", icon: MessageSquare },
@@ -60,12 +67,14 @@ function MessageItem({
   onChange,
   onRemove,
   showRejectionReason,
+  showDealOrigin,
 }: {
   msg: AutoMessage;
   index: number;
   onChange: (updated: AutoMessage) => void;
   onRemove: () => void;
   showRejectionReason: boolean;
+  showDealOrigin: boolean;
 }) {
   const [uploading, setUploading] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -113,6 +122,11 @@ function MessageItem({
         {msg.rejection_reason && (
           <Badge variant="outline" className="text-[8px]">
             {REJECTION_REASONS.find((r) => r.value === msg.rejection_reason)?.label || msg.rejection_reason}
+          </Badge>
+        )}
+        {msg.deal_origin && (
+          <Badge variant="outline" className="text-[8px]">
+            {DEAL_ORIGIN_OPTIONS.find((o) => o.value === msg.deal_origin)?.label || msg.deal_origin}
           </Badge>
         )}
 
@@ -220,6 +234,23 @@ function MessageItem({
         </div>
       )}
 
+      {/* Deal origin (for time-based stages like 30, 60, 90, 120 dias) */}
+      {showDealOrigin && (
+        <div className="space-y-1">
+          <p className="text-[9px] text-muted-foreground">🔄 Origem (só dispara para leads desta origem):</p>
+          <Select value={msg.deal_origin || "all"} onValueChange={(v) => onChange({ ...msg, deal_origin: v === "all" ? "" : v })}>
+            <SelectTrigger className="h-7 text-[10px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {DEAL_ORIGIN_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value} className="text-[10px]">{o.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       {/* Text */}
       <Textarea
         value={msg.message_text}
@@ -266,6 +297,7 @@ export function StageAutoMessageConfig({
           image_url: d.image_url || "",
           delay_seconds: d.delay_seconds || 0,
           rejection_reason: d.rejection_reason || "",
+          deal_origin: (d as any).deal_origin || "",
         }))
       );
     } else if (autoMessageText || autoMessageMediaUrl || autoMessageImageUrl) {
@@ -278,6 +310,7 @@ export function StageAutoMessageConfig({
           image_url: autoMessageImageUrl || "",
           delay_seconds: 0,
           rejection_reason: "",
+          deal_origin: "",
         },
       ]);
     } else {
@@ -300,6 +333,7 @@ export function StageAutoMessageConfig({
         image_url: "",
         delay_seconds: prev.length > 0 ? 5 : 0,
         rejection_reason: "",
+        deal_origin: "",
       },
     ]);
   };
@@ -334,6 +368,7 @@ export function StageAutoMessageConfig({
           image_url: m.image_url.trim() || null,
           delay_seconds: m.delay_seconds,
           rejection_reason: m.rejection_reason.trim() || null,
+          deal_origin: m.deal_origin.trim() || null,
         }));
         const { error } = await supabase.from("stage_auto_messages").insert(inserts);
         if (error) throw error;
@@ -392,6 +427,7 @@ export function StageAutoMessageConfig({
               onChange={(updated) => updateMessage(i, updated)}
               onRemove={() => removeMessage(i)}
               showRejectionReason={stageKey === "reprovado"}
+              showDealOrigin={["30_dias", "60_dias", "90_dias", "120_dias"].includes(stageKey)}
             />
           ))}
         </div>

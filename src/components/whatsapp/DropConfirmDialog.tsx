@@ -32,6 +32,7 @@ interface AutoMessagePreview {
   image_url: string | null;
   delay_seconds: number;
   rejection_reason: string | null;
+  deal_origin: string | null;
 }
 
 interface DropConfirmDialogProps {
@@ -43,6 +44,7 @@ interface DropConfirmDialogProps {
   stageId: string;
   consultantId: string;
   dealName: string;
+  dealOrigin?: string | null;
 }
 
 export function DropConfirmDialog({
@@ -54,6 +56,7 @@ export function DropConfirmDialog({
   stageId,
   consultantId,
   dealName,
+  dealOrigin,
 }: DropConfirmDialogProps) {
   const [allMessages, setAllMessages] = useState<AutoMessagePreview[]>([]);
   const [rejectionReason, setRejectionReason] = useState("");
@@ -65,7 +68,7 @@ export function DropConfirmDialog({
     (async () => {
       const { data } = await supabase
         .from("stage_auto_messages")
-        .select("message_type, message_text, media_url, image_url, delay_seconds, rejection_reason")
+        .select("message_type, message_text, media_url, image_url, delay_seconds, rejection_reason, deal_origin")
         .eq("stage_id", stageId)
         .eq("consultant_id", consultantId)
         .order("position", { ascending: true });
@@ -74,11 +77,24 @@ export function DropConfirmDialog({
   }, [open, stageId, consultantId]);
 
   // Filter messages based on rejection reason for reprovado
-  const filteredMessages = isReprovado && rejectionReason
-    ? allMessages.filter(
-        (m) => !m.rejection_reason || m.rejection_reason === rejectionReason
-      )
-    : allMessages.filter((m) => !m.rejection_reason);
+  const filteredMessages = (() => {
+    let msgs = allMessages;
+    // Filter by rejection reason for reprovado
+    if (isReprovado && rejectionReason) {
+      msgs = msgs.filter((m) => !m.rejection_reason || m.rejection_reason === rejectionReason);
+    } else if (isReprovado) {
+      msgs = msgs.filter((m) => !m.rejection_reason);
+    } else {
+      msgs = msgs.filter((m) => !m.rejection_reason);
+    }
+    // Filter by deal_origin for time-based stages
+    if (dealOrigin) {
+      msgs = msgs.filter((m) => !m.deal_origin || m.deal_origin === dealOrigin);
+    } else {
+      msgs = msgs.filter((m) => !m.deal_origin);
+    }
+    return msgs;
+  })();
 
   const typeIcon = (t: string) => {
     switch (t) {

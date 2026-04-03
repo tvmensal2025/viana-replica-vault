@@ -46,7 +46,7 @@ const DEFAULT_STAGES: Omit<KanbanStageInsert, "consultant_id">[] = [
   { stage_key: "60_dias", label: "60 DIAS", color: "bg-cyan-500/20 text-cyan-400", position: 4, auto_message_text: "Olá *{{nome}}*! 🌱\n\nJá são *60 dias* desde sua aprovação!\n\nEstamos acompanhando seu progresso.", auto_message_type: "text", auto_message_media_url: null, auto_message_enabled: true },
   { stage_key: "90_dias", label: "90 DIAS", color: "bg-yellow-500/20 text-yellow-400", position: 5, auto_message_text: "Olá *{{nome}}*! ☀️\n\n*90 dias* de aprovação!\n\nComo está a economia na sua conta de luz?", auto_message_type: "text", auto_message_media_url: null, auto_message_enabled: true },
   { stage_key: "120_dias", label: "120 DIAS", color: "bg-orange-500/20 text-orange-400", position: 6, auto_message_text: "Olá *{{nome}}*! 🏆\n\n*120 dias* de aprovação!\n\nQue tal indicar um amigo e ganhar benefícios?", auto_message_type: "text", auto_message_media_url: null, auto_message_enabled: true },
-  { stage_key: "reprovado_60_dias", label: "Reprovado 60 Dias", color: "bg-red-800/20 text-red-300", position: 7, auto_message_text: null, auto_message_type: "text", auto_message_media_url: null, auto_message_enabled: true },
+  
 ];
 
 const COLOR_OPTIONS = [
@@ -135,7 +135,11 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
 
     // Filter by rejection_reason if applicable, then fall back to legacy
     let filteredMsgs = autoMsgs && autoMsgs.length > 0
-      ? autoMsgs.filter((m: any) => !m.rejection_reason || m.rejection_reason === rejectionReason)
+      ? autoMsgs.filter((m: any) => {
+          const reasonMatch = !m.rejection_reason || m.rejection_reason === rejectionReason;
+          const originMatch = !m.deal_origin || m.deal_origin === (deal as any).deal_origin;
+          return reasonMatch && originMatch;
+        })
       : [];
 
     const messagesToSend = filteredMsgs.length > 0
@@ -218,9 +222,11 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
     const updateData: CrmDealUpdate = { stage: stageKey };
     if (stageKey === "aprovado" && !deal.approved_at) {
       updateData.approved_at = new Date().toISOString();
+      (updateData as any).deal_origin = "aprovado";
     }
     if (stageKey === "reprovado" && !deal.rejected_at) {
       (updateData as any).rejected_at = new Date().toISOString();
+      (updateData as any).deal_origin = "reprovado";
     }
     if (rejectionReason) {
       (updateData as any).rejection_reason = rejectionReason;
@@ -439,8 +445,8 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
               </DialogHeader>
               <p className="text-[11px] text-muted-foreground -mt-1">
                 Leads aprovados progridem automaticamente para 30 → 60 → 90 → 120 DIAS.
-                Reprovados progridem para "Reprovado 60 Dias" após 60 dias.
-                Cada coluna pode ter múltiplas mensagens automáticas.
+                Reprovados progridem para 60 DIAS após 60 dias.
+                Nas colunas de tempo, configure mensagens por origem (aprovado/reprovado).
               </p>
               <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
                 {stages.map((stage) => (
@@ -659,6 +665,7 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
           dealName={
             deals.find((d) => d.id === pendingDrop.dealId)?.remote_jid?.split("@")[0] || "Lead"
           }
+          dealOrigin={(deals.find((d) => d.id === pendingDrop.dealId) as any)?.deal_origin}
         />
       )}
     </div>
