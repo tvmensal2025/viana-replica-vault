@@ -110,6 +110,11 @@ function MessageItem({
       <div className="flex items-center gap-2">
         <GripVertical className="h-3.5 w-3.5 text-muted-foreground/50" />
         <Badge variant="secondary" className="text-[9px]">Msg {index + 1}</Badge>
+        {msg.rejection_reason && (
+          <Badge variant="outline" className="text-[8px]">
+            {REJECTION_REASONS.find((r) => r.value === msg.rejection_reason)?.label || msg.rejection_reason}
+          </Badge>
+        )}
 
         {/* Delay */}
         {index > 0 && (
