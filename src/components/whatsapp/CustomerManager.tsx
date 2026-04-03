@@ -667,6 +667,8 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
                 Status: c.status || "", Cidade: c.address_city || "", Estado: c.address_state || "",
                 Distribuidora: c.distribuidora || "", "Consumo Médio (kW)": c.media_consumo ?? "",
                 "Valor Conta (R$)": c.electricity_bill_value ?? "", Licenciado: c.registered_by_name || "",
+                "Indicado Por": c.customer_referred_by_name || "", "Telefone Indicador": c.customer_referred_by_phone || "",
+                Cashback: c.cashback || "",
                 "Código iGreen": c.igreen_code || "", Andamento: c.andamento_igreen || "",
                 Devolutiva: c.devolutiva || "", Observação: c.observacao || "",
                 "Data Cadastro": c.data_cadastro || c.created_at || "",
@@ -844,6 +846,12 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
                             <span className="text-[11px] text-blue-400 flex items-center gap-1">
                               <Users className="h-2.5 w-2.5" />
                               Ind: {c.customer_referred_by_name}
+                            </span>
+                          )}
+                          {c.cashback && (
+                            <span className="text-[11px] text-emerald-400 flex items-center gap-1">
+                              <CreditCard className="h-2.5 w-2.5" />
+                              CB: {c.cashback}
                             </span>
                           )}
                         </div>
