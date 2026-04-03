@@ -68,7 +68,7 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
   );
 
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [activeSubTab, setActiveSubTab] = useState<SubTab>("conversas");
+  const [activeSubTab, setActiveSubTab] = useState<SubTab>("dashboard");
   const [selectedChatJid, setSelectedChatJid] = useState<string | null>(null);
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const [pendingMessageKey, setPendingMessageKey] = useState(0);
