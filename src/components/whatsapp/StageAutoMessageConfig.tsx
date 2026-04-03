@@ -231,10 +231,10 @@ export function StageAutoMessageConfig({
           media_url: d.media_url || "",
           image_url: d.image_url || "",
           delay_seconds: d.delay_seconds || 0,
+          rejection_reason: d.rejection_reason || "",
         }))
       );
     } else if (autoMessageText || autoMessageMediaUrl || autoMessageImageUrl) {
-      // Migrate legacy single message
       setMessages([
         {
           position: 0,
@@ -243,6 +243,7 @@ export function StageAutoMessageConfig({
           media_url: autoMessageMediaUrl || "",
           image_url: autoMessageImageUrl || "",
           delay_seconds: 0,
+          rejection_reason: "",
         },
       ]);
     } else {
