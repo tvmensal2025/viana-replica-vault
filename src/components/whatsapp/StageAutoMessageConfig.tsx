@@ -35,6 +35,7 @@ interface AutoMessage {
   media_url: string;
   image_url: string;
   delay_seconds: number;
+  rejection_reason: string;
 }
 
 const MESSAGE_TYPES = [
