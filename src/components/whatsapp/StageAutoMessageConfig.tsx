@@ -11,13 +11,22 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { MessageSquare, Image, Video, Mic, X, Check, Bold, Upload, Loader2, Plus, Trash2, GripVertical } from "lucide-react";
 import { uploadMedia, getAcceptString, formatFileSize } from "@/services/minioUpload";
 import { useToast } from "@/hooks/use-toast";
+import { REJECTION_REASONS } from "./DropConfirmDialog";
 
 interface StageAutoMessageConfigProps {
   stageId: string;
   stageLabel: string;
+  stageKey: string;
   consultantId: string;
   /** Legacy single-message fields (for migration display) */
   autoMessageText: string | null;
@@ -35,6 +44,7 @@ interface AutoMessage {
   media_url: string;
   image_url: string;
   delay_seconds: number;
+  rejection_reason: string;
 }
 
 const MESSAGE_TYPES = [
@@ -49,11 +59,13 @@ function MessageItem({
   index,
   onChange,
   onRemove,
+  showRejectionReason,
 }: {
   msg: AutoMessage;
   index: number;
   onChange: (updated: AutoMessage) => void;
   onRemove: () => void;
+  showRejectionReason: boolean;
 }) {
   const [uploading, setUploading] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -98,6 +110,11 @@ function MessageItem({
       <div className="flex items-center gap-2">
         <GripVertical className="h-3.5 w-3.5 text-muted-foreground/50" />
         <Badge variant="secondary" className="text-[9px]">Msg {index + 1}</Badge>
+        {msg.rejection_reason && (
+          <Badge variant="outline" className="text-[8px]">
+            {REJECTION_REASONS.find((r) => r.value === msg.rejection_reason)?.label || msg.rejection_reason}
+          </Badge>
+        )}
 
         {/* Delay */}
         {index > 0 && (
@@ -185,6 +202,24 @@ function MessageItem({
         </div>
       )}
 
+      {/* Rejection reason (only for reprovado stages) */}
+      {showRejectionReason && (
+        <div className="space-y-1">
+          <p className="text-[9px] text-muted-foreground">🏷 Motivo (só dispara para este motivo):</p>
+          <Select value={msg.rejection_reason || "all"} onValueChange={(v) => onChange({ ...msg, rejection_reason: v === "all" ? "" : v })}>
+            <SelectTrigger className="h-7 text-[10px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" className="text-[10px]">Todos os motivos</SelectItem>
+              {REJECTION_REASONS.map((r) => (
+                <SelectItem key={r.value} value={r.value} className="text-[10px]">{r.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       {/* Text */}
       <Textarea
         value={msg.message_text}
@@ -199,6 +234,7 @@ function MessageItem({
 export function StageAutoMessageConfig({
   stageId,
   stageLabel,
+  stageKey,
   consultantId,
   autoMessageText,
   autoMessageType,
@@ -229,10 +265,10 @@ export function StageAutoMessageConfig({
           media_url: d.media_url || "",
           image_url: d.image_url || "",
           delay_seconds: d.delay_seconds || 0,
+          rejection_reason: d.rejection_reason || "",
         }))
       );
     } else if (autoMessageText || autoMessageMediaUrl || autoMessageImageUrl) {
-      // Migrate legacy single message
       setMessages([
         {
           position: 0,
@@ -241,6 +277,7 @@ export function StageAutoMessageConfig({
           media_url: autoMessageMediaUrl || "",
           image_url: autoMessageImageUrl || "",
           delay_seconds: 0,
+          rejection_reason: "",
         },
       ]);
     } else {
@@ -262,6 +299,7 @@ export function StageAutoMessageConfig({
         media_url: "",
         image_url: "",
         delay_seconds: prev.length > 0 ? 5 : 0,
+        rejection_reason: "",
       },
     ]);
   };
@@ -295,6 +333,7 @@ export function StageAutoMessageConfig({
           media_url: m.media_url.trim() || null,
           image_url: m.image_url.trim() || null,
           delay_seconds: m.delay_seconds,
+          rejection_reason: m.rejection_reason.trim() || null,
         }));
         const { error } = await supabase.from("stage_auto_messages").insert(inserts);
         if (error) throw error;
@@ -352,6 +391,7 @@ export function StageAutoMessageConfig({
               index={i}
               onChange={(updated) => updateMessage(i, updated)}
               onRemove={() => removeMessage(i)}
+              showRejectionReason={stageKey === "reprovado"}
             />
           ))}
         </div>

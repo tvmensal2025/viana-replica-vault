@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { StageAutoMessageConfig } from "./StageAutoMessageConfig";
 import { AddLeadDialog } from "./AddLeadDialog";
+import { DropConfirmDialog } from "./DropConfirmDialog";
 import { sendWhatsAppMessage, resolveRecipient } from "@/services/messageSender";
 import type { MediaCategory } from "@/services/messageSender";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
@@ -77,6 +78,7 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
   const [addingNew, setAddingNew] = useState(false);
   const [draggedStageId, setDraggedStageId] = useState<string | null>(null);
   const [dragOverStageId, setDragOverStageId] = useState<string | null>(null);
+  const [pendingDrop, setPendingDrop] = useState<{ dealId: string; stageKey: string; stageId: string; stageLabel: string } | null>(null);
   const { toast } = useToast();
 
   const fetchStages = useCallback(async () => {
@@ -118,7 +120,7 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
   const handleDragStart = (id: string) => setDraggedId(id);
 
   // Send auto-messages when deal moves to a stage (now supports multiple)
-  const sendAutoMessages = async (stage: KanbanStageRow, deal: CrmDealRow) => {
+  const sendAutoMessages = async (stage: KanbanStageRow, deal: CrmDealRow, rejectionReason?: string) => {
     if (!stage.auto_message_enabled || !instanceName || !deal.remote_jid) return;
 
     // Fetch multi-messages from stage_auto_messages
@@ -131,9 +133,13 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
 
     const phone = resolveRecipient(deal.remote_jid);
 
-    // If no multi-messages, fall back to legacy single message
-    const messagesToSend = autoMsgs && autoMsgs.length > 0
-      ? autoMsgs
+    // Filter by rejection_reason if applicable, then fall back to legacy
+    let filteredMsgs = autoMsgs && autoMsgs.length > 0
+      ? autoMsgs.filter((m: any) => !m.rejection_reason || m.rejection_reason === rejectionReason)
+      : [];
+
+    const messagesToSend = filteredMsgs.length > 0
+      ? filteredMsgs
       : (stage.auto_message_text || stage.auto_message_media_url || (stage as any).auto_message_image_url)
         ? [{
             message_type: stage.auto_message_type || "text",
@@ -190,31 +196,53 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
       return;
     }
 
+    const targetStage = stages.find((s) => s.stage_key === stageKey);
+    if (!targetStage) { setDraggedId(null); return; }
+
+    // Show confirmation dialog
+    setPendingDrop({
+      dealId: draggedId,
+      stageKey,
+      stageId: targetStage.id,
+      stageLabel: targetStage.label,
+    });
+    setDraggedId(null);
+  };
+
+  const confirmDrop = async (sendMessages: boolean, rejectionReason?: string) => {
+    if (!pendingDrop) return;
+    const { dealId, stageKey } = pendingDrop;
+    const deal = deals.find((d) => d.id === dealId);
+    if (!deal) { setPendingDrop(null); return; }
+
     const updateData: CrmDealUpdate = { stage: stageKey };
     if (stageKey === "aprovado" && !deal.approved_at) {
       updateData.approved_at = new Date().toISOString();
     }
-    if (stageKey === "reprovado" && !(deal as any).rejected_at) {
+    if (stageKey === "reprovado" && !deal.rejected_at) {
       (updateData as any).rejected_at = new Date().toISOString();
+    }
+    if (rejectionReason) {
+      (updateData as any).rejection_reason = rejectionReason;
     }
 
     setDeals((prev) =>
-      prev.map((d) => (d.id === draggedId ? { ...d, ...updateData } : d))
+      prev.map((d) => (d.id === dealId ? { ...d, ...updateData } : d))
     );
-    setDraggedId(null);
+    setPendingDrop(null);
 
     const { error } = await supabase
       .from("crm_deals")
       .update(updateData)
-      .eq("id", draggedId);
+      .eq("id", dealId);
 
     if (error) {
       toast({ title: "Erro ao mover deal", variant: "destructive" });
       fetchDeals();
-    } else {
+    } else if (sendMessages) {
       const targetStage = stages.find((s) => s.stage_key === stageKey);
       if (targetStage) {
-        sendAutoMessages(targetStage, deal);
+        sendAutoMessages(targetStage, { ...deal, ...updateData } as CrmDealRow, rejectionReason);
       }
     }
   };
@@ -478,6 +506,7 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
                         <StageAutoMessageConfig
                           stageId={stage.id}
                           stageLabel={stage.label}
+                          stageKey={stage.stage_key}
                           consultantId={consultantId}
                           autoMessageText={stage.auto_message_text}
                           autoMessageType={stage.auto_message_type || "text"}
@@ -590,9 +619,10 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
                               Aprovado: {new Date(deal.approved_at).toLocaleDateString("pt-BR")}
                             </p>
                           )}
-                          {(deal as any).rejected_at && (
+                          {deal.rejected_at && (
                             <p className="text-[9px] text-muted-foreground mt-0.5">
-                              Reprovado: {new Date((deal as any).rejected_at).toLocaleDateString("pt-BR")}
+                              Reprovado: {new Date(deal.rejected_at).toLocaleDateString("pt-BR")}
+                              {deal.rejection_reason && ` (${deal.rejection_reason.replace(/_/g, " ")})`}
                             </p>
                           )}
                           {deal.notes && (
@@ -615,6 +645,22 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
           );
         })}
       </div>
+
+      {/* Drop confirmation dialog */}
+      {pendingDrop && (
+        <DropConfirmDialog
+          open={!!pendingDrop}
+          onClose={() => setPendingDrop(null)}
+          onConfirm={confirmDrop}
+          stageLabel={pendingDrop.stageLabel}
+          stageKey={pendingDrop.stageKey}
+          stageId={pendingDrop.stageId}
+          consultantId={consultantId}
+          dealName={
+            deals.find((d) => d.id === pendingDrop.dealId)?.remote_jid?.split("@")[0] || "Lead"
+          }
+        />
+      )}
     </div>
   );
 }

@@ -80,7 +80,8 @@ async function sendAutoMessages(
   phone: string,
   stageData: any,
   apiUrl: string,
-  apiKey: string
+  apiKey: string,
+  rejectionReason?: string | null
 ) {
   // Try multi-message table first
   const { data: multiMsgs } = await supabase
@@ -89,15 +90,20 @@ async function sendAutoMessages(
     .eq("stage_id", stageData.id)
     .order("position", { ascending: true });
 
-  if (multiMsgs && multiMsgs.length > 0) {
-    for (let i = 0; i < multiMsgs.length; i++) {
-      const msg = multiMsgs[i];
+  // Filter by rejection_reason: include messages with no reason or matching reason
+  const filtered = multiMsgs?.filter((m: any) =>
+    !m.rejection_reason || m.rejection_reason === rejectionReason
+  ) || [];
+
+  if (filtered.length > 0) {
+    for (let i = 0; i < filtered.length; i++) {
+      const msg = filtered[i];
       if (i > 0 && msg.delay_seconds > 0) {
         await new Promise((r) => setTimeout(r, msg.delay_seconds * 1000));
       }
       await sendSingleMessage(instanceName, phone, msg, apiUrl, apiKey);
     }
-    console.log(`Multi-messages (${multiMsgs.length}) sent to ${phone} for stage ${stageData.label}`);
+    console.log(`Multi-messages (${filtered.length}) sent to ${phone} for stage ${stageData.label}`);
   } else {
     // Legacy single message
     const hasContent = stageData.auto_message_text || stageData.auto_message_media_url || stageData.auto_message_image_url;
@@ -203,7 +209,7 @@ Deno.serve(async (req) => {
           .limit(1)
           .single();
         if (instance) {
-          await sendAutoMessages(supabase, instance.instance_name, deal.remote_jid.split("@")[0], stageData, evolutionUrl, evolutionKey);
+          await sendAutoMessages(supabase, instance.instance_name, deal.remote_jid.split("@")[0], stageData, evolutionUrl, evolutionKey, deal.rejection_reason);
         }
       }
     }
