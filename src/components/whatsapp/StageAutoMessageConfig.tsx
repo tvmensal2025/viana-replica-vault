@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 interface StageAutoMessageConfigProps {
   stageId: string;
   stageLabel: string;
+  stageKey: string;
   consultantId: string;
   /** Legacy single-message fields (for migration display) */
   autoMessageText: string | null;
