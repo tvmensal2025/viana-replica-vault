@@ -65,6 +65,8 @@ interface Customer {
   assinatura_cliente?: string | null;
   assinatura_igreen?: string | null;
   link_assinatura?: string | null;
+  customer_referred_by_name?: string | null;
+  customer_referred_by_phone?: string | null;
 }
 
 interface CustomerManagerProps {
@@ -323,6 +325,8 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
       address_city: c.address_city || "", address_state: c.address_state || "",
       numero_instalacao: c.numero_instalacao || "", electricity_bill_value: c.electricity_bill_value?.toString() || "",
       status: c.status || "pending",
+      customer_referred_by_name: c.customer_referred_by_name || "",
+      customer_referred_by_phone: c.customer_referred_by_phone || "",
     });
   }
 
@@ -346,6 +350,8 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
       updateData.numero_instalacao = editForm.numero_instalacao || null;
       updateData.electricity_bill_value = editForm.electricity_bill_value ? parseFloat(editForm.electricity_bill_value) : null;
       updateData.status = editForm.status || "pending";
+      (updateData as any).customer_referred_by_name = editForm.customer_referred_by_name || null;
+      (updateData as any).customer_referred_by_phone = editForm.customer_referred_by_phone || null;
 
       const { error } = await supabase.from("customers").update(updateData).eq("id", editingCustomer.id);
       if (error) throw error;
@@ -434,6 +440,12 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
 
     const linkAssinatura = safeString(findColumnValue(row, "Link Assinatura", "link_assinatura"));
     if (linkAssinatura) data.link_assinatura = linkAssinatura;
+
+    const indicador = safeString(findColumnValue(row, "Indicador", "indicador", "Indicado Por", "indicado_por", "Quem Indicou", "Referido Por"));
+    if (indicador) data.customer_referred_by_name = indicador;
+
+    const indicadorPhone = safeString(findColumnValue(row, "Telefone Indicador", "telefone_indicador", "Celular Indicador"));
+    if (indicadorPhone) data.customer_referred_by_phone = indicadorPhone;
 
     return data;
   }
@@ -828,6 +840,12 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
                               {c.registered_by_name}
                             </span>
                           )}
+                          {c.customer_referred_by_name && (
+                            <span className="text-[11px] text-blue-400 flex items-center gap-1">
+                              <Users className="h-2.5 w-2.5" />
+                              Ind: {c.customer_referred_by_name}
+                            </span>
+                          )}
                         </div>
                       </div>
 
@@ -852,6 +870,7 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
                           {c.data_nascimento && <DetailItem icon={User} label="Nascimento" value={c.data_nascimento} />}
                           {c.distribuidora && <DetailItem icon={Building2} label="Distribuidora" value={c.distribuidora} />}
                           {c.registered_by_name && <DetailItem icon={User} label="Licenciado" value={`${c.registered_by_name}${c.registered_by_igreen_id ? ` (${c.registered_by_igreen_id})` : ""}`} />}
+                          {c.customer_referred_by_name && <DetailItem icon={User} label="Indicado por" value={`${c.customer_referred_by_name}${c.customer_referred_by_phone ? ` (${c.customer_referred_by_phone})` : ""}`} />}
                           {c.nivel_licenciado && <DetailItem icon={User} label="Nível" value={c.nivel_licenciado} />}
                           {c.andamento_igreen && <DetailItem icon={FileText} label="Andamento iGreen" value={c.andamento_igreen} />}
                           {c.status_financeiro && <DetailItem icon={CreditCard} label="Status Financeiro" value={c.status_financeiro} />}
@@ -1031,6 +1050,16 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
                   <Input value={editForm.address_city || ""} onChange={(e) => updateEdit("address_city", e.target.value)} className="h-9 text-xs flex-1 bg-secondary/30 border-border/50" />
                   <Input value={editForm.address_state || ""} onChange={(e) => updateEdit("address_state", e.target.value.toUpperCase())} className="h-9 text-xs w-16 bg-secondary/30 border-border/50" maxLength={2} />
                 </div>
+              </div>
+
+              <SectionLabel icon={Users} title="Indicação" />
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Indicado por (nome)</Label>
+                <Input value={editForm.customer_referred_by_name || ""} onChange={(e) => updateEdit("customer_referred_by_name", e.target.value)} placeholder="Quem indicou este cliente" className="h-9 text-xs mt-1 bg-secondary/30 border-border/50" />
+              </div>
+              <div>
+                <Label className="text-[11px] text-muted-foreground">Telefone do indicador</Label>
+                <Input value={editForm.customer_referred_by_phone || ""} onChange={(e) => updateEdit("customer_referred_by_phone", e.target.value)} placeholder="(00) 00000-0000" className="h-9 text-xs mt-1 bg-secondary/30 border-border/50" />
               </div>
 
               <SectionLabel icon={Zap} title="Dados de Energia" />

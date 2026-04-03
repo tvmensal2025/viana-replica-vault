@@ -219,6 +219,9 @@ export type Database = {
           conversation_step: string | null
           cpf: string | null
           created_at: string
+          customer_referred_by_consultant_id: string | null
+          customer_referred_by_name: string | null
+          customer_referred_by_phone: string | null
           data_ativo: string | null
           data_cadastro: string | null
           data_nascimento: string | null
@@ -277,6 +280,9 @@ export type Database = {
           conversation_step?: string | null
           cpf?: string | null
           created_at?: string
+          customer_referred_by_consultant_id?: string | null
+          customer_referred_by_name?: string | null
+          customer_referred_by_phone?: string | null
           data_ativo?: string | null
           data_cadastro?: string | null
           data_nascimento?: string | null
@@ -335,6 +341,9 @@ export type Database = {
           conversation_step?: string | null
           cpf?: string | null
           created_at?: string
+          customer_referred_by_consultant_id?: string | null
+          customer_referred_by_name?: string | null
+          customer_referred_by_phone?: string | null
           data_ativo?: string | null
           data_cadastro?: string | null
           data_nascimento?: string | null
@@ -376,7 +385,22 @@ export type Database = {
           status_financeiro?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "customers_customer_referred_by_consultant_id_fkey"
+            columns: ["customer_referred_by_consultant_id"]
+            isOneToOne: false
+            referencedRelation: "consultants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customers_customer_referred_by_consultant_id_fkey"
+            columns: ["customer_referred_by_consultant_id"]
+            isOneToOne: false
+            referencedRelation: "consultants_public"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       kanban_stages: {
         Row: {

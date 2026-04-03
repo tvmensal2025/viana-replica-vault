@@ -150,6 +150,13 @@ function buildRecord(c: Record<string, unknown>): Record<string, unknown> | null
   const codLic = safeStr(get(c, "codigoLicenciado", "codigo_licenciado"));
   if (codLic) record.registered_by_igreen_id = codLic;
 
+  // Indicador / quem trouxe o cliente (campo separado do licenciado)
+  const indicador = safeStr(get(c, "indicador", "Indicador", "nomeIndicador", "indicadoPor", "quemIndicou", "referredBy", "indicacao"));
+  if (indicador) record.customer_referred_by_name = indicador;
+
+  const indicadorPhone = safeStr(get(c, "telefoneIndicador", "celularIndicador", "phoneIndicador"));
+  if (indicadorPhone) record.customer_referred_by_phone = normalizePhone(String(indicadorPhone));
+
   const inst = safeStr(get(c, "numeroInstalacao", "numero_instalacao", "Instalação"));
   if (inst) record.numero_instalacao = inst;
 
