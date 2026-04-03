@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useWhatsApp } from "@/hooks/useWhatsApp";
 import { useTemplates } from "@/hooks/useTemplates";
@@ -12,7 +12,8 @@ import { ChatSidebar } from "./ChatSidebar";
 import { ChatView } from "./ChatView";
 import { KanbanBoard } from "./KanbanBoard";
 import { SchedulePanel } from "./SchedulePanel";
-import { MessageSquare, LayoutGrid, Send, FileText, Clock, Users } from "lucide-react";
+import { WhatsAppDashboard } from "./WhatsAppDashboard";
+import { BarChart3, MessageSquare, LayoutGrid, Send, FileText, Clock, Users } from "lucide-react";
 
 interface Customer {
   id: string;
@@ -25,9 +26,10 @@ interface WhatsAppTabProps {
   userId: string;
 }
 
-type SubTab = "conversas" | "crm" | "envio_massa" | "templates" | "agendamentos" | "clientes";
+type SubTab = "dashboard" | "conversas" | "crm" | "envio_massa" | "templates" | "agendamentos" | "clientes";
 
 const SUB_TABS: { key: SubTab; label: string; icon: React.ElementType }[] = [
+  { key: "dashboard", label: "Dashboard", icon: BarChart3 },
   { key: "conversas", label: "Conversas", icon: MessageSquare },
   { key: "crm", label: "CRM", icon: LayoutGrid },
   { key: "envio_massa", label: "Envio em Massa", icon: Send },
