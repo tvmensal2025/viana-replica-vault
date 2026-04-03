@@ -1,68 +1,72 @@
 
 
-# Mensagens separadas por origem (Aprovado vs Reprovado) na coluna 60 Dias
+# Análise: Pessoa responsável pelo cashback (indicador) vs Licenciado
 
-## Problema atual
+## Situação atual
 
-A coluna "60 DIAS" recebe leads de dois caminhos diferentes:
-- Aprovados que completaram 60 dias
-- Reprovados que completaram 60 dias (via `reprovado_60_dias`)
+O sistema já captura do portal iGreen dois campos relevantes:
+- **`registered_by_name`** — nome do licenciado que cadastrou o cliente
+- **`registered_by_igreen_id`** — código do licenciado no iGreen
 
-O usuario quer que na coluna de 60 dias existam **duas mensagens distintas**: uma para quem veio de aprovado e outra para quem veio de reprovado.
+Porém, no modelo de cashback da iGreen, quem **indicou** o cliente (e recebe o cashback) nem sempre é o mesmo licenciado que fez o cadastro. Essa informação hoje não é rastreada separadamente.
 
-## Solucao
+## O que a API iGreen fornece
 
-Adicionar um campo `deal_origin` na tabela `stage_auto_messages` (valores: `aprovado`, `reprovado`, ou NULL para todos). Unificar as colunas `60_dias` e `reprovado_60_dias` em uma so, e usar o `deal_origin` para filtrar qual mensagem enviar.
+Olhando o sync (`sync-igreen-customers`), os campos extraídos são:
+- `licenciado` / `codigoLicenciado` → salvos como `registered_by_name` / `registered_by_igreen_id`
+- `cashback` → salvo como texto
 
-Tambem adicionar `deal_origin` em `crm_deals` para rastrear se o lead veio do fluxo aprovado ou reprovado.
+A API iGreen pode ou não fornecer um campo separado para o **indicador**. Precisamos verificar.
 
-### 1. Migration SQL
-- `ALTER TABLE crm_deals ADD COLUMN deal_origin TEXT NULL` (preenchido com "aprovado" ou "reprovado" quando o deal entra nessas colunas)
-- `ALTER TABLE stage_auto_messages ADD COLUMN deal_origin TEXT NULL`
+## Opções de implementação
 
-### 2. KanbanBoard.tsx
-- Ao mover deal para "aprovado", setar `deal_origin = 'aprovado'`
-- Ao mover deal para "reprovado", setar `deal_origin = 'reprovado'`
-- Remover o estagio padrao `reprovado_60_dias` (unificar no `60_dias`)
+### Opção A: Campo manual "Indicado por"
 
-### 3. StageAutoMessageConfig.tsx
-- Para colunas de tempo (30, 60, 90, 120 dias), mostrar um seletor de **origem**: "Todos", "Aprovados", "Reprovados"
-- Cada mensagem pode ser configurada para disparar apenas para uma origem especifica
+Adicionar dois campos na tabela `customers`:
+- `referred_by_name TEXT` — nome de quem indicou
+- `referred_by_phone TEXT` — telefone de quem indicou (para vincular)
 
-### 4. Edge Function (crm-auto-progress)
-- Reprovados com 60 dias tambem vao para `60_dias` (em vez de `reprovado_60_dias`)
-- Ao enviar mensagens, filtrar por `deal_origin` do deal alem do `rejection_reason`
+**Prós:** Simples, funciona mesmo sem dados da API
+**Contras:** Preenchimento manual
 
-### 5. DropConfirmDialog.tsx
-- Preview de mensagens tambem considera o `deal_origin` ao filtrar
+### Opção B: Vincular a outro consultor do sistema
 
-## Fluxo visual no StageAutoMessageConfig
+Se o indicador também é um licenciado cadastrado no sistema, podemos usar:
+- `referred_by_consultant_id UUID` → referência a `consultants.id`
 
-```text
-Mensagens Automáticas [60 DIAS]
+Isso permitiria um **dashboard de indicações** mostrando quantos clientes cada pessoa trouxe e o cashback gerado.
 
-  ┌────────────────────────────┐
-  │ Msg 1  Origem: [Aprovados] │
-  │ 🔊 audio_aprovado.ogg     │
-  │ 📷 imagem_aprovado.jpg     │
-  │ "Parabéns, 60 dias..."    │
-  └────────────────────────────┘
+**Prós:** Relatórios automáticos, rastreabilidade
+**Contras:** Só funciona se o indicador estiver cadastrado no sistema
 
-  ┌────────────────────────────┐
-  │ Msg 2  Origem: [Reprovados]│
-  │ 🔊 audio_reprovado.ogg    │
-  │ 📷 imagem_reprovado.jpg    │
-  │ "Gostaríamos de tentar..." │
-  └────────────────────────────┘
-```
+### Opção C: Híbrido (recomendado)
 
-## Arquivos alterados
+Combinar ambos:
+- `referred_by_name TEXT` — sempre preenchido (manual ou via sync)
+- `referred_by_phone TEXT` — telefone do indicador
+- `referred_by_consultant_id UUID NULL` — preenchido automaticamente se o telefone/nome bater com um consultor cadastrado
 
-| Arquivo | Mudanca |
-|---------|---------|
-| Migration SQL | `deal_origin` em `crm_deals` e `stage_auto_messages` |
-| `KanbanBoard.tsx` | Setar `deal_origin` ao aprovar/reprovar, remover `reprovado_60_dias` |
-| `StageAutoMessageConfig.tsx` | Seletor de origem (aprovado/reprovado) por mensagem |
-| `DropConfirmDialog.tsx` | Filtrar preview por `deal_origin` |
-| `crm-auto-progress/index.ts` | Unificar progressao para `60_dias`, filtrar por `deal_origin` |
+Na tabela de clientes (CustomerManager), adicionar:
+1. Coluna "Indicado por" na tabela
+2. No modal de detalhes, campo editável para informar quem indicou
+3. No sync iGreen, tentar extrair o campo de indicação se a API fornecer
+
+### Visualização proposta
+
+Na tela de clientes (screenshot que você enviou), adicionar uma coluna **"Indicado por"** ao lado de "Licenciado". No Kanban e nos relatórios, permitir filtrar por indicador.
+
+Também seria possível criar uma **aba de Indicações/Cashback** no admin mostrando:
+- Ranking de indicadores
+- Total de clientes por indicador
+- Valor estimado de cashback por indicador
+
+## Próximos passos sugeridos
+
+1. Verificar se a API iGreen retorna algum campo de "indicador" ou "quem trouxe" separado do licenciado
+2. Escolher entre as opções A, B ou C
+3. Implementar os campos e a UI
+
+## Pergunta-chave
+
+A informação de "quem trouxe o cliente" vem do portal iGreen (algum campo que ainda não estamos capturando) ou é algo que o licenciado preenche manualmente no seu sistema?
 
