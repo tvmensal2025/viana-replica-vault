@@ -303,6 +303,7 @@ export function StageAutoMessageConfig({
           image_url: autoMessageImageUrl || "",
           delay_seconds: 0,
           rejection_reason: "",
+          deal_origin: "",
         },
       ]);
     } else {
