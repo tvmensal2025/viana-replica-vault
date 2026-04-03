@@ -31,11 +31,13 @@ function formatTime(ts: number): string {
   return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 }
 
-export function ChatSidebar({ chats, isLoading, selectedJid, onSelectChat }: ChatSidebarProps) {
+export function ChatSidebar({ chats, isLoading, selectedJid, onSelectChat, consultantId }: ChatSidebarProps) {
   const [search, setSearch] = useState("");
   const [showNewChat, setShowNewChat] = useState(false);
   const [newPhone, setNewPhone] = useState("");
   const newPhoneRef = useRef<HTMLInputElement>(null);
+  const [customerResults, setCustomerResults] = useState<CustomerResult[]>([]);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (showNewChat) {
@@ -43,15 +45,45 @@ export function ChatSidebar({ chats, isLoading, selectedJid, onSelectChat }: Cha
     }
   }, [showNewChat]);
 
+  // Search customers from DB when search has 3+ chars
+  const searchCustomers = useCallback(async (query: string) => {
+    if (!consultantId || query.length < 3) { setCustomerResults([]); return; }
+    try {
+      const { data } = await supabase
+        .from("customers")
+        .select("name, phone_whatsapp")
+        .eq("consultant_id", consultantId)
+        .or(`name.ilike.%${query}%,phone_whatsapp.ilike.%${query}%`)
+        .limit(5);
+      setCustomerResults(data || []);
+    } catch {
+      setCustomerResults([]);
+    }
+  }, [consultantId]);
+
+  useEffect(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => searchCustomers(search), 300);
+    return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current); };
+  }, [search, searchCustomers]);
+
   const handleStartNewChat = () => {
     const clean = newPhone.replace(/\D/g, "");
     if (clean.length < 10) return;
-    // Add country code if missing
     const phone = clean.startsWith("55") ? clean : `55${clean}`;
     const jid = `${phone}@s.whatsapp.net`;
     onSelectChat(jid);
     setNewPhone("");
     setShowNewChat(false);
+  };
+
+  const handleStartChatFromCustomer = (phone: string) => {
+    const clean = phone.replace(/\D/g, "");
+    const normalized = clean.startsWith("55") ? clean : `55${clean}`;
+    const jid = `${normalized}@s.whatsapp.net`;
+    onSelectChat(jid);
+    setSearch("");
+    setCustomerResults([]);
   };
 
   const filtered = chats.filter(
