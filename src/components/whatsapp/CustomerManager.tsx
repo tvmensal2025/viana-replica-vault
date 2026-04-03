@@ -196,6 +196,7 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [selectedLicenciado, setSelectedLicenciado] = useState("all");
   const [syncing, setSyncing] = useState(false);
+  const [syncCooldown, setSyncCooldown] = useState(0);
   const [lastSync, setLastSync] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);

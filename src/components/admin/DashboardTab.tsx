@@ -28,6 +28,7 @@ export function DashboardTab({ userId, form, onFormUpdate, periodDays, onPeriodC
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [syncingDashboard, setSyncingDashboard] = useState(false);
+  const [syncCooldown, setSyncCooldown] = useState(0);
   const [selectedLicenciado, setSelectedLicenciado] = useState("all");
   const [showCredentialsDialog, setShowCredentialsDialog] = useState(false);
   const [credForm, setCredForm] = useState({ email: "", password: "" });
