@@ -278,6 +278,7 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
                   isLoading={chatsLoading}
                   selectedJid={selectedChatJid}
                   onSelectChat={handleSelectChat}
+                  consultantId={userId}
                 />
               </div>
               <ChatView
