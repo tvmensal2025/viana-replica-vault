@@ -299,6 +299,7 @@ export function StageAutoMessageConfig({
           media_url: m.media_url.trim() || null,
           image_url: m.image_url.trim() || null,
           delay_seconds: m.delay_seconds,
+          rejection_reason: m.rejection_reason.trim() || null,
         }));
         const { error } = await supabase.from("stage_auto_messages").insert(inserts);
         if (error) throw error;
