@@ -45,7 +45,14 @@ interface AutoMessage {
   image_url: string;
   delay_seconds: number;
   rejection_reason: string;
+  deal_origin: string;
 }
+
+const DEAL_ORIGIN_OPTIONS = [
+  { value: "all", label: "Todos" },
+  { value: "aprovado", label: "Aprovados" },
+  { value: "reprovado", label: "Reprovados" },
+];
 
 const MESSAGE_TYPES = [
   { key: "text", label: "Texto", icon: MessageSquare },
