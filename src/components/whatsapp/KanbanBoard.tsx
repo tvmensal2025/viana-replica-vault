@@ -645,6 +645,22 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
           );
         })}
       </div>
+
+      {/* Drop confirmation dialog */}
+      {pendingDrop && (
+        <DropConfirmDialog
+          open={!!pendingDrop}
+          onClose={() => setPendingDrop(null)}
+          onConfirm={confirmDrop}
+          stageLabel={pendingDrop.stageLabel}
+          stageKey={pendingDrop.stageKey}
+          stageId={pendingDrop.stageId}
+          consultantId={consultantId}
+          dealName={
+            deals.find((d) => d.id === pendingDrop.dealId)?.remote_jid?.split("@")[0] || "Lead"
+          }
+        />
+      )}
     </div>
   );
 }
