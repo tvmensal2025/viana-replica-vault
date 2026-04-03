@@ -15,7 +15,7 @@ const APPROVED_PROGRESSION = [
 ];
 
 const REJECTED_PROGRESSION = [
-  { days: 60, stage_key: "reprovado_60_dias" },
+  { days: 60, stage_key: "60_dias" },
 ];
 
 async function sendEvolutionText(instanceName: string, phone: string, text: string, apiUrl: string, apiKey: string) {
