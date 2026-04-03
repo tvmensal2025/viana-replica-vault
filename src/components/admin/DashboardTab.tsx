@@ -129,6 +129,7 @@ export function DashboardTab({ userId, form, onFormUpdate, periodDays, onPeriodC
 
   const runSync = async (email: string, password: string) => {
     setSyncingDashboard(true);
+    startCooldown();
     try {
       const { data, error } = await supabase.functions.invoke("sync-igreen-customers", {
         body: { portal_email: email, portal_password: password, consultant_id: userId },
