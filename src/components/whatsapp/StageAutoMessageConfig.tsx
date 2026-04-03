@@ -202,6 +202,24 @@ function MessageItem({
         </div>
       )}
 
+      {/* Rejection reason (only for reprovado stages) */}
+      {showRejectionReason && (
+        <div className="space-y-1">
+          <p className="text-[9px] text-muted-foreground">🏷 Motivo (só dispara para este motivo):</p>
+          <Select value={msg.rejection_reason || "all"} onValueChange={(v) => onChange({ ...msg, rejection_reason: v === "all" ? "" : v })}>
+            <SelectTrigger className="h-7 text-[10px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" className="text-[10px]">Todos os motivos</SelectItem>
+              {REJECTION_REASONS.map((r) => (
+                <SelectItem key={r.value} value={r.value} className="text-[10px]">{r.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       {/* Text */}
       <Textarea
         value={msg.message_text}
