@@ -858,6 +858,7 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
                           {c.data_nascimento && <DetailItem icon={User} label="Nascimento" value={c.data_nascimento} />}
                           {c.distribuidora && <DetailItem icon={Building2} label="Distribuidora" value={c.distribuidora} />}
                           {c.registered_by_name && <DetailItem icon={User} label="Licenciado" value={`${c.registered_by_name}${c.registered_by_igreen_id ? ` (${c.registered_by_igreen_id})` : ""}`} />}
+                          {c.customer_referred_by_name && <DetailItem icon={User} label="Indicado por" value={`${c.customer_referred_by_name}${c.customer_referred_by_phone ? ` (${c.customer_referred_by_phone})` : ""}`} />}
                           {c.nivel_licenciado && <DetailItem icon={User} label="Nível" value={c.nivel_licenciado} />}
                           {c.andamento_igreen && <DetailItem icon={FileText} label="Andamento iGreen" value={c.andamento_igreen} />}
                           {c.status_financeiro && <DetailItem icon={CreditCard} label="Status Financeiro" value={c.status_financeiro} />}
