@@ -350,6 +350,8 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
       updateData.numero_instalacao = editForm.numero_instalacao || null;
       updateData.electricity_bill_value = editForm.electricity_bill_value ? parseFloat(editForm.electricity_bill_value) : null;
       updateData.status = editForm.status || "pending";
+      (updateData as any).customer_referred_by_name = editForm.customer_referred_by_name || null;
+      (updateData as any).customer_referred_by_phone = editForm.customer_referred_by_phone || null;
 
       const { error } = await supabase.from("customers").update(updateData).eq("id", editingCustomer.id);
       if (error) throw error;
