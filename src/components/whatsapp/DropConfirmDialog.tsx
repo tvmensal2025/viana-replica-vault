@@ -76,11 +76,24 @@ export function DropConfirmDialog({
   }, [open, stageId, consultantId]);
 
   // Filter messages based on rejection reason for reprovado
-  const filteredMessages = isReprovado && rejectionReason
-    ? allMessages.filter(
-        (m) => !m.rejection_reason || m.rejection_reason === rejectionReason
-      )
-    : allMessages.filter((m) => !m.rejection_reason);
+  const filteredMessages = (() => {
+    let msgs = allMessages;
+    // Filter by rejection reason for reprovado
+    if (isReprovado && rejectionReason) {
+      msgs = msgs.filter((m) => !m.rejection_reason || m.rejection_reason === rejectionReason);
+    } else if (isReprovado) {
+      msgs = msgs.filter((m) => !m.rejection_reason);
+    } else {
+      msgs = msgs.filter((m) => !m.rejection_reason);
+    }
+    // Filter by deal_origin for time-based stages
+    if (dealOrigin) {
+      msgs = msgs.filter((m) => !m.deal_origin || m.deal_origin === dealOrigin);
+    } else {
+      msgs = msgs.filter((m) => !m.deal_origin);
+    }
+    return msgs;
+  })();
 
   const typeIcon = (t: string) => {
     switch (t) {
