@@ -290,6 +290,7 @@ export function StageAutoMessageConfig({
           image_url: d.image_url || "",
           delay_seconds: d.delay_seconds || 0,
           rejection_reason: d.rejection_reason || "",
+          deal_origin: (d as any).deal_origin || "",
         }))
       );
     } else if (autoMessageText || autoMessageMediaUrl || autoMessageImageUrl) {
