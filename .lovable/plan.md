@@ -1,40 +1,35 @@
 
 
-# Redesign do Dashboard WhatsApp — Versão Profissional
+# Correção: Sincronização iGreen com proteção contra rate limit
 
 ## Problema
+O portal iGreen retorna erro 429 com texto simples "Muitas tentativas de login, tente novamente mais tarde." — mas o código tenta fazer `JSON.parse` desse texto, falha silenciosamente, e mostra uma mensagem genérica. Além disso, não há proteção no frontend para evitar cliques repetidos.
 
-O dashboard atual repete informações que já existem no dashboard principal (total clientes, aprovados, valor contas, novos por semana) e mostra métricas pouco úteis (total templates). Precisa ter foco exclusivo em **operações WhatsApp**.
+## Correções
 
-## Novo Layout Proposto
+### 1. Edge Function — Detectar 429 antes do JSON parse
+**Arquivo:** `supabase/functions/sync-igreen-customers/index.ts` (linhas 221-237)
 
-### Linha 1 — KPIs de Operação WhatsApp (4 cards)
-- **Conversas Ativas** — total de chats com mensagens nos últimos 7 dias
-- **Tempo Médio de Resposta** — tempo médio entre mensagem recebida e resposta do consultor
-- **Mensagens Enviadas (período)** — total de mensagens enviadas nos últimos 7/30 dias
-- **Taxa de Resposta** — % de conversas respondidas vs recebidas
+Adicionar check para status 429 e texto "Muitas tentativas" ANTES do try/catch JSON:
 
-### Linha 2 — Dois painéis lado a lado
-- **Funil do CRM** (esquerda) — gráfico de funil vertical mostrando deals por estágio com gradiente de cores, incluindo % de conversão entre etapas
-- **Mensagens por Dia** (direita) — gráfico de área mostrando volume de mensagens enviadas/recebidas por dia nos últimos 14 dias (dados da tabela `conversations`)
+```typescript
+if (loginRes.status === 429 || errText.toLowerCase().includes("muitas tentativas")) {
+  friendlyError = "Muitas tentativas de login no portal iGreen. Aguarde 10 minutos e tente novamente.";
+} else {
+  try { ... JSON parse ... } catch { }
+}
+```
 
-### Linha 3 — Dois painéis lado a lado
-- **Agendamentos** (esquerda) — mini timeline mostrando próximas 5 mensagens agendadas com horário e destinatário
-- **Top Contatos** (direita) — lista dos 5 contatos com mais interações recentes
+### 2. Edge Function — Retry automático com delay
+Se receber 429 na primeira tentativa, aguardar 30 segundos e tentar uma vez mais antes de retornar erro.
 
-## Fontes de Dados
+### 3. Frontend — Cooldown de 60s no botão
+**Arquivos:** `DashboardTab.tsx` e `CustomerManager.tsx`
 
-- **Conversas/Mensagens**: tabela `conversations` (já tem `message_direction`, `created_at`, `customer_id`)
-- **CRM Deals**: tabela `crm_deals` + `kanban_stages` (já usado)
-- **Agendamentos**: tabela `scheduled_messages` (já usado)
-- **Clientes**: tabela `customers` para nomes dos contatos
+Após clicar em sincronizar, desabilitar o botão por 60 segundos com countdown visual ("Aguarde 45s...") usando `localStorage` para persistir entre reloads.
 
-## Detalhes Técnicos
-
-- Arquivo: `src/components/whatsapp/WhatsAppDashboard.tsx` — reescrita completa
-- Consultas paralelas com `useQuery` para cada seção
-- Skeletons durante carregamento
-- Recharts para gráficos (já instalado)
-- Cálculo de tempo de resposta: diferença entre mensagem `inbound` e próxima `outbound` na mesma conversa
-- Responsivo: 1 coluna mobile, 2 colunas desktop
+## Resultado
+- Mensagem de erro clara quando o portal bloqueia
+- Retry automático evita erros por timing
+- Cooldown impede o usuário de disparar múltiplas tentativas
 
