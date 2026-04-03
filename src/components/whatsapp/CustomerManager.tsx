@@ -623,6 +623,25 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
               {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
               Sincronizar iGreen
             </Button>
+            <Button onClick={() => {
+              const exportData = filtered.map((c) => ({
+                Nome: c.name || "", Telefone: c.phone_whatsapp, Email: c.email || "", CPF: c.cpf || "",
+                Status: c.status || "", Cidade: c.address_city || "", Estado: c.address_state || "",
+                Distribuidora: c.distribuidora || "", "Consumo Médio (kW)": c.media_consumo ?? "",
+                "Valor Conta (R$)": c.electricity_bill_value ?? "", Licenciado: c.registered_by_name || "",
+                "Código iGreen": c.igreen_code || "", Andamento: c.andamento_igreen || "",
+                Devolutiva: c.devolutiva || "", Observação: c.observacao || "",
+                "Data Cadastro": c.data_cadastro || c.created_at || "",
+              }));
+              const ws = XLSX.utils.json_to_sheet(exportData);
+              const wb = XLSX.utils.book_new();
+              XLSX.utils.book_append_sheet(wb, ws, "Clientes");
+              XLSX.writeFile(wb, `clientes-${new Date().toISOString().split("T")[0]}.xlsx`);
+              toast({ title: "✅ Excel exportado!" });
+            }} size="sm" variant="outline" className="gap-2 rounded-xl font-semibold h-9 px-4 border-accent/20 text-accent-foreground hover:bg-accent/10" disabled={filtered.length === 0}>
+              <FileSpreadsheet className="w-4 h-4" />
+              Exportar
+            </Button>
             <Button onClick={() => fileInputRef.current?.click()} size="sm" variant="outline" className="gap-2 rounded-xl font-semibold h-9 px-4 border-primary/20 text-primary hover:bg-primary/10" disabled={importing || parsing}>
               {(importing || parsing) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
               Importar Excel

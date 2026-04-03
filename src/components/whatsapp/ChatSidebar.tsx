@@ -1,15 +1,22 @@
-import { useState, useRef, useEffect } from "react";
-import { Search, MessageCirclePlus, X } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { Search, MessageCirclePlus, X, Users } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { supabase } from "@/integrations/supabase/client";
 import type { ChatItem } from "@/hooks/useChats";
+
+interface CustomerResult {
+  name: string | null;
+  phone_whatsapp: string;
+}
 
 interface ChatSidebarProps {
   chats: ChatItem[];
   isLoading: boolean;
   selectedJid: string | null;
   onSelectChat: (jid: string) => void;
+  consultantId?: string;
 }
 
 function formatTime(ts: number): string {
