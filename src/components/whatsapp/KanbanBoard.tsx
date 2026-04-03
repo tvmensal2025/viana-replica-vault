@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { StageAutoMessageConfig } from "./StageAutoMessageConfig";
 import { AddLeadDialog } from "./AddLeadDialog";
+import { DropConfirmDialog } from "./DropConfirmDialog";
 import { sendWhatsAppMessage, resolveRecipient } from "@/services/messageSender";
 import type { MediaCategory } from "@/services/messageSender";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
