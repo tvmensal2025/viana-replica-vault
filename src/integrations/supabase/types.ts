@@ -129,6 +129,7 @@ export type Database = {
           customer_id: string | null
           id: string
           notes: string | null
+          rejected_at: string | null
           remote_jid: string | null
           stage: string
           updated_at: string
@@ -140,6 +141,7 @@ export type Database = {
           customer_id?: string | null
           id?: string
           notes?: string | null
+          rejected_at?: string | null
           remote_jid?: string | null
           stage?: string
           updated_at?: string
@@ -151,6 +153,7 @@ export type Database = {
           customer_id?: string | null
           id?: string
           notes?: string | null
+          rejected_at?: string | null
           remote_jid?: string | null
           stage?: string
           updated_at?: string
@@ -599,6 +602,53 @@ export type Database = {
           value?: string
         }
         Relationships: []
+      }
+      stage_auto_messages: {
+        Row: {
+          consultant_id: string
+          created_at: string
+          delay_seconds: number
+          id: string
+          image_url: string | null
+          media_url: string | null
+          message_text: string | null
+          message_type: string
+          position: number
+          stage_id: string
+        }
+        Insert: {
+          consultant_id: string
+          created_at?: string
+          delay_seconds?: number
+          id?: string
+          image_url?: string | null
+          media_url?: string | null
+          message_text?: string | null
+          message_type?: string
+          position?: number
+          stage_id: string
+        }
+        Update: {
+          consultant_id?: string
+          created_at?: string
+          delay_seconds?: number
+          id?: string
+          image_url?: string | null
+          media_url?: string | null
+          message_text?: string | null
+          message_type?: string
+          position?: number
+          stage_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stage_auto_messages_stage_id_fkey"
+            columns: ["stage_id"]
+            isOneToOne: false
+            referencedRelation: "kanban_stages"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
