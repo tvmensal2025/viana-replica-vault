@@ -1,66 +1,76 @@
 
-Objetivo: eliminar o erro intermitente 401 do WhatsApp sem derrubar o preview.
 
-Diagnóstico
-- O problema principal está no fluxo de autenticação entre `src/services/evolutionApi.ts` e `supabase/functions/evolution-proxy/index.ts`.
-- Hoje o frontend busca o token com `supabase.auth.getSession()` a cada chamada. Em cenários intermitentes de refresh de sessão, esse token pode ficar ausente ou inconsistente por um momento.
-- Quando isso acontece, a chamada segue mesmo assim para a edge function, que responde `401 Token de autenticação inválido ou ausente`.
-- Parte dessas chamadas acontece em handlers assíncronos e polling; nem todas estão protegidas contra rejeição não tratada, então o preview às vezes mostra o erro global.
-- Além disso, a edge function ainda está forçando `http -> https` em `normalizeEvolutionBaseUrl`, contrariando a configuração salva e podendo gerar instabilidade extra.
+# Análise Completa do Sistema iGreen + Sugestões de Melhorias
 
-Plano de implementação
+## Estado Atual
 
-1. Endurecer o cliente da Evolution API
-- Arquivo: `src/services/evolutionApi.ts`
-- Substituir o fetch manual para a edge function por um fluxo mais seguro:
-  - não enviar requisição se não houver token válido;
-  - tratar 401 como erro controlado, não como falha genérica;
-  - preferir a integração do próprio client Supabase para invocar a function, ou no mínimo centralizar uma rotina de token com retry curto antes de desistir.
-- Criar um erro/tipo interno de auth (`unauthorized` / `session_missing`) para os hooks conseguirem reagir sem quebrar a UI.
+O sistema é um painel administrativo para consultores de energia solar com: landing pages (cliente/licenciada), dashboard de analytics, integração WhatsApp via Evolution API, CRM Kanban, envio em massa, templates, agendamentos, gestão de clientes e sincronização com portal iGreen. Stack: React 18 + Supabase + Evolution API.
 
-2. Impedir que polling e refresh derrubem a tela
-- Arquivo: `src/hooks/useWhatsApp.ts`
-- Envolver `refreshQr`, polling interno e caminhos de reconexão com `try/catch` completo.
-- Quando receber erro de autenticação:
-  - parar o polling atual;
-  - mudar o estado para desconectado;
-  - mostrar mensagem amigável;
-  - nunca relançar a exceção para o runtime global.
-- Arquivo: `src/components/whatsapp/ConnectionPanel.tsx`
-- Consumir com segurança o `onRefreshQr()` automático no vencimento do QR para evitar promise rejeitada sem tratamento.
+---
 
-3. Tornar hooks de chat tolerantes a falhas temporárias de auth
-- Arquivos: `src/hooks/useChats.ts`, `src/hooks/useMessages.ts`, `src/components/whatsapp/CustomerManager.tsx`
-- Para chamadas não críticas (`findChats`, `findMessages`, `getProfilePicture`, `markAsRead`):
-  - em caso de auth temporária, retornar vazio/null e aguardar próxima tentativa;
-  - não deixar esse erro escapar para a aplicação inteira.
+## Melhorias Seguras (sem risco de quebrar o sistema)
 
-4. Ajustar a edge function para comportamento previsível
-- Arquivo: `supabase/functions/evolution-proxy/index.ts`
-- Corrigir `normalizeEvolutionBaseUrl` para respeitar exatamente o protocolo configurado no secret `EVOLUTION_API_URL`.
-- Melhorar a leitura do header `Authorization`:
-  - trim do valor;
-  - parsing mais robusto do prefixo `Bearer`;
-  - resposta 401 estruturada com código identificável.
-- Manter logs úteis sem expor token.
+### 1. Refatorar Admin.tsx (1450 linhas → componentes menores)
 
-5. Validação final
-- Testar o carregamento da aba WhatsApp ao abrir `/admin`.
-- Testar clique em `Reconectar` e renovação de QR.
-- Deixar a aba aberta por alguns minutos para validar refresh/polling.
-- Confirmar que, mesmo quando houver 401 momentâneo, a interface permanece funcional e apenas mostra estado desconectado em vez do erro global.
+O arquivo `Admin.tsx` concentra TODA a lógica do painel em um único arquivo de 1450 linhas. Isso dificulta manutenção e aumenta risco de bugs.
 
-Detalhes técnicos
-- Arquivos envolvidos:
-  - `src/services/evolutionApi.ts`
-  - `src/hooks/useWhatsApp.ts`
-  - `src/hooks/useChats.ts`
-  - `src/hooks/useMessages.ts`
-  - `src/components/whatsapp/ConnectionPanel.tsx`
-  - `src/components/whatsapp/CustomerManager.tsx`
-  - `supabase/functions/evolution-proxy/index.ts`
-- Não deve exigir mudança de banco/RLS.
-- Resultado esperado:
-  - some o “The app encountered an error”;
-  - falhas intermitentes de sessão viram estado tratado;
-  - conexão WhatsApp fica resiliente mesmo com refresh de auth.
+**Proposta:** Extrair cada aba em componente próprio:
+- `DashboardTab.tsx` — KPIs, gráficos, filtros
+- `LinksTab.tsx` — links UTM, QR codes
+- `DadosTab.tsx` — formulário de dados do consultor
+- `PreviewTab.tsx` — iframe de preview
+
+O `Admin.tsx` ficaria apenas com auth + navegação entre abas (~200 linhas).
+
+### 2. Dashboard WhatsApp (nova sub-aba)
+
+Conforme os requisitos já documentados em `.kiro/specs/whatsapp-dashboard-metrics/requirements.md`, adicionar uma sub-aba "Dashboard" como primeira opção na aba WhatsApp, mostrando:
+- KPIs: total clientes, aprovados/pendentes/reprovados
+- Métricas financeiras (soma/média electricity_bill_value)
+- Gráfico de deals por estágio do Kanban
+- Contagem de templates e mensagens agendadas (pendentes/enviadas)
+- Gráfico de novos clientes por semana
+
+### 3. Notificações de Novas Mensagens
+
+Atualmente não há indicação visual de mensagens novas quando o consultor está em outra aba.
+
+**Proposta:** Badge com contador no tab "WhatsApp" mostrando total de mensagens não lidas, usando os dados já disponíveis no `useChats` (campo `unreadCount`).
+
+### 4. Exportar Clientes para Excel
+
+A funcionalidade de importar Excel já existe, mas não há exportação. Adicionar botão "Exportar Excel" na sub-aba Clientes que gera planilha com todos os campos do cliente usando a lib `xlsx` já instalada.
+
+### 5. Filtro de Período no Dashboard
+
+O dashboard principal mostra apenas dados dos últimos 30 dias fixos. Adicionar seletor de período (7 dias / 15 dias / 30 dias / 90 dias) para todas as métricas e gráficos.
+
+### 6. Busca Global de Clientes no Chat
+
+Quando o consultor quer enviar mensagem para um cliente que ainda não tem conversa, precisa ir até a sub-aba "Clientes". Adicionar campo de busca no topo do `ChatSidebar` que também pesquise na tabela `customers` e permita iniciar conversa direto.
+
+### 7. Indicador de Status da Conexão WhatsApp no Header
+
+Adicionar um pequeno dot (verde/vermelho) ao lado do ícone WhatsApp na navegação principal para o consultor saber se está conectado sem precisar entrar na aba.
+
+### 8. Melhorar Responsividade Mobile do Dashboard
+
+Os gráficos atuais usam alturas fixas e margens que não se adaptam bem em telas pequenas. Ajustar para que KPI cards fiquem em 1 coluna no mobile e gráficos tenham altura proporcional.
+
+---
+
+## Detalhes Técnicos
+
+| Melhoria | Arquivos | Risco | Complexidade |
+|----------|----------|-------|-------------|
+| 1. Refatorar Admin | Admin.tsx → 4 novos componentes | Baixo | Médio |
+| 2. Dashboard WhatsApp | WhatsAppTab.tsx + novo componente | Baixo | Médio |
+| 3. Badge mensagens | Admin.tsx + useChats | Muito baixo | Baixo |
+| 4. Exportar Excel | CustomerManager.tsx | Muito baixo | Baixo |
+| 5. Filtro período | Admin.tsx + useAnalytics | Baixo | Baixo |
+| 6. Busca clientes no chat | ChatSidebar.tsx | Baixo | Baixo |
+| 7. Status dot WhatsApp | Admin.tsx | Muito baixo | Muito baixo |
+| 8. Responsividade | Admin.tsx (CSS only) | Muito baixo | Baixo |
+
+Todas as melhorias são aditivas — nenhuma remove funcionalidade existente ou altera fluxos críticos (auth, envio de mensagens, sincronização iGreen).
+
