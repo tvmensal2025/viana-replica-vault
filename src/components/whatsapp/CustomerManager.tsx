@@ -180,6 +180,37 @@ function isDevolutiva(c: Customer): boolean {
   return !!(c.devolutiva || c.andamento_igreen?.toLowerCase().includes("devolutiva"));
 }
 
+// Stage progression definitions for visual dots
+const APPROVED_STAGES = ["aprovado", "30_dias", "60_dias", "90_dias", "120_dias"];
+const REJECTED_STAGES = ["reprovado", "60_dias"];
+
+function getStageDotsForDeal(deal: { stage: string; deal_origin?: string | null }) {
+  const isRejected = deal.deal_origin === "reprovado" || deal.stage === "reprovado";
+  const stages = isRejected ? REJECTED_STAGES : APPROVED_STAGES;
+  const currentIdx = stages.indexOf(deal.stage);
+
+  return stages.map((key, idx) => {
+    const reached = currentIdx >= idx;
+    const labels: Record<string, string> = {
+      aprovado: "Aprov.",
+      reprovado: "Reprov.",
+      "30_dias": "30d",
+      "60_dias": "60d",
+      "90_dias": "90d",
+      "120_dias": "120d",
+    };
+    const colors: Record<string, string> = {
+      aprovado: "bg-green-500",
+      reprovado: "bg-red-500",
+      "30_dias": "bg-blue-500",
+      "60_dias": "bg-yellow-500",
+      "90_dias": "bg-orange-500",
+      "120_dias": "bg-purple-500",
+    };
+    return { key, label: labels[key] || key, color: colors[key] || "bg-gray-500", reached };
+  });
+}
+
 export function CustomerManager({ customers, consultantId, onCustomersChange, instanceName, onOpenChat }: CustomerManagerProps) {
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -200,10 +231,30 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
   const [syncing, setSyncing] = useState(false);
   const [syncCooldown, setSyncCooldown] = useState(0);
   const [lastSync, setLastSync] = useState<string | null>(null);
+  const [dealsByCustomer, setDealsByCustomer] = useState<Record<string, { stage: string; deal_origin?: string | null }>>({});
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Fetch CRM deals for stage dots
+  useEffect(() => {
+    async function fetchDeals() {
+      const { data } = await supabase
+        .from("crm_deals")
+        .select("customer_id, stage, deal_origin")
+        .eq("consultant_id", consultantId)
+        .not("customer_id", "is", null);
+      if (data) {
+        const map: Record<string, { stage: string; deal_origin?: string | null }> = {};
+        for (const d of data) {
+          if (d.customer_id) map[d.customer_id] = { stage: d.stage, deal_origin: d.deal_origin };
+        }
+        setDealsByCustomer(map);
+      }
+    }
+    fetchDeals();
+  }, [consultantId, customers]);
 
   // Fetch last sync timestamp
   useEffect(() => {
