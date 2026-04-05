@@ -260,6 +260,8 @@ const Admin = () => {
   const tabs = [
     { id: "dashboard" as const, label: "Dashboard", icon: BarChart3 },
     { id: "preview" as const, label: "Preview", icon: Monitor },
+    { id: "crm" as const, label: "CRM", icon: LayoutGrid },
+    { id: "clientes" as const, label: "Clientes", icon: Users },
     { id: "whatsapp" as const, label: "WhatsApp", icon: MessageSquare },
     { id: "links" as const, label: "Links", icon: LinkIcon },
     { id: "dados" as const, label: "Dados", icon: Settings },
