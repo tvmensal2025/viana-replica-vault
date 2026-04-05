@@ -242,13 +242,28 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
     async function fetchDeals() {
       const { data } = await supabase
         .from("crm_deals")
-        .select("customer_id, stage, deal_origin")
-        .eq("consultant_id", consultantId)
-        .not("customer_id", "is", null);
+        .select("customer_id, remote_jid, stage, deal_origin")
+        .eq("consultant_id", consultantId);
       if (data) {
         const map: Record<string, { stage: string; deal_origin?: string | null }> = {};
+        // Map by customer_id
         for (const d of data) {
           if (d.customer_id) map[d.customer_id] = { stage: d.stage, deal_origin: d.deal_origin };
+        }
+        // Also map by phone (remote_jid) for deals without customer_id
+        for (const d of data) {
+          if (!d.customer_id && d.remote_jid) {
+            const phone = d.remote_jid.split("@")[0];
+            // Find matching customer by phone
+            for (const c of customers) {
+              const cPhone = c.phone_whatsapp.replace(/\D/g, "").replace(/_.*$/, "");
+              if (cPhone === phone || phone.endsWith(cPhone) || cPhone.endsWith(phone)) {
+                if (!map[c.id]) {
+                  map[c.id] = { stage: d.stage, deal_origin: d.deal_origin };
+                }
+              }
+            }
+          }
         }
         setDealsByCustomer(map);
       }
