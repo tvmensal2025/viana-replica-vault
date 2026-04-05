@@ -131,6 +131,14 @@ function findTargetStage(daysSince: number, progression: typeof APPROVED_PROGRES
   return null;
 }
 
+function isValidJid(jid: string): boolean {
+  if (!jid) return false;
+  if (jid === "status@broadcast") return false;
+  if (/sem_celular/i.test(jid)) return false;
+  const phone = jid.split("@")[0];
+  return phone.replace(/\D/g, "").length >= 8;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -170,7 +178,7 @@ Deno.serve(async (req) => {
       if (error) { console.error("Failed to move deal:", deal.id, error); continue; }
       movedCount++;
 
-      if (stageData.auto_message_enabled && deal.remote_jid && evolutionUrl && evolutionKey) {
+      if (stageData.auto_message_enabled && isValidJid(deal.remote_jid) && evolutionUrl && evolutionKey) {
         // Fetch customer name
         let customerName = "";
         if (deal.customer_id) {
@@ -219,7 +227,7 @@ Deno.serve(async (req) => {
       if (error) { console.error("Failed to move rejected deal:", deal.id, error); continue; }
       movedCount++;
 
-      if (stageData.auto_message_enabled && deal.remote_jid && evolutionUrl && evolutionKey) {
+      if (stageData.auto_message_enabled && isValidJid(deal.remote_jid) && evolutionUrl && evolutionKey) {
         // Fetch customer name
         let customerName = "";
         if (deal.customer_id) {
