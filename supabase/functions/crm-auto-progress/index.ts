@@ -131,6 +131,14 @@ function findTargetStage(daysSince: number, progression: typeof APPROVED_PROGRES
   return null;
 }
 
+function isValidJid(jid: string): boolean {
+  if (!jid) return false;
+  if (jid === "status@broadcast") return false;
+  if (/sem_celular/i.test(jid)) return false;
+  const phone = jid.split("@")[0];
+  return phone.replace(/\D/g, "").length >= 8;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
