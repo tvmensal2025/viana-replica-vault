@@ -9,7 +9,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  Shield, Users, CheckCircle, XCircle, LogOut, Loader2, UserCheck, UserX, BarChart3,
+  Shield, Users, CheckCircle, XCircle, LogOut, Loader2, UserCheck, UserX, BarChart3, KeyRound,
 } from "lucide-react";
 
 interface ConsultantRow {
