@@ -50,10 +50,12 @@ async function sendSingleMessage(
   phone: string,
   msg: { message_type: string; message_text: string | null; media_url: string | null; image_url: string | null },
   apiUrl: string,
-  apiKey: string
+  apiKey: string,
+  customerName?: string
 ) {
+  const displayName = customerName || phone;
   const messageText = (msg.message_text || "")
-    .replace(/\{\{nome\}\}/g, phone)
+    .replace(/\{\{nome\}\}/g, displayName)
     .replace(/\{\{telefone\}\}/g, phone);
   const msgType = msg.message_type || "text";
 
