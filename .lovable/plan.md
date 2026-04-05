@@ -1,42 +1,20 @@
 
 
-# Analise: Contato duplicado na sidebar (ericachristofoletti)
+# Substituir vídeo do topo (Conta de Energia) — usar MinIO
 
-## Causa raiz
+## O que será feito
 
-O WhatsApp (via Evolution API / Baileys) usa dois tipos de identificadores para o mesmo contato:
-- `@s.whatsapp.net` — baseado no numero de telefone
-- `@lid` — identificador interno do WhatsApp (LID)
+Trocar o vídeo do hero da landing page principal para apontar para o MinIO, usando a mesma base URL já utilizada na `NewsSection`.
 
-Quando a API retorna os chats, ela pode criar **duas entradas separadas** para a mesma pessoa: uma com JID de telefone e outra com JID LID. O codigo atual (`useChats.ts`) nao faz deduplicacao — cada `remoteJid` unico vira um item separado na lista.
+## Etapa única
 
-O campo `remoteJidAlt` (que ja existe no codigo) faz exatamente essa ponte: ele vincula um JID LID ao numero de telefone real. Porem, ele so e usado para `sendTargetJid`, nao para deduplicar.
-
-## Solucao
-
-Adicionar logica de deduplicacao no `useChats.ts` apos o mapeamento dos chats:
-
-1. **Agrupar chats pelo mesmo telefone real** — usar `sendTargetJid` ou `remoteJidAlt` para identificar que dois JIDs diferentes pertencem ao mesmo contato
-2. **Mesclar os registros duplicados** — manter o que tem a mensagem mais recente, preservando o `sendTargetJid` correto para envio
-3. **Preservar mensagens nao lidas** — somar `unreadCount` dos duplicados
-
-### Logica de deduplicacao
-
-```text
-Para cada chat mapeado:
-  1. Extrair o "telefone real" (de sendTargetJid ou remoteJid @s.whatsapp.net)
-  2. Se ja existe um chat com esse telefone:
-     - Manter o com lastMessageTimestamp mais recente
-     - Somar unreadCount
-     - Preservar profilePicUrl se um tiver e outro nao
-  3. Se nao existe, adicionar normalmente
-```
-
-### Arquivo alterado
-
-| Arquivo | Mudanca |
+| Arquivo | Mudança |
 |---------|---------|
-| `src/hooks/useChats.ts` | Adicionar funcao `deduplicateChats()` apos o `map/filter` e antes do `sort` |
+| `src/components/HeroSection.tsx` | Trocar `"/videos/igreen-energy.mp4"` por `"https://igreen-minio.b099mi.easypanel.host/igreen/Green_Energy.mp4"` |
 
-A mudanca e de ~20 linhas, sem impacto em outros arquivos.
+O usuário precisa primeiro fazer upload do arquivo `Green_Energy.mp4` no bucket `igreen` do MinIO. Após isso, basta atualizar a URL no componente.
+
+## Pré-requisito
+
+- O arquivo `Green_Energy.mp4` deve estar disponível no MinIO em `https://igreen-minio.b099mi.easypanel.host/igreen/Green_Energy.mp4`. Se o nome do arquivo for diferente, a URL será ajustada conforme necessário.
 
