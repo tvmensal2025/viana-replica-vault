@@ -50,10 +50,12 @@ async function sendSingleMessage(
   phone: string,
   msg: { message_type: string; message_text: string | null; media_url: string | null; image_url: string | null },
   apiUrl: string,
-  apiKey: string
+  apiKey: string,
+  customerName?: string
 ) {
+  const displayName = customerName || phone;
   const messageText = (msg.message_text || "")
-    .replace(/\{\{nome\}\}/g, phone)
+    .replace(/\{\{nome\}\}/g, displayName)
     .replace(/\{\{telefone\}\}/g, phone);
   const msgType = msg.message_type || "text";
 
@@ -82,7 +84,8 @@ async function sendAutoMessages(
   apiUrl: string,
   apiKey: string,
   rejectionReason?: string | null,
-  dealOrigin?: string | null
+  dealOrigin?: string | null,
+  customerName?: string
 ) {
   // Try multi-message table first
   const { data: multiMsgs } = await supabase
@@ -104,7 +107,7 @@ async function sendAutoMessages(
       if (i > 0 && msg.delay_seconds > 0) {
         await new Promise((r) => setTimeout(r, msg.delay_seconds * 1000));
       }
-      await sendSingleMessage(instanceName, phone, msg, apiUrl, apiKey);
+      await sendSingleMessage(instanceName, phone, msg, apiUrl, apiKey, customerName);
     }
     console.log(`Multi-messages (${filtered.length}) sent to ${phone} for stage ${stageData.label}`);
   } else {
@@ -116,7 +119,7 @@ async function sendAutoMessages(
       message_text: stageData.auto_message_text,
       media_url: stageData.auto_message_media_url,
       image_url: stageData.auto_message_image_url,
-    }, apiUrl, apiKey);
+    }, apiUrl, apiKey, customerName);
     console.log(`Legacy auto-message sent to ${phone} for stage ${stageData.label}`);
   }
 }
@@ -168,6 +171,18 @@ Deno.serve(async (req) => {
       movedCount++;
 
       if (stageData.auto_message_enabled && deal.remote_jid && evolutionUrl && evolutionKey) {
+        // Fetch customer name
+        let customerName = "";
+        if (deal.customer_id) {
+          const { data: customer } = await supabase.from("customers").select("name").eq("id", deal.customer_id).single();
+          customerName = customer?.name || "";
+        }
+        if (!customerName) {
+          const phone = deal.remote_jid.split("@")[0];
+          const { data: customer } = await supabase.from("customers").select("name").eq("phone_whatsapp", phone).limit(1).maybeSingle();
+          customerName = customer?.name || "";
+        }
+
         const { data: instance } = await supabase
           .from("whatsapp_instances")
           .select("instance_name")
@@ -175,7 +190,7 @@ Deno.serve(async (req) => {
           .limit(1)
           .single();
         if (instance) {
-          await sendAutoMessages(supabase, instance.instance_name, deal.remote_jid.split("@")[0], stageData, evolutionUrl, evolutionKey, null, deal.deal_origin || "aprovado");
+          await sendAutoMessages(supabase, instance.instance_name, deal.remote_jid.split("@")[0], stageData, evolutionUrl, evolutionKey, null, deal.deal_origin || "aprovado", customerName);
         }
       }
     }
@@ -205,6 +220,18 @@ Deno.serve(async (req) => {
       movedCount++;
 
       if (stageData.auto_message_enabled && deal.remote_jid && evolutionUrl && evolutionKey) {
+        // Fetch customer name
+        let customerName = "";
+        if (deal.customer_id) {
+          const { data: customer } = await supabase.from("customers").select("name").eq("id", deal.customer_id).single();
+          customerName = customer?.name || "";
+        }
+        if (!customerName) {
+          const phone = deal.remote_jid.split("@")[0];
+          const { data: customer } = await supabase.from("customers").select("name").eq("phone_whatsapp", phone).limit(1).maybeSingle();
+          customerName = customer?.name || "";
+        }
+
         const { data: instance } = await supabase
           .from("whatsapp_instances")
           .select("instance_name")
@@ -212,7 +239,7 @@ Deno.serve(async (req) => {
           .limit(1)
           .single();
         if (instance) {
-          await sendAutoMessages(supabase, instance.instance_name, deal.remote_jid.split("@")[0], stageData, evolutionUrl, evolutionKey, deal.rejection_reason, deal.deal_origin || "reprovado");
+          await sendAutoMessages(supabase, instance.instance_name, deal.remote_jid.split("@")[0], stageData, evolutionUrl, evolutionKey, deal.rejection_reason, deal.deal_origin || "reprovado", customerName);
         }
       }
     }
