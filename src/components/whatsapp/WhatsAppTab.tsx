@@ -17,6 +17,7 @@ interface WhatsAppTabProps {
   pendingChatPhone?: string | null;
   pendingChatMessage?: string;
   onPendingChatConsumed?: () => void;
+  customers?: any[];
 }
 
 type SubTab = "dashboard" | "conversas" | "envio_massa" | "templates" | "agendamentos";
@@ -29,7 +30,7 @@ const SUB_TABS: { key: SubTab; label: string; icon: React.ElementType }[] = [
   { key: "agendamentos", label: "Agendamentos", icon: Clock },
 ];
 
-export function WhatsAppTab({ userId, pendingChatPhone, pendingChatMessage, onPendingChatConsumed }: WhatsAppTabProps) {
+export function WhatsAppTab({ userId, pendingChatPhone, pendingChatMessage, onPendingChatConsumed, customers = [] }: WhatsAppTabProps) {
   const {
     connectionStatus,
     instanceName,
