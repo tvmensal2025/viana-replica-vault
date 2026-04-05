@@ -240,22 +240,39 @@ const SuperAdmin = () => {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant={c.approved ? "outline" : "default"}
-                        size="sm"
-                        onClick={() => toggleApproval(c.id, c.approved)}
-                        disabled={togglingId === c.id}
-                        className="gap-1.5"
-                      >
-                        {togglingId === c.id ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : c.approved ? (
-                          <UserX className="w-3.5 h-3.5" />
-                        ) : (
-                          <UserCheck className="w-3.5 h-3.5" />
-                        )}
-                        {c.approved ? "Revogar" : "Aprovar"}
-                      </Button>
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleResetPassword(c.id, c.name)}
+                          disabled={resettingId === c.id}
+                          className="gap-1.5"
+                          title="Enviar email de redefinição de senha"
+                        >
+                          {resettingId === c.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <KeyRound className="w-3.5 h-3.5" />
+                          )}
+                          Resetar Senha
+                        </Button>
+                        <Button
+                          variant={c.approved ? "outline" : "default"}
+                          size="sm"
+                          onClick={() => toggleApproval(c.id, c.approved)}
+                          disabled={togglingId === c.id}
+                          className="gap-1.5"
+                        >
+                          {togglingId === c.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : c.approved ? (
+                            <UserX className="w-3.5 h-3.5" />
+                          ) : (
+                            <UserCheck className="w-3.5 h-3.5" />
+                          )}
+                          {c.approved ? "Revogar" : "Aprovar"}
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
