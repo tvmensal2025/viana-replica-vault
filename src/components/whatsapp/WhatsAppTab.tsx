@@ -1,44 +1,35 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { useWhatsApp } from "@/hooks/useWhatsApp";
 import { useTemplates } from "@/hooks/useTemplates";
 import { useChats } from "@/hooks/useChats";
 import { ConnectionPanel } from "./ConnectionPanel";
-import { MessagePanel } from "./MessagePanel";
 import { BulkSendPanel } from "./BulkSendPanel";
 import { TemplateManager } from "./TemplateManager";
-import { CustomerManager } from "./CustomerManager";
 import { ChatSidebar } from "./ChatSidebar";
 import { ChatView } from "./ChatView";
-import { KanbanBoard } from "./KanbanBoard";
 import { SchedulePanel } from "./SchedulePanel";
 import { WhatsAppDashboard } from "./WhatsAppDashboard";
-import { BarChart3, MessageSquare, LayoutGrid, Send, FileText, Clock, Users } from "lucide-react";
-
-interface Customer {
-  id: string;
-  name: string;
-  phone_whatsapp: string;
-  electricity_bill_value?: number;
-}
+import { BarChart3, MessageSquare, Send, FileText, Clock } from "lucide-react";
 
 interface WhatsAppTabProps {
   userId: string;
+  pendingChatPhone?: string | null;
+  pendingChatMessage?: string;
+  onPendingChatConsumed?: () => void;
+  customers?: any[];
 }
 
-type SubTab = "dashboard" | "conversas" | "crm" | "envio_massa" | "templates" | "agendamentos" | "clientes";
+type SubTab = "dashboard" | "conversas" | "envio_massa" | "templates" | "agendamentos";
 
 const SUB_TABS: { key: SubTab; label: string; icon: React.ElementType }[] = [
   { key: "dashboard", label: "Dashboard", icon: BarChart3 },
   { key: "conversas", label: "Conversas", icon: MessageSquare },
-  { key: "crm", label: "CRM", icon: LayoutGrid },
   { key: "envio_massa", label: "Envio em Massa", icon: Send },
   { key: "templates", label: "Templates", icon: FileText },
   { key: "agendamentos", label: "Agendamentos", icon: Clock },
-  { key: "clientes", label: "Clientes", icon: Users },
 ];
 
-export function WhatsAppTab({ userId }: WhatsAppTabProps) {
+export function WhatsAppTab({ userId, pendingChatPhone, pendingChatMessage, onPendingChatConsumed, customers = [] }: WhatsAppTabProps) {
   const {
     connectionStatus,
     instanceName,
@@ -67,7 +58,6 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
     connectionStatus === "connected" ? instanceName : null
   );
 
-  const [customers, setCustomers] = useState<Customer[]>([]);
   const [activeSubTab, setActiveSubTab] = useState<SubTab>("dashboard");
   const [selectedChatJid, setSelectedChatJid] = useState<string | null>(null);
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
@@ -137,72 +127,13 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
     setPendingMessageKey((k) => k + 1);
   }, [chats]);
 
-  const fetchCustomers = useCallback(async () => {
-    try {
-      const selectFields = "id, name, phone_whatsapp, electricity_bill_value, email, cpf, address_city, address_state, address_street, address_neighborhood, address_complement, address_number, cep, numero_instalacao, data_nascimento, status, created_at, distribuidora, registered_by_name, registered_by_igreen_id, media_consumo, desconto_cliente, andamento_igreen, devolutiva, observacao, igreen_code, data_cadastro, data_ativo, data_validado, status_financeiro, cashback, nivel_licenciado, assinatura_cliente, assinatura_igreen, link_assinatura";
-      const allRows: any[] = [];
-      const pageSize = 1000;
-      let page = 0;
-      while (true) {
-        const { data, error } = await supabase
-          .from("customers")
-          .select(selectFields)
-          .eq("consultant_id", userId)
-          .range(page * pageSize, (page + 1) * pageSize - 1);
-        if (error) throw error;
-        if (data) allRows.push(...data);
-        if (!data || data.length < pageSize) break;
-        page++;
-      }
-      if (allRows.length > 0) {
-        setCustomers(
-          allRows.map((c) => ({
-            id: c.id,
-            name: c.name || "Sem nome",
-            phone_whatsapp: c.phone_whatsapp,
-            electricity_bill_value: c.electricity_bill_value ?? undefined,
-            email: c.email,
-            cpf: c.cpf,
-            address_city: c.address_city,
-            address_state: c.address_state,
-            address_street: c.address_street,
-            address_neighborhood: c.address_neighborhood,
-            address_complement: c.address_complement,
-            address_number: c.address_number,
-            cep: c.cep,
-            numero_instalacao: c.numero_instalacao,
-            data_nascimento: c.data_nascimento,
-            status: c.status,
-            created_at: c.created_at,
-            distribuidora: c.distribuidora,
-            registered_by_name: c.registered_by_name,
-            registered_by_igreen_id: c.registered_by_igreen_id,
-            media_consumo: c.media_consumo,
-            desconto_cliente: c.desconto_cliente,
-            andamento_igreen: c.andamento_igreen,
-            devolutiva: c.devolutiva,
-            observacao: c.observacao,
-            igreen_code: c.igreen_code,
-            data_cadastro: c.data_cadastro,
-            data_ativo: c.data_ativo,
-            data_validado: c.data_validado,
-            status_financeiro: c.status_financeiro,
-            cashback: c.cashback,
-            nivel_licenciado: c.nivel_licenciado,
-            assinatura_cliente: c.assinatura_cliente,
-            assinatura_igreen: c.assinatura_igreen,
-            link_assinatura: c.link_assinatura,
-          }))
-        );
-      }
-    } catch {
-      // silently handle
-    }
-  }, [userId]);
-
+  // Handle incoming pending chat from Admin (Clientes tab)
   useEffect(() => {
-    fetchCustomers();
-  }, [fetchCustomers]);
+    if (pendingChatPhone) {
+      handleOpenChatFromCustomer(pendingChatPhone, pendingChatMessage);
+      onPendingChatConsumed?.();
+    }
+  }, [pendingChatPhone, pendingChatMessage]);
 
   const totalUnread = useMemo(() => chats.reduce((sum, c) => sum + c.unreadCount, 0), [chats]);
   const isConnected = connectionStatus === "connected";
@@ -323,11 +254,6 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
           )
         )}
 
-        {activeSubTab === "crm" && (
-          <div className="p-4 overflow-auto h-full">
-            <KanbanBoard consultantId={userId} instanceName={instanceName} />
-          </div>
-        )}
 
         {activeSubTab === "envio_massa" && (
           <div className="p-4 overflow-auto h-full">
@@ -374,17 +300,6 @@ export function WhatsAppTab({ userId }: WhatsAppTabProps) {
           </div>
         )}
 
-        {activeSubTab === "clientes" && (
-          <div className="p-4 overflow-auto h-full">
-            <CustomerManager
-              customers={customers}
-              consultantId={userId}
-              onCustomersChange={fetchCustomers}
-              instanceName={instanceName}
-              onOpenChat={handleOpenChatFromCustomer}
-            />
-          </div>
-        )}
       </div>
     </div>
   );

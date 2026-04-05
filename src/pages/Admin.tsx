@@ -1,13 +1,16 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import type { Database } from "@/integrations/supabase/types";
-import { LogOut, BarChart3, LinkIcon, Settings, Monitor, MessageSquare, Copy, Download, X } from "lucide-react";
+import { LogOut, BarChart3, LinkIcon, Settings, Monitor, MessageSquare, LayoutGrid, Users, Copy, Download, X } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { WhatsAppTab } from "@/components/whatsapp/WhatsAppTab";
 import { WhatsAppErrorBoundary } from "@/components/whatsapp/WhatsAppErrorBoundary";
+import { KanbanBoard } from "@/components/whatsapp/KanbanBoard";
+import { CustomerManager } from "@/components/whatsapp/CustomerManager";
+import { useWhatsApp } from "@/hooks/useWhatsApp";
 import { QRCodeSVG } from "qrcode.react";
 import { DashboardTab } from "@/components/admin/DashboardTab";
 import { DadosTab } from "@/components/admin/DadosTab";
@@ -44,7 +47,9 @@ const Admin = () => {
   const [loading, setLoading] = useState(true);
   const [approved, setApproved] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<"dashboard" | "dados" | "links" | "preview" | "whatsapp">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "dados" | "links" | "preview" | "whatsapp" | "crm" | "clientes">("dashboard");
+  const [pendingChatPhone, setPendingChatPhone] = useState<string | null>(null);
+  const [pendingChatMessage, setPendingChatMessage] = useState<string | undefined>(undefined);
   const [qrModal, setQrModal] = useState<{ url: string; label: string } | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [form, setForm] = useState({ ...DEFAULT_CONSULTANT_FORM });
@@ -57,6 +62,61 @@ const Admin = () => {
   const loadingUidRef = useRef<string | null>(null);
   const activeUidRef = useRef<string | null>(null);
   const loadRequestIdRef = useRef(0);
+
+  // WhatsApp connection for CRM/Clientes tabs
+  const {
+    instanceName,
+    connectionStatus,
+  } = useWhatsApp(userId || "");
+
+  // Customers state (shared between Clientes tab and WhatsAppTab)
+  const [customers, setCustomers] = useState<any[]>([]);
+
+  const fetchCustomers = React.useCallback(async () => {
+    if (!userId) return;
+    try {
+      const selectFields = "id, name, phone_whatsapp, electricity_bill_value, email, cpf, address_city, address_state, address_street, address_neighborhood, address_complement, address_number, cep, numero_instalacao, data_nascimento, status, created_at, distribuidora, registered_by_name, registered_by_igreen_id, media_consumo, desconto_cliente, andamento_igreen, devolutiva, observacao, igreen_code, data_cadastro, data_ativo, data_validado, status_financeiro, cashback, nivel_licenciado, assinatura_cliente, assinatura_igreen, link_assinatura";
+      const allRows: any[] = [];
+      const pageSize = 1000;
+      let page = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from("customers")
+          .select(selectFields)
+          .eq("consultant_id", userId)
+          .range(page * pageSize, (page + 1) * pageSize - 1);
+        if (error) throw error;
+        if (data) allRows.push(...data);
+        if (!data || data.length < pageSize) break;
+        page++;
+      }
+      setCustomers(allRows.map((c) => ({
+        id: c.id, name: c.name || "Sem nome", phone_whatsapp: c.phone_whatsapp,
+        electricity_bill_value: c.electricity_bill_value ?? undefined,
+        email: c.email, cpf: c.cpf, address_city: c.address_city, address_state: c.address_state,
+        address_street: c.address_street, address_neighborhood: c.address_neighborhood,
+        address_complement: c.address_complement, address_number: c.address_number,
+        cep: c.cep, numero_instalacao: c.numero_instalacao, data_nascimento: c.data_nascimento,
+        status: c.status, created_at: c.created_at, distribuidora: c.distribuidora,
+        registered_by_name: c.registered_by_name, registered_by_igreen_id: c.registered_by_igreen_id,
+        media_consumo: c.media_consumo, desconto_cliente: c.desconto_cliente,
+        andamento_igreen: c.andamento_igreen, devolutiva: c.devolutiva, observacao: c.observacao,
+        igreen_code: c.igreen_code, data_cadastro: c.data_cadastro, data_ativo: c.data_ativo,
+        data_validado: c.data_validado, status_financeiro: c.status_financeiro,
+        cashback: c.cashback, nivel_licenciado: c.nivel_licenciado,
+        assinatura_cliente: c.assinatura_cliente, assinatura_igreen: c.assinatura_igreen,
+        link_assinatura: c.link_assinatura,
+      })));
+    } catch { /* silently handle */ }
+  }, [userId]);
+
+  useEffect(() => { fetchCustomers(); }, [fetchCustomers]);
+
+  const handleOpenChatFromCustomer = React.useCallback((phone: string, suggestedMessage?: string) => {
+    setPendingChatPhone(phone);
+    setPendingChatMessage(suggestedMessage);
+    setActiveTab("whatsapp");
+  }, []);
 
   const resetConsultantState = () => {
     setApproved(false);
@@ -200,6 +260,8 @@ const Admin = () => {
   const tabs = [
     { id: "dashboard" as const, label: "Dashboard", icon: BarChart3 },
     { id: "preview" as const, label: "Preview", icon: Monitor },
+    { id: "crm" as const, label: "CRM", icon: LayoutGrid },
+    { id: "clientes" as const, label: "Clientes", icon: Users },
     { id: "whatsapp" as const, label: "WhatsApp", icon: MessageSquare },
     { id: "links" as const, label: "Links", icon: LinkIcon },
     { id: "dados" as const, label: "Dados", icon: Settings },
@@ -283,9 +345,30 @@ const Admin = () => {
           <LinksTab slug={slug} baseUrl={baseUrl} onCopy={copyLink} onQrOpen={(url, label) => setQrModal({ url, label })} />
         )}
 
+        {userId && activeTab === "crm" && (
+          <KanbanBoard consultantId={userId} instanceName={instanceName} />
+        )}
+
+        {userId && activeTab === "clientes" && (
+          <CustomerManager
+            customers={customers}
+            consultantId={userId}
+            onCustomersChange={fetchCustomers}
+            instanceName={instanceName}
+            onOpenChat={handleOpenChatFromCustomer}
+          />
+        )}
+
         {userId && activeTab === "whatsapp" && (
           <WhatsAppErrorBoundary>
-            <WhatsAppTab key="whatsapp-tab" userId={userId} />
+            <WhatsAppTab
+              key="whatsapp-tab"
+              userId={userId}
+              customers={customers}
+              pendingChatPhone={pendingChatPhone}
+              pendingChatMessage={pendingChatMessage}
+              onPendingChatConsumed={() => { setPendingChatPhone(null); setPendingChatMessage(undefined); }}
+            />
           </WhatsAppErrorBoundary>
         )}
 
