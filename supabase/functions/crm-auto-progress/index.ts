@@ -84,7 +84,8 @@ async function sendAutoMessages(
   apiUrl: string,
   apiKey: string,
   rejectionReason?: string | null,
-  dealOrigin?: string | null
+  dealOrigin?: string | null,
+  customerName?: string
 ) {
   // Try multi-message table first
   const { data: multiMsgs } = await supabase
@@ -106,7 +107,7 @@ async function sendAutoMessages(
       if (i > 0 && msg.delay_seconds > 0) {
         await new Promise((r) => setTimeout(r, msg.delay_seconds * 1000));
       }
-      await sendSingleMessage(instanceName, phone, msg, apiUrl, apiKey);
+      await sendSingleMessage(instanceName, phone, msg, apiUrl, apiKey, customerName);
     }
     console.log(`Multi-messages (${filtered.length}) sent to ${phone} for stage ${stageData.label}`);
   } else {
@@ -118,7 +119,7 @@ async function sendAutoMessages(
       message_text: stageData.auto_message_text,
       media_url: stageData.auto_message_media_url,
       image_url: stageData.auto_message_image_url,
-    }, apiUrl, apiKey);
+    }, apiUrl, apiKey, customerName);
     console.log(`Legacy auto-message sent to ${phone} for stage ${stageData.label}`);
   }
 }
