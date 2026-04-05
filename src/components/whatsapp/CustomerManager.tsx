@@ -870,6 +870,25 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
                             </Badge>
                           )}
                         </div>
+                        {/* CRM Stage Progress Dots */}
+                        {dealsByCustomer[c.id] && (
+                          <div className="flex items-center gap-1 mt-1">
+                            {getStageDotsForDeal(dealsByCustomer[c.id]).map((dot) => (
+                              <div
+                                key={dot.key}
+                                title={`${dot.label} ${dot.reached ? "✓ Enviado" : "– Pendente"}`}
+                                className={`w-3 h-3 rounded-full border transition-all ${
+                                  dot.reached
+                                    ? `${dot.color} border-transparent shadow-sm shadow-current`
+                                    : "bg-muted/30 border-border/50"
+                                }`}
+                              />
+                            ))}
+                            <span className="text-[9px] text-muted-foreground ml-1">
+                              {getStageDotsForDeal(dealsByCustomer[c.id]).filter(d => d.reached).map(d => d.label).join(" → ")}
+                            </span>
+                          </div>
+                        )}
                         <div className="flex items-center gap-3 mt-0.5">
                           <span className="text-[11px] text-muted-foreground flex items-center gap-1">
                             <Phone className="h-2.5 w-2.5" />
