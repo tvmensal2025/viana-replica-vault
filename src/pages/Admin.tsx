@@ -345,9 +345,29 @@ const Admin = () => {
           <LinksTab slug={slug} baseUrl={baseUrl} onCopy={copyLink} onQrOpen={(url, label) => setQrModal({ url, label })} />
         )}
 
+        {userId && activeTab === "crm" && (
+          <KanbanBoard consultantId={userId} instanceName={instanceName} />
+        )}
+
+        {userId && activeTab === "clientes" && (
+          <CustomerManager
+            customers={customers}
+            consultantId={userId}
+            onCustomersChange={fetchCustomers}
+            instanceName={instanceName}
+            onOpenChat={handleOpenChatFromCustomer}
+          />
+        )}
+
         {userId && activeTab === "whatsapp" && (
           <WhatsAppErrorBoundary>
-            <WhatsAppTab key="whatsapp-tab" userId={userId} />
+            <WhatsAppTab
+              key="whatsapp-tab"
+              userId={userId}
+              pendingChatPhone={pendingChatPhone}
+              pendingChatMessage={pendingChatMessage}
+              onPendingChatConsumed={() => { setPendingChatPhone(null); setPendingChatMessage(undefined); }}
+            />
           </WhatsAppErrorBoundary>
         )}
 
