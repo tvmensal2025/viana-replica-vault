@@ -83,6 +83,36 @@ function mapChat(chat: EvolutionChat, contactsMap: Map<string, EvolutionContact>
   };
 }
 
+function deduplicateChats(chats: ChatItem[]): ChatItem[] {
+  const map = new Map<string, ChatItem>();
+  for (const chat of chats) {
+    // Resolve the "real phone" key: prefer sendTargetJid (@s.whatsapp.net), fallback to remoteJid
+    const key =
+      (chat.sendTargetJid && chat.sendTargetJid.endsWith("@s.whatsapp.net")
+        ? chat.sendTargetJid
+        : null) ||
+      (chat.remoteJid.endsWith("@s.whatsapp.net") ? chat.remoteJid : null) ||
+      chat.remoteJid; // fallback for pure LID with no alt
+
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, chat);
+    } else {
+      // Merge: keep the one with the most recent message, sum unread, preserve pic
+      const keep = chat.lastMessageTimestamp > existing.lastMessageTimestamp ? chat : existing;
+      const other = keep === chat ? existing : chat;
+      map.set(key, {
+        ...keep,
+        unreadCount: keep.unreadCount + other.unreadCount,
+        profilePicUrl: keep.profilePicUrl || other.profilePicUrl,
+        name: keep.name.startsWith("Contato ") && !other.name.startsWith("Contato ") ? other.name : keep.name,
+        sendTargetJid: keep.sendTargetJid || other.sendTargetJid,
+      });
+    }
+  }
+  return Array.from(map.values());
+}
+
 // Low-concurrency queue
 async function processWithConcurrency<T, R>(
   items: T[],
