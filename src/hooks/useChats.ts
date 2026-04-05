@@ -178,7 +178,7 @@ export function useChats(instanceName: string | null) {
       const raw = await findChats(instanceName);
       const cache = profilePicCacheRef.current;
 
-      const mapped = (Array.isArray(raw) ? raw : [])
+      const rawMapped = (Array.isArray(raw) ? raw : [])
         .map((c) => {
           const item = mapChat(c, contactsMapRef.current);
           if (!item) return null;
@@ -188,7 +188,9 @@ export function useChats(instanceName: string | null) {
           }
           return item;
         })
-        .filter((c): c is ChatItem => c !== null && !c.isGroup)
+        .filter((c): c is ChatItem => c !== null && !c.isGroup);
+
+      const mapped = deduplicateChats(rawMapped)
         .sort((a, b) => b.lastMessageTimestamp - a.lastMessageTimestamp);
       setChats(mapped);
       setError(null);
