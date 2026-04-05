@@ -19,13 +19,12 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Verify caller is admin
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    const callerClient = createClient(supabaseUrl, supabaseServiceKey);
+    const adminClient = createClient(supabaseUrl, supabaseServiceKey);
     const anonClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!);
 
+    // Verify caller is admin
     const token = authHeader.replace("Bearer ", "");
     const { data: { user: caller }, error: authError } = await anonClient.auth.getUser(token);
     if (authError || !caller) {
@@ -35,7 +34,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: isAdmin } = await callerClient.rpc("has_role", {
+    const { data: isAdmin } = await adminClient.rpc("has_role", {
       _user_id: caller.id,
       _role: "admin",
     });
@@ -47,35 +46,35 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { email } = await req.json();
-    if (!email) {
-      return new Response(JSON.stringify({ error: "Email é obrigatório" }), {
+    const { consultant_id, redirect_url } = await req.json();
+    if (!consultant_id) {
+      return new Response(JSON.stringify({ error: "consultant_id é obrigatório" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Look up user by email to find their auth account
-    const { data: { users }, error: listError } = await callerClient.auth.admin.listUsers();
-    if (listError) throw listError;
-
-    const targetUser = users?.find((u) => u.email === email);
-    if (!targetUser) {
-      return new Response(JSON.stringify({ error: "Usuário não encontrado no auth" }), {
+    // The consultant ID is the same as the auth user ID
+    const { data: { user: targetUser }, error: getUserError } = await adminClient.auth.admin.getUserById(consultant_id);
+    if (getUserError || !targetUser?.email) {
+      return new Response(JSON.stringify({ error: "Usuário não encontrado ou sem email" }), {
         status: 404,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Send password reset email via Supabase Auth
-    const { error: resetError } = await callerClient.auth.admin.generateLink({
+    // Generate recovery link and the email is sent automatically by Supabase
+    const { error: resetError } = await adminClient.auth.admin.generateLink({
       type: "recovery",
-      email,
+      email: targetUser.email,
+      options: {
+        redirectTo: redirect_url || `${req.headers.get("origin") || supabaseUrl}/auth`,
+      },
     });
 
     if (resetError) throw resetError;
 
-    return new Response(JSON.stringify({ success: true }), {
+    return new Response(JSON.stringify({ success: true, email: targetUser.email }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
