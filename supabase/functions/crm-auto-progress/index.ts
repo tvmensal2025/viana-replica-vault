@@ -171,6 +171,18 @@ Deno.serve(async (req) => {
       movedCount++;
 
       if (stageData.auto_message_enabled && deal.remote_jid && evolutionUrl && evolutionKey) {
+        // Fetch customer name
+        let customerName = "";
+        if (deal.customer_id) {
+          const { data: customer } = await supabase.from("customers").select("name").eq("id", deal.customer_id).single();
+          customerName = customer?.name || "";
+        }
+        if (!customerName) {
+          const phone = deal.remote_jid.split("@")[0];
+          const { data: customer } = await supabase.from("customers").select("name").eq("phone_whatsapp", phone).limit(1).maybeSingle();
+          customerName = customer?.name || "";
+        }
+
         const { data: instance } = await supabase
           .from("whatsapp_instances")
           .select("instance_name")
@@ -178,7 +190,7 @@ Deno.serve(async (req) => {
           .limit(1)
           .single();
         if (instance) {
-          await sendAutoMessages(supabase, instance.instance_name, deal.remote_jid.split("@")[0], stageData, evolutionUrl, evolutionKey, null, deal.deal_origin || "aprovado");
+          await sendAutoMessages(supabase, instance.instance_name, deal.remote_jid.split("@")[0], stageData, evolutionUrl, evolutionKey, null, deal.deal_origin || "aprovado", customerName);
         }
       }
     }
