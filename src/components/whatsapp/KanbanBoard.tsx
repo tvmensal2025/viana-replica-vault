@@ -121,7 +121,40 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
 
   // Send auto-messages when deal moves to a stage (now supports multiple)
   const sendAutoMessages = async (stage: KanbanStageRow, deal: CrmDealRow, rejectionReason?: string) => {
-    if (!stage.auto_message_enabled || !instanceName || !deal.remote_jid) return;
+    if (!stage.auto_message_enabled) {
+      toast({ title: "⚠️ Msg automática desativada para esta coluna", description: stage.label });
+      return;
+    }
+    if (!instanceName) {
+      toast({ title: "⚠️ WhatsApp não conectado", description: "Conecte o WhatsApp para enviar mensagens automáticas.", variant: "destructive" });
+      return;
+    }
+    if (!deal.remote_jid) {
+      toast({ title: "⚠️ Lead sem número de WhatsApp", description: "Este lead não possui um JID vinculado.", variant: "destructive" });
+      return;
+    }
+
+    // Fetch customer name for {{nome}} placeholder
+    let customerName = "";
+    if (deal.customer_id) {
+      const { data: customer } = await supabase
+        .from("customers")
+        .select("name")
+        .eq("id", deal.customer_id)
+        .single();
+      customerName = customer?.name || "";
+    }
+    // Fallback: try to find by phone
+    if (!customerName && deal.remote_jid) {
+      const phone = deal.remote_jid.split("@")[0];
+      const { data: customer } = await supabase
+        .from("customers")
+        .select("name")
+        .eq("phone_whatsapp", phone)
+        .limit(1)
+        .maybeSingle();
+      customerName = customer?.name || "";
+    }
 
     // Fetch multi-messages from stage_auto_messages
     const { data: autoMsgs } = await supabase
@@ -132,6 +165,7 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
       .order("position", { ascending: true });
 
     const phone = resolveRecipient(deal.remote_jid);
+    const displayName = customerName || phone;
 
     // Filter by rejection_reason if applicable, then fall back to legacy
     let filteredMsgs = autoMsgs && autoMsgs.length > 0
@@ -154,9 +188,15 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
           }]
         : [];
 
-    if (messagesToSend.length === 0) return;
+    if (messagesToSend.length === 0) {
+      toast({ title: "⚠️ Nenhuma mensagem configurada", description: `Coluna "${stage.label}" não tem mensagens automáticas.` });
+      return;
+    }
 
     try {
+      let sentCount = 0;
+      let failedCount = 0;
+
       for (let i = 0; i < messagesToSend.length; i++) {
         const msg = messagesToSend[i];
         if (i > 0 && msg.delay_seconds > 0) {
@@ -164,31 +204,43 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
         }
 
         const messageText = (msg.message_text || "")
-          .replace(/\{\{nome\}\}/g, phone)
+          .replace(/\{\{nome\}\}/g, displayName)
           .replace(/\{\{telefone\}\}/g, phone);
         const mediaCategory: MediaCategory = (msg.message_type as MediaCategory) || "text";
 
         // Send optional image first
         if (msg.image_url && mediaCategory !== "image") {
-          await sendWhatsAppMessage({ instanceName, phone, mediaCategory: "image", mediaUrl: msg.image_url });
+          const imgResult = await sendWhatsAppMessage({ instanceName, phone, mediaCategory: "image", mediaUrl: msg.image_url });
+          if (imgResult.status === "failed") failedCount++;
           await new Promise((r) => setTimeout(r, 1500));
         }
 
+        let result;
         if (mediaCategory === "audio" && msg.media_url) {
-          await sendWhatsAppMessage({ instanceName, phone, mediaCategory: "audio", mediaUrl: msg.media_url });
+          result = await sendWhatsAppMessage({ instanceName, phone, mediaCategory: "audio", mediaUrl: msg.media_url });
           if (messageText) {
             await new Promise((r) => setTimeout(r, 1500));
-            await sendWhatsAppMessage({ instanceName, phone, mediaCategory: "text", text: messageText });
+            const textResult = await sendWhatsAppMessage({ instanceName, phone, mediaCategory: "text", text: messageText });
+            if (textResult.status === "sent") sentCount++;
+            else failedCount++;
           }
         } else if ((mediaCategory === "image" || mediaCategory === "video") && msg.media_url) {
-          await sendWhatsAppMessage({ instanceName, phone, mediaCategory, mediaUrl: msg.media_url, text: messageText });
+          result = await sendWhatsAppMessage({ instanceName, phone, mediaCategory, mediaUrl: msg.media_url, text: messageText });
         } else if (messageText) {
-          await sendWhatsAppMessage({ instanceName, phone, mediaCategory: "text", text: messageText });
+          result = await sendWhatsAppMessage({ instanceName, phone, mediaCategory: "text", text: messageText });
         }
+
+        if (result?.status === "sent") sentCount++;
+        else if (result) failedCount++;
       }
-      toast({ title: `✅ ${messagesToSend.length} msg(s) automática(s) enviada(s) (${stage.label})` });
-    } catch {
-      toast({ title: "Erro ao enviar msg automática", variant: "destructive" });
+
+      if (failedCount > 0) {
+        toast({ title: `⚠️ ${sentCount} enviada(s), ${failedCount} falha(s)`, description: `Coluna: ${stage.label}`, variant: "destructive" });
+      } else {
+        toast({ title: `✅ ${sentCount} msg(s) automática(s) enviada(s) (${stage.label})` });
+      }
+    } catch (err) {
+      toast({ title: "❌ Erro ao enviar msg automática", description: err instanceof Error ? err.message : "Falha desconhecida", variant: "destructive" });
     }
   };
 
