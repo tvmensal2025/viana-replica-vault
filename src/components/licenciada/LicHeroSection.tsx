@@ -59,15 +59,15 @@ const LicHeroSection = ({ cadastroUrl, whatsappUrl, consultantId }: LicHeroSecti
         <div className="absolute -bottom-60 -left-40 w-[600px] h-[600px] rounded-full opacity-[0.05]" style={{ background: 'radial-gradient(circle, hsl(130, 100%, 36%), transparent 70%)' }} />
       </div>
 
-      <div className="section-container text-center py-12 md:py-20 relative z-10">
-        <div className="badge-green mx-auto mb-8 animate-fade-in">
+      <div className="section-container text-center py-6 md:py-12 relative z-10">
+        <div className="badge-green mx-auto mb-4 animate-fade-in">
           <span className="glow-dot" />
           Oportunidade exclusiva
         </div>
 
-        <img src="/images/logo-colorida-igreen.png" alt="iGreen Energy Logo" className="mx-auto mb-8 w-48 md:w-64 animate-fade-in" />
+        <img src="/images/logo-colorida-igreen.png" alt="iGreen Energy Logo" className="mx-auto mb-4 w-36 md:w-56 animate-fade-in" />
 
-        <h1 className="font-heading font-black mb-6 text-3xl md:text-4xl lg:text-[3.2rem] leading-[1.15] max-w-5xl mx-auto text-foreground">
+        <h1 className="font-heading font-black mb-3 text-2xl md:text-4xl lg:text-[3.2rem] leading-[1.15] max-w-5xl mx-auto text-foreground">
           Seja um Licenciado iGreen Energy e receba{" "}
           <span className="relative inline-block" style={{ color: 'hsl(var(--primary))' }}>
             comissões recorrentes e vitalícias
@@ -76,21 +76,14 @@ const LicHeroSection = ({ cadastroUrl, whatsappUrl, consultantId }: LicHeroSecti
           todos os meses
         </h1>
 
-        <p className="text-foreground/70 text-lg md:text-xl max-w-3xl mx-auto mb-8 leading-relaxed">
+        <p className="text-foreground/70 text-base md:text-xl max-w-3xl mx-auto mb-4 leading-relaxed">
           O mercado de energia solar está explodindo no Brasil. Quem está aproveitando agora já está faturando — <strong className="text-foreground">esse é o seu momento.</strong>
         </p>
 
-        <div className="flex items-center justify-center gap-2 mb-12">
-          <span className="inline-block w-2.5 h-2.5 rounded-full animate-pulse" style={{ background: 'hsl(var(--primary))' }} />
-          <span className="text-sm font-heading font-bold uppercase tracking-wider" style={{ color: 'hsl(var(--primary))' }}>
-            Aproveite agora — O momento é este
-          </span>
-        </div>
-
-        <div className="max-w-4xl mx-auto mb-12 rounded-2xl overflow-hidden relative" style={{ boxShadow: 'var(--shadow-green-lg)' }}>
+        <div className="max-w-4xl mx-auto mb-4 rounded-2xl overflow-hidden relative" style={{ boxShadow: 'var(--shadow-green-lg)' }}>
           <div className="absolute inset-0 rounded-2xl border border-primary/20 z-10 pointer-events-none" />
           <video controls className="w-full aspect-video relative z-0">
-            <source src="https://igreen-minio.b099mi.easypanel.host/igreen/casasustentavel.mp4" type="video/mp4" />
+            <source src="https://igreen-minio.b099mi.easypanel.host/igreen/Licenciado_iGreen_Energy.mp4" type="video/mp4" />
           </video>
         </div>
 
@@ -105,7 +98,7 @@ const LicHeroSection = ({ cadastroUrl, whatsappUrl, consultantId }: LicHeroSecti
         </a>
 
         {/* Social proof stats */}
-        <div className="grid grid-cols-3 gap-6 md:gap-12 max-w-3xl mx-auto mt-16 pt-12 border-t border-border">
+        <div className="grid grid-cols-3 gap-6 md:gap-12 max-w-3xl mx-auto mt-8 pt-6 border-t border-border">
           <div>
             <AnimatedCounter target={600} suffix="mil+" />
             <p className="stat-label text-xs md:text-sm mt-2 text-muted-foreground uppercase tracking-wider font-heading">Clientes ativos</p>
