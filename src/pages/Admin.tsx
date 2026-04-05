@@ -364,6 +364,7 @@ const Admin = () => {
             <WhatsAppTab
               key="whatsapp-tab"
               userId={userId}
+              customers={customers}
               pendingChatPhone={pendingChatPhone}
               pendingChatMessage={pendingChatMessage}
               onPendingChatConsumed={() => { setPendingChatPhone(null); setPendingChatMessage(undefined); }}
