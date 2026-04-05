@@ -181,34 +181,32 @@ function isDevolutiva(c: Customer): boolean {
 }
 
 // Stage progression definitions for visual dots
-const APPROVED_STAGES = ["aprovado", "30_dias", "60_dias", "90_dias", "120_dias"];
-const REJECTED_STAGES = ["reprovado", "60_dias"];
+const APPROVED_STAGES = [
+  { key: "aprovado", label: "Aprovado", color: "bg-green-500" },
+  { key: "30_dias", label: "30 dias", color: "bg-sky-500" },
+  { key: "60_dias", label: "60 dias", color: "bg-yellow-500" },
+  { key: "90_dias", label: "90 dias", color: "bg-orange-500" },
+  { key: "120_dias", label: "120 dias", color: "bg-violet-500" },
+] as const;
 
-function getStageDotsForDeal(deal: { stage: string; deal_origin?: string | null }) {
-  const isRejected = deal.deal_origin === "reprovado" || deal.stage === "reprovado";
+const REJECTED_STAGES = [
+  { key: "reprovado", label: "Reprovado", color: "bg-red-500" },
+  { key: "60_dias", label: "60 dias", color: "bg-yellow-500" },
+] as const;
+
+function normalizeCustomerPhone(value: string | null | undefined): string {
+  return normalizePhone(String(value || "").split("@")[0].split("_")[0]);
+}
+
+function getStageDotsForCustomer(status: string | null | undefined, deal?: { stage: string; deal_origin?: string | null }) {
+  const isRejected = deal?.deal_origin === "reprovado" || deal?.stage === "reprovado" || status === "rejected";
   const stages = isRejected ? REJECTED_STAGES : APPROVED_STAGES;
-  const currentIdx = stages.indexOf(deal.stage);
+  const currentIdx = deal ? stages.findIndex((item) => item.key === deal.stage) : -1;
 
-  return stages.map((key, idx) => {
-    const reached = currentIdx >= idx;
-    const labels: Record<string, string> = {
-      aprovado: "Aprov.",
-      reprovado: "Reprov.",
-      "30_dias": "30d",
-      "60_dias": "60d",
-      "90_dias": "90d",
-      "120_dias": "120d",
-    };
-    const colors: Record<string, string> = {
-      aprovado: "bg-green-500",
-      reprovado: "bg-red-500",
-      "30_dias": "bg-blue-500",
-      "60_dias": "bg-yellow-500",
-      "90_dias": "bg-orange-500",
-      "120_dias": "bg-purple-500",
-    };
-    return { key, label: labels[key] || key, color: colors[key] || "bg-gray-500", reached };
-  });
+  return stages.map((item, idx) => ({
+    ...item,
+    reached: currentIdx >= idx,
+  }));
 }
 
 export function CustomerManager({ customers, consultantId, onCustomersChange, instanceName, onOpenChat }: CustomerManagerProps) {
@@ -242,32 +240,35 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
     async function fetchDeals() {
       const { data } = await supabase
         .from("crm_deals")
-        .select("customer_id, remote_jid, stage, deal_origin")
-        .eq("consultant_id", consultantId);
+        .select("customer_id, remote_jid, stage, deal_origin, updated_at")
+        .eq("consultant_id", consultantId)
+        .order("updated_at", { ascending: false });
+
       if (data) {
         const map: Record<string, { stage: string; deal_origin?: string | null }> = {};
-        // Map by customer_id
-        for (const d of data) {
-          if (d.customer_id) map[d.customer_id] = { stage: d.stage, deal_origin: d.deal_origin };
-        }
-        // Also map by phone (remote_jid) for deals without customer_id
-        for (const d of data) {
-          if (!d.customer_id && d.remote_jid) {
-            const phone = d.remote_jid.split("@")[0];
-            // Find matching customer by phone
-            for (const c of customers) {
-              const cPhone = c.phone_whatsapp.replace(/\D/g, "").replace(/_.*$/, "");
-              if (cPhone === phone || phone.endsWith(cPhone) || cPhone.endsWith(phone)) {
-                if (!map[c.id]) {
-                  map[c.id] = { stage: d.stage, deal_origin: d.deal_origin };
-                }
-              }
+
+        for (const deal of data) {
+          if (deal.customer_id && !map[deal.customer_id]) {
+            map[deal.customer_id] = { stage: deal.stage, deal_origin: deal.deal_origin };
+            continue;
+          }
+
+          const dealPhone = normalizeCustomerPhone(deal.remote_jid);
+          if (!dealPhone) continue;
+
+          for (const customer of customers) {
+            const customerPhone = normalizeCustomerPhone(customer.phone_whatsapp);
+            if (!customerPhone || map[customer.id]) continue;
+            if (customerPhone === dealPhone || customerPhone.endsWith(dealPhone) || dealPhone.endsWith(customerPhone)) {
+              map[customer.id] = { stage: deal.stage, deal_origin: deal.deal_origin };
             }
           }
         }
+
         setDealsByCustomer(map);
       }
     }
+
     fetchDeals();
   }, [consultantId, customers]);
 
