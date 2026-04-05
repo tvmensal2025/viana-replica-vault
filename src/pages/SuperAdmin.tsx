@@ -9,7 +9,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  Shield, Users, CheckCircle, XCircle, LogOut, Loader2, UserCheck, UserX, BarChart3,
+  Shield, Users, CheckCircle, XCircle, LogOut, Loader2, UserCheck, UserX, BarChart3, KeyRound,
 } from "lucide-react";
 
 interface ConsultantRow {
@@ -27,6 +27,7 @@ const SuperAdmin = () => {
   const [consultants, setConsultants] = useState<ConsultantRow[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [resettingId, setResettingId] = useState<string | null>(null);
   const accessDeniedToastShownRef = useRef(false);
   const { isAdmin, loading: roleLoading } = useUserRole(userId);
   const navigate = useNavigate();
@@ -107,6 +108,34 @@ const SuperAdmin = () => {
       toast({ title: !currentApproved ? "✅ Consultor aprovado!" : "❌ Acesso revogado" });
     }
     setTogglingId(null);
+  };
+
+  const handleResetPassword = async (consultantId: string, consultantName: string) => {
+    setResettingId(consultantId);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const { data, error } = await supabase.functions.invoke("admin-reset-password", {
+        body: {
+          consultant_id: consultantId,
+          redirect_url: `${window.location.origin}/auth`,
+        },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      toast({
+        title: "✅ Email de redefinição enviado!",
+        description: `Link enviado para ${data?.email || consultantName}`,
+      });
+    } catch (err: any) {
+      toast({
+        title: "Erro ao resetar senha",
+        description: err.message || "Erro desconhecido",
+        variant: "destructive",
+      });
+    }
+    setResettingId(null);
   };
 
   const handleLogout = async () => {
@@ -193,7 +222,7 @@ const SuperAdmin = () => {
                   <TableHead>Telefone</TableHead>
                   <TableHead>Cadastro</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Ação</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -211,22 +240,39 @@ const SuperAdmin = () => {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant={c.approved ? "outline" : "default"}
-                        size="sm"
-                        onClick={() => toggleApproval(c.id, c.approved)}
-                        disabled={togglingId === c.id}
-                        className="gap-1.5"
-                      >
-                        {togglingId === c.id ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : c.approved ? (
-                          <UserX className="w-3.5 h-3.5" />
-                        ) : (
-                          <UserCheck className="w-3.5 h-3.5" />
-                        )}
-                        {c.approved ? "Revogar" : "Aprovar"}
-                      </Button>
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleResetPassword(c.id, c.name)}
+                          disabled={resettingId === c.id}
+                          className="gap-1.5"
+                          title="Enviar email de redefinição de senha"
+                        >
+                          {resettingId === c.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <KeyRound className="w-3.5 h-3.5" />
+                          )}
+                          Resetar Senha
+                        </Button>
+                        <Button
+                          variant={c.approved ? "outline" : "default"}
+                          size="sm"
+                          onClick={() => toggleApproval(c.id, c.approved)}
+                          disabled={togglingId === c.id}
+                          className="gap-1.5"
+                        >
+                          {togglingId === c.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : c.approved ? (
+                            <UserX className="w-3.5 h-3.5" />
+                          ) : (
+                            <UserCheck className="w-3.5 h-3.5" />
+                          )}
+                          {c.approved ? "Revogar" : "Aprovar"}
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
