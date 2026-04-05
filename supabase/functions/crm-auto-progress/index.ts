@@ -227,7 +227,7 @@ Deno.serve(async (req) => {
       if (error) { console.error("Failed to move rejected deal:", deal.id, error); continue; }
       movedCount++;
 
-      if (stageData.auto_message_enabled && deal.remote_jid && evolutionUrl && evolutionKey) {
+      if (stageData.auto_message_enabled && isValidJid(deal.remote_jid) && evolutionUrl && evolutionKey) {
         // Fetch customer name
         let customerName = "";
         if (deal.customer_id) {
