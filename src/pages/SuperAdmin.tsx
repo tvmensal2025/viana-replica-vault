@@ -27,6 +27,7 @@ const SuperAdmin = () => {
   const [consultants, setConsultants] = useState<ConsultantRow[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [resettingId, setResettingId] = useState<string | null>(null);
   const accessDeniedToastShownRef = useRef(false);
   const { isAdmin, loading: roleLoading } = useUserRole(userId);
   const navigate = useNavigate();
