@@ -272,11 +272,16 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
     if (!deal) { setPendingDrop(null); return; }
 
     const updateData: CrmDealUpdate = { stage: stageKey };
-    if (stageKey === "aprovado" && !deal.approved_at) {
+
+    // Always update timestamps and origin when moving to aprovado/reprovado
+    if (stageKey === "aprovado") {
       updateData.approved_at = new Date().toISOString();
       (updateData as any).deal_origin = "aprovado";
+      // Clear rejection fields when re-approving
+      (updateData as any).rejected_at = null;
+      (updateData as any).rejection_reason = null;
     }
-    if (stageKey === "reprovado" && !deal.rejected_at) {
+    if (stageKey === "reprovado") {
       (updateData as any).rejected_at = new Date().toISOString();
       (updateData as any).deal_origin = "reprovado";
     }
