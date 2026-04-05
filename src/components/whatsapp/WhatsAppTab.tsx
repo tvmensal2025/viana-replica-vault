@@ -4,38 +4,29 @@ import { useWhatsApp } from "@/hooks/useWhatsApp";
 import { useTemplates } from "@/hooks/useTemplates";
 import { useChats } from "@/hooks/useChats";
 import { ConnectionPanel } from "./ConnectionPanel";
-import { MessagePanel } from "./MessagePanel";
 import { BulkSendPanel } from "./BulkSendPanel";
 import { TemplateManager } from "./TemplateManager";
-import { CustomerManager } from "./CustomerManager";
 import { ChatSidebar } from "./ChatSidebar";
 import { ChatView } from "./ChatView";
-import { KanbanBoard } from "./KanbanBoard";
 import { SchedulePanel } from "./SchedulePanel";
 import { WhatsAppDashboard } from "./WhatsAppDashboard";
-import { BarChart3, MessageSquare, LayoutGrid, Send, FileText, Clock, Users } from "lucide-react";
-
-interface Customer {
-  id: string;
-  name: string;
-  phone_whatsapp: string;
-  electricity_bill_value?: number;
-}
+import { BarChart3, MessageSquare, Send, FileText, Clock } from "lucide-react";
 
 interface WhatsAppTabProps {
   userId: string;
+  pendingChatPhone?: string | null;
+  pendingChatMessage?: string;
+  onPendingChatConsumed?: () => void;
 }
 
-type SubTab = "dashboard" | "conversas" | "crm" | "envio_massa" | "templates" | "agendamentos" | "clientes";
+type SubTab = "dashboard" | "conversas" | "envio_massa" | "templates" | "agendamentos";
 
 const SUB_TABS: { key: SubTab; label: string; icon: React.ElementType }[] = [
   { key: "dashboard", label: "Dashboard", icon: BarChart3 },
   { key: "conversas", label: "Conversas", icon: MessageSquare },
-  { key: "crm", label: "CRM", icon: LayoutGrid },
   { key: "envio_massa", label: "Envio em Massa", icon: Send },
   { key: "templates", label: "Templates", icon: FileText },
   { key: "agendamentos", label: "Agendamentos", icon: Clock },
-  { key: "clientes", label: "Clientes", icon: Users },
 ];
 
 export function WhatsAppTab({ userId }: WhatsAppTabProps) {
