@@ -222,7 +222,7 @@ const SuperAdmin = () => {
                   <TableHead>Telefone</TableHead>
                   <TableHead>Cadastro</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Ação</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
