@@ -63,6 +63,61 @@ const Admin = () => {
   const activeUidRef = useRef<string | null>(null);
   const loadRequestIdRef = useRef(0);
 
+  // WhatsApp connection for CRM/Clientes tabs
+  const {
+    instanceName,
+    connectionStatus,
+  } = useWhatsApp(userId || "");
+
+  // Customers state (shared between Clientes tab and WhatsAppTab)
+  const [customers, setCustomers] = useState<any[]>([]);
+
+  const fetchCustomers = React.useCallback(async () => {
+    if (!userId) return;
+    try {
+      const selectFields = "id, name, phone_whatsapp, electricity_bill_value, email, cpf, address_city, address_state, address_street, address_neighborhood, address_complement, address_number, cep, numero_instalacao, data_nascimento, status, created_at, distribuidora, registered_by_name, registered_by_igreen_id, media_consumo, desconto_cliente, andamento_igreen, devolutiva, observacao, igreen_code, data_cadastro, data_ativo, data_validado, status_financeiro, cashback, nivel_licenciado, assinatura_cliente, assinatura_igreen, link_assinatura";
+      const allRows: any[] = [];
+      const pageSize = 1000;
+      let page = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from("customers")
+          .select(selectFields)
+          .eq("consultant_id", userId)
+          .range(page * pageSize, (page + 1) * pageSize - 1);
+        if (error) throw error;
+        if (data) allRows.push(...data);
+        if (!data || data.length < pageSize) break;
+        page++;
+      }
+      setCustomers(allRows.map((c) => ({
+        id: c.id, name: c.name || "Sem nome", phone_whatsapp: c.phone_whatsapp,
+        electricity_bill_value: c.electricity_bill_value ?? undefined,
+        email: c.email, cpf: c.cpf, address_city: c.address_city, address_state: c.address_state,
+        address_street: c.address_street, address_neighborhood: c.address_neighborhood,
+        address_complement: c.address_complement, address_number: c.address_number,
+        cep: c.cep, numero_instalacao: c.numero_instalacao, data_nascimento: c.data_nascimento,
+        status: c.status, created_at: c.created_at, distribuidora: c.distribuidora,
+        registered_by_name: c.registered_by_name, registered_by_igreen_id: c.registered_by_igreen_id,
+        media_consumo: c.media_consumo, desconto_cliente: c.desconto_cliente,
+        andamento_igreen: c.andamento_igreen, devolutiva: c.devolutiva, observacao: c.observacao,
+        igreen_code: c.igreen_code, data_cadastro: c.data_cadastro, data_ativo: c.data_ativo,
+        data_validado: c.data_validado, status_financeiro: c.status_financeiro,
+        cashback: c.cashback, nivel_licenciado: c.nivel_licenciado,
+        assinatura_cliente: c.assinatura_cliente, assinatura_igreen: c.assinatura_igreen,
+        link_assinatura: c.link_assinatura,
+      })));
+    } catch { /* silently handle */ }
+  }, [userId]);
+
+  useEffect(() => { fetchCustomers(); }, [fetchCustomers]);
+
+  const handleOpenChatFromCustomer = React.useCallback((phone: string, suggestedMessage?: string) => {
+    setPendingChatPhone(phone);
+    setPendingChatMessage(suggestedMessage);
+    setActiveTab("whatsapp");
+  }, []);
+
   const resetConsultantState = () => {
     setApproved(false);
     setForm({ ...DEFAULT_CONSULTANT_FORM });
