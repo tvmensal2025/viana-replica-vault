@@ -254,11 +254,6 @@ export function WhatsAppTab({ userId, pendingChatPhone, pendingChatMessage, onPe
           )
         )}
 
-        {activeSubTab === "crm" && (
-          <div className="p-4 overflow-auto h-full">
-            <KanbanBoard consultantId={userId} instanceName={instanceName} />
-          </div>
-        )}
 
         {activeSubTab === "envio_massa" && (
           <div className="p-4 overflow-auto h-full">
@@ -305,17 +300,6 @@ export function WhatsAppTab({ userId, pendingChatPhone, pendingChatMessage, onPe
           </div>
         )}
 
-        {activeSubTab === "clientes" && (
-          <div className="p-4 overflow-auto h-full">
-            <CustomerManager
-              customers={customers}
-              consultantId={userId}
-              onCustomersChange={fetchCustomers}
-              instanceName={instanceName}
-              onOpenChat={handleOpenChatFromCustomer}
-            />
-          </div>
-        )}
       </div>
     </div>
   );
