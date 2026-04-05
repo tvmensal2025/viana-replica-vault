@@ -1,20 +1,39 @@
 
 
-# Substituir vídeo do topo (Conta de Energia) — usar MinIO
+# Mover Clientes e CRM para o topo do painel
 
 ## O que será feito
 
-Trocar o vídeo do hero da landing page principal para apontar para o MinIO, usando a mesma base URL já utilizada na `NewsSection`.
+Promover as abas **CRM** e **Clientes** do sub-menu do WhatsApp para o menu principal do Admin (ao lado de Dashboard, Preview, WhatsApp, Links, Dados). Elas continuarão dependendo do `userId` e `instanceName` do WhatsApp para funcionar.
 
-## Etapa única
+## Mudanças
 
-| Arquivo | Mudança |
-|---------|---------|
-| `src/components/HeroSection.tsx` | Trocar `"/videos/igreen-energy.mp4"` por `"https://igreen-minio.b099mi.easypanel.host/igreen/Green_Energy.mp4"` |
+### 1. `src/pages/Admin.tsx`
 
-O usuário precisa primeiro fazer upload do arquivo `Green_Energy.mp4` no bucket `igreen` do MinIO. Após isso, basta atualizar a URL no componente.
+- Adicionar `"crm"` e `"clientes"` ao tipo do `activeTab` e ao array `tabs` (com ícones `LayoutGrid` e `Users`)
+- Importar `KanbanBoard` e `CustomerManager` diretamente
+- Adicionar estado para `customers` e `fetchCustomers` (mover lógica de fetch do WhatsAppTab)
+- Precisará de `instanceName` do WhatsApp — importar `useWhatsApp` no Admin ou criar um hook leve que apenas lê a instância do DB
+- Renderizar `<KanbanBoard>` e `<CustomerManager>` como abas de primeiro nível na `<main>`
 
-## Pré-requisito
+### 2. `src/components/whatsapp/WhatsAppTab.tsx`
 
-- O arquivo `Green_Energy.mp4` deve estar disponível no MinIO em `https://igreen-minio.b099mi.easypanel.host/igreen/Green_Energy.mp4`. Se o nome do arquivo for diferente, a URL será ajustada conforme necessário.
+- Remover `"crm"` e `"clientes"` do array `SUB_TABS`
+- Remover o estado/fetch de `customers` (será gerenciado no Admin)
+- Remover os blocos de renderização de `KanbanBoard` e `CustomerManager`
+- Remover imports não utilizados (`KanbanBoard`, `CustomerManager`, `LayoutGrid`, `Users`)
+
+### 3. Ordem das abas no topo
+
+```text
+Dashboard | Preview | CRM | Clientes | WhatsApp | Links | Dados
+```
+
+CRM e Clientes ficam antes do WhatsApp por serem as ferramentas mais usadas no dia a dia.
+
+### Detalhes técnicos
+
+- O `KanbanBoard` precisa de `consultantId` e `instanceName`. O `instanceName` será obtido via `useWhatsApp(userId)` no Admin, ou de forma mais leve, lendo direto do banco (`whatsapp_instances`).
+- O `CustomerManager` precisa de `customers`, `consultantId`, `onCustomersChange`, `instanceName` e `onOpenChat`. O `onOpenChat` precisará alternar para a aba WhatsApp e abrir o chat — será adaptado para `setActiveTab("whatsapp")` + passar o JID.
+- A lógica de `fetchCustomers` será elevada para o Admin.tsx para ser compartilhada.
 
