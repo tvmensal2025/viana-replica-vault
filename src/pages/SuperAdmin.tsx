@@ -110,6 +110,34 @@ const SuperAdmin = () => {
     setTogglingId(null);
   };
 
+  const handleResetPassword = async (consultantId: string, consultantName: string) => {
+    setResettingId(consultantId);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const { data, error } = await supabase.functions.invoke("admin-reset-password", {
+        body: {
+          consultant_id: consultantId,
+          redirect_url: `${window.location.origin}/auth`,
+        },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      toast({
+        title: "✅ Email de redefinição enviado!",
+        description: `Link enviado para ${data?.email || consultantName}`,
+      });
+    } catch (err: any) {
+      toast({
+        title: "Erro ao resetar senha",
+        description: err.message || "Erro desconhecido",
+        variant: "destructive",
+      });
+    }
+    setResettingId(null);
+  };
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate("/auth");
