@@ -90,7 +90,7 @@ const LicHeroSection = ({ cadastroUrl, whatsappUrl, consultantId }: LicHeroSecti
         <div className="max-w-4xl mx-auto mb-12 rounded-2xl overflow-hidden relative" style={{ boxShadow: 'var(--shadow-green-lg)' }}>
           <div className="absolute inset-0 rounded-2xl border border-primary/20 z-10 pointer-events-none" />
           <video controls className="w-full aspect-video relative z-0">
-            <source src="/videos/igreen-energy.mp4" type="video/mp4" />
+            <source src="https://igreen-minio.b099mi.easypanel.host/igreen/casasustentavel.mp4" type="video/mp4" />
           </video>
         </div>
 
