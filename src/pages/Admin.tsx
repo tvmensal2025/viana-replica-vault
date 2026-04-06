@@ -48,7 +48,7 @@ const Admin = () => {
   const [loading, setLoading] = useState(true);
   const [approved, setApproved] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<"dashboard" | "dados" | "links" | "preview" | "whatsapp" | "crm" | "clientes">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "dados" | "links" | "preview" | "whatsapp" | "crm" | "clientes" | "historico">("dashboard");
   const [pendingChatPhone, setPendingChatPhone] = useState<string | null>(null);
   const [pendingChatMessage, setPendingChatMessage] = useState<string | undefined>(undefined);
   const [qrModal, setQrModal] = useState<{ url: string; label: string } | null>(null);
@@ -264,6 +264,7 @@ const Admin = () => {
     { id: "crm" as const, label: "CRM", icon: LayoutGrid },
     { id: "clientes" as const, label: "Clientes", icon: Users },
     { id: "whatsapp" as const, label: "WhatsApp", icon: MessageSquare },
+    { id: "historico" as const, label: "Histórico", icon: History },
     { id: "links" as const, label: "Links", icon: LinkIcon },
     { id: "dados" as const, label: "Dados", icon: Settings },
   ];
