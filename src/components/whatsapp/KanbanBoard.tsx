@@ -651,7 +651,15 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
       {/* Kanban columns */}
       <div className="flex gap-3 overflow-x-auto pb-2">
         {stages.map((s) => {
-          const stageDeals = deals.filter((d) => d.stage === s.stage_key);
+          const allStageDeals = deals.filter((d) => d.stage === s.stage_key);
+          const stageDeals = searchQuery.trim()
+            ? allStageDeals.filter((d) => {
+                const q = searchQuery.toLowerCase();
+                const phone = d.remote_jid?.split("@")[0] || "";
+                const notes = d.notes || "";
+                return phone.includes(q) || notes.toLowerCase().includes(q);
+              })
+            : allStageDeals;
           return (
             <div
               key={s.id}
