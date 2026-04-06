@@ -24,6 +24,7 @@ import {
   Check,
   X,
   Zap,
+  Search,
 } from "lucide-react";
 import { StageAutoMessageConfig } from "./StageAutoMessageConfig";
 import { AddLeadDialog } from "./AddLeadDialog";
