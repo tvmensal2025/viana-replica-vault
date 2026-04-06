@@ -374,6 +374,10 @@ const Admin = () => {
           </WhatsAppErrorBoundary>
         )}
 
+        {userId && activeTab === "historico" && (
+          <AutoMessageLog consultantId={userId} />
+        )}
+
         {/* Preview Tab */}
         <div className="space-y-4" style={{ display: activeTab === "preview" ? "block" : "none" }}>
           <PreviewTab slug={slug} baseUrl={baseUrl} />
