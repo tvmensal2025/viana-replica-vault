@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { findChats, findContacts, getProfilePicture, type EvolutionChat, type EvolutionContact } from "@/services/evolutionApi";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 export interface ChatItem {
   remoteJid: string;
@@ -145,12 +147,14 @@ export function useChats(instanceName: string | null) {
   const [chats, setChats] = useState<ChatItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [newMessageAlert, setNewMessageAlert] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const contactsMapRef = useRef<Map<string, EvolutionContact>>(new Map());
   const profilePicCacheRef = useRef<Map<string, PicCacheEntry>>(new Map());
   const fetchingChatsRef = useRef(false);
   const fetchingPicsRef = useRef(false);
   const globalPicPauseUntilRef = useRef(0);
+  const { toast } = useToast();
 
   const fetchContacts = useCallback(async () => {
     if (!instanceName) return;
@@ -248,6 +252,33 @@ export function useChats(instanceName: string | null) {
     }
   }, [instanceName]);
 
+  // Supabase Realtime subscription for inbound messages
+  useEffect(() => {
+    const channel = supabase
+      .channel("conversations-realtime")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "conversations", filter: "message_direction=eq.inbound" },
+        (payload) => {
+          const msg = payload.new as any;
+          if (msg.message_text) {
+            toast({
+              title: "💬 Nova mensagem recebida",
+              description: msg.message_text.slice(0, 80),
+            });
+            setNewMessageAlert(true);
+            // Trigger refetch
+            fetchChats();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [toast, fetchChats]);
+
   useEffect(() => {
     if (!instanceName) {
       setChats([]);
@@ -266,5 +297,5 @@ export function useChats(instanceName: string | null) {
     };
   }, [fetchContacts, fetchChats, instanceName]);
 
-  return { chats, isLoading, error, refetch: fetchChats };
+  return { chats, isLoading, error, refetch: fetchChats, newMessageAlert, clearAlert: () => setNewMessageAlert(false) };
 }

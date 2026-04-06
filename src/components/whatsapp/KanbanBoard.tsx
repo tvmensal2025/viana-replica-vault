@@ -24,6 +24,7 @@ import {
   Check,
   X,
   Zap,
+  Search,
 } from "lucide-react";
 import { StageAutoMessageConfig } from "./StageAutoMessageConfig";
 import { AddLeadDialog } from "./AddLeadDialog";
@@ -79,6 +80,7 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
   const [draggedStageId, setDraggedStageId] = useState<string | null>(null);
   const [dragOverStageId, setDragOverStageId] = useState<string | null>(null);
   const [pendingDrop, setPendingDrop] = useState<{ dealId: string; stageKey: string; stageId: string; stageLabel: string } | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const { toast } = useToast();
 
   const fetchStages = useCallback(async () => {
@@ -475,7 +477,7 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
   return (
     <div className="space-y-3">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-semibold text-foreground">CRM Kanban</h3>
           <Badge variant="secondary" className="text-[9px] gap-1">
@@ -484,6 +486,15 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
           </Badge>
         </div>
         <div className="flex items-center gap-2">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              placeholder="Buscar lead..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-7 text-xs pl-8 w-[180px]"
+            />
+          </div>
           <AddLeadDialog
             consultantId={consultantId}
             stages={stages.map((s) => ({ stage_key: s.stage_key, label: s.label, color: s.color }))}
@@ -640,7 +651,15 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
       {/* Kanban columns */}
       <div className="flex gap-3 overflow-x-auto pb-2">
         {stages.map((s) => {
-          const stageDeals = deals.filter((d) => d.stage === s.stage_key);
+          const allStageDeals = deals.filter((d) => d.stage === s.stage_key);
+          const stageDeals = searchQuery.trim()
+            ? allStageDeals.filter((d) => {
+                const q = searchQuery.toLowerCase();
+                const phone = d.remote_jid?.split("@")[0] || "";
+                const notes = d.notes || "";
+                return phone.includes(q) || notes.toLowerCase().includes(q);
+              })
+            : allStageDeals;
           return (
             <div
               key={s.id}

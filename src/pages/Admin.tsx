@@ -4,12 +4,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import type { Database } from "@/integrations/supabase/types";
-import { LogOut, BarChart3, LinkIcon, Settings, Monitor, MessageSquare, LayoutGrid, Users, Copy, Download, X } from "lucide-react";
+import { LogOut, BarChart3, LinkIcon, Settings, Monitor, MessageSquare, LayoutGrid, Users, Copy, Download, X, History } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { WhatsAppTab } from "@/components/whatsapp/WhatsAppTab";
 import { WhatsAppErrorBoundary } from "@/components/whatsapp/WhatsAppErrorBoundary";
 import { KanbanBoard } from "@/components/whatsapp/KanbanBoard";
 import { CustomerManager } from "@/components/whatsapp/CustomerManager";
+import { AutoMessageLog } from "@/components/whatsapp/AutoMessageLog";
 import { useWhatsApp } from "@/hooks/useWhatsApp";
 import { QRCodeSVG } from "qrcode.react";
 import { DashboardTab } from "@/components/admin/DashboardTab";
@@ -47,7 +48,7 @@ const Admin = () => {
   const [loading, setLoading] = useState(true);
   const [approved, setApproved] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<"dashboard" | "dados" | "links" | "preview" | "whatsapp" | "crm" | "clientes">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "dados" | "links" | "preview" | "whatsapp" | "crm" | "clientes" | "historico">("dashboard");
   const [pendingChatPhone, setPendingChatPhone] = useState<string | null>(null);
   const [pendingChatMessage, setPendingChatMessage] = useState<string | undefined>(undefined);
   const [qrModal, setQrModal] = useState<{ url: string; label: string } | null>(null);
@@ -263,6 +264,7 @@ const Admin = () => {
     { id: "crm" as const, label: "CRM", icon: LayoutGrid },
     { id: "clientes" as const, label: "Clientes", icon: Users },
     { id: "whatsapp" as const, label: "WhatsApp", icon: MessageSquare },
+    { id: "historico" as const, label: "Histórico", icon: History },
     { id: "links" as const, label: "Links", icon: LinkIcon },
     { id: "dados" as const, label: "Dados", icon: Settings },
   ];
@@ -370,6 +372,10 @@ const Admin = () => {
               onPendingChatConsumed={() => { setPendingChatPhone(null); setPendingChatMessage(undefined); }}
             />
           </WhatsAppErrorBoundary>
+        )}
+
+        {userId && activeTab === "historico" && (
+          <AutoMessageLog consultantId={userId} />
         )}
 
         {/* Preview Tab */}

@@ -74,6 +74,8 @@ async function sendSingleMessage(
   } else if (messageText) {
     await sendEvolutionText(instanceName, phone, messageText, apiUrl, apiKey);
   }
+
+  return messageText || "[mídia]";
 }
 
 async function sendAutoMessages(
@@ -86,7 +88,7 @@ async function sendAutoMessages(
   rejectionReason?: string | null,
   dealOrigin?: string | null,
   customerName?: string
-) {
+): Promise<string> {
   // Try multi-message table first
   const { data: multiMsgs } = await supabase
     .from("stage_auto_messages")
@@ -101,20 +103,22 @@ async function sendAutoMessages(
     return reasonMatch && originMatch;
   }) || [];
 
+  let preview = "";
+
   if (filtered.length > 0) {
     for (let i = 0; i < filtered.length; i++) {
       const msg = filtered[i];
       if (i > 0 && msg.delay_seconds > 0) {
         await new Promise((r) => setTimeout(r, msg.delay_seconds * 1000));
       }
-      await sendSingleMessage(instanceName, phone, msg, apiUrl, apiKey, customerName);
+      preview = await sendSingleMessage(instanceName, phone, msg, apiUrl, apiKey, customerName);
     }
     console.log(`Multi-messages (${filtered.length}) sent to ${phone} for stage ${stageData.label}`);
   } else {
     // Legacy single message
     const hasContent = stageData.auto_message_text || stageData.auto_message_media_url || stageData.auto_message_image_url;
-    if (!hasContent) return;
-    await sendSingleMessage(instanceName, phone, {
+    if (!hasContent) return "";
+    preview = await sendSingleMessage(instanceName, phone, {
       message_type: stageData.auto_message_type,
       message_text: stageData.auto_message_text,
       media_url: stageData.auto_message_media_url,
@@ -122,6 +126,8 @@ async function sendAutoMessages(
     }, apiUrl, apiKey, customerName);
     console.log(`Legacy auto-message sent to ${phone} for stage ${stageData.label}`);
   }
+
+  return preview;
 }
 
 function findTargetStage(daysSince: number, progression: typeof APPROVED_PROGRESSION): string | null {
@@ -139,6 +145,14 @@ function isValidJid(jid: string): boolean {
   return phone.replace(/\D/g, "").length >= 8;
 }
 
+function normalizePhone(raw: string): string {
+  const digits = String(raw || "").replace(/\D/g, "");
+  if (digits.startsWith("55") && digits.length >= 12) return digits;
+  if (digits.length === 11) return `55${digits}`;
+  if (digits.length === 10) return `55${digits}`;
+  return digits;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -153,6 +167,35 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
     const now = Date.now();
     let movedCount = 0;
+
+    // ── 0. Link customer_id on deals that are missing it ──
+    const { data: unlinkedDeals } = await supabase
+      .from("crm_deals")
+      .select("id, remote_jid, consultant_id")
+      .is("customer_id", null)
+      .not("remote_jid", "is", null)
+      .limit(200);
+
+    let linkedCount = 0;
+    for (const deal of unlinkedDeals || []) {
+      const phone = normalizePhone(deal.remote_jid.split("@")[0]);
+      if (!phone || phone.length < 10) continue;
+
+      // Try exact match first, then partial
+      const { data: customer } = await supabase
+        .from("customers")
+        .select("id")
+        .eq("consultant_id", deal.consultant_id)
+        .eq("phone_whatsapp", phone)
+        .limit(1)
+        .maybeSingle();
+
+      if (customer) {
+        await supabase.from("crm_deals").update({ customer_id: customer.id }).eq("id", deal.id);
+        linkedCount++;
+      }
+    }
+    if (linkedCount > 0) console.log(`Linked ${linkedCount} deals to customers`);
 
     // ── 1. Approved deals progression ──
     const { data: approvedDeals } = await supabase
@@ -179,7 +222,6 @@ Deno.serve(async (req) => {
       movedCount++;
 
       if (stageData.auto_message_enabled && isValidJid(deal.remote_jid) && evolutionUrl && evolutionKey) {
-        // Fetch customer name
         let customerName = "";
         if (deal.customer_id) {
           const { data: customer } = await supabase.from("customers").select("name").eq("id", deal.customer_id).single();
@@ -198,7 +240,18 @@ Deno.serve(async (req) => {
           .limit(1)
           .single();
         if (instance) {
-          await sendAutoMessages(supabase, instance.instance_name, deal.remote_jid.split("@")[0], stageData, evolutionUrl, evolutionKey, null, deal.deal_origin || "aprovado", customerName);
+          const preview = await sendAutoMessages(supabase, instance.instance_name, deal.remote_jid.split("@")[0], stageData, evolutionUrl, evolutionKey, null, deal.deal_origin || "aprovado", customerName);
+
+          // Log the auto-message
+          await supabase.from("crm_auto_message_log").insert({
+            deal_id: deal.id,
+            consultant_id: deal.consultant_id,
+            stage_key: targetStageKey,
+            remote_jid: deal.remote_jid,
+            customer_name: customerName || null,
+            message_preview: preview ? preview.slice(0, 200) : null,
+            status: "sent",
+          });
         }
       }
     }
@@ -228,7 +281,6 @@ Deno.serve(async (req) => {
       movedCount++;
 
       if (stageData.auto_message_enabled && isValidJid(deal.remote_jid) && evolutionUrl && evolutionKey) {
-        // Fetch customer name
         let customerName = "";
         if (deal.customer_id) {
           const { data: customer } = await supabase.from("customers").select("name").eq("id", deal.customer_id).single();
@@ -247,14 +299,25 @@ Deno.serve(async (req) => {
           .limit(1)
           .single();
         if (instance) {
-          await sendAutoMessages(supabase, instance.instance_name, deal.remote_jid.split("@")[0], stageData, evolutionUrl, evolutionKey, deal.rejection_reason, deal.deal_origin || "reprovado", customerName);
+          const preview = await sendAutoMessages(supabase, instance.instance_name, deal.remote_jid.split("@")[0], stageData, evolutionUrl, evolutionKey, deal.rejection_reason, deal.deal_origin || "reprovado", customerName);
+
+          // Log the auto-message
+          await supabase.from("crm_auto_message_log").insert({
+            deal_id: deal.id,
+            consultant_id: deal.consultant_id,
+            stage_key: targetStageKey,
+            remote_jid: deal.remote_jid,
+            customer_name: customerName || null,
+            message_preview: preview ? preview.slice(0, 200) : null,
+            status: "sent",
+          });
         }
       }
     }
 
     const totalChecked = (approvedDeals?.length || 0) + (rejectedDeals?.length || 0);
     return new Response(
-      JSON.stringify({ moved: movedCount, checked: totalChecked }),
+      JSON.stringify({ moved: movedCount, checked: totalChecked, linked: linkedCount }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {

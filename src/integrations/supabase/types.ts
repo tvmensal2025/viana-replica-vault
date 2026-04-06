@@ -121,6 +121,42 @@ export type Database = {
           },
         ]
       }
+      crm_auto_message_log: {
+        Row: {
+          consultant_id: string
+          created_at: string
+          customer_name: string | null
+          deal_id: string
+          id: string
+          message_preview: string | null
+          remote_jid: string | null
+          stage_key: string
+          status: string
+        }
+        Insert: {
+          consultant_id: string
+          created_at?: string
+          customer_name?: string | null
+          deal_id: string
+          id?: string
+          message_preview?: string | null
+          remote_jid?: string | null
+          stage_key: string
+          status?: string
+        }
+        Update: {
+          consultant_id?: string
+          created_at?: string
+          customer_name?: string | null
+          deal_id?: string
+          id?: string
+          message_preview?: string | null
+          remote_jid?: string | null
+          stage_key?: string
+          status?: string
+        }
+        Relationships: []
+      }
       crm_deals: {
         Row: {
           approved_at: string | null
