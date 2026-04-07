@@ -16,12 +16,14 @@ interface AIChatPanelProps {
 }
 
 const SUGGESTIONS = [
-  "Como funciona o desconto na conta de luz?",
-  "Quanto um licenciado pode ganhar por mês?",
-  "Quais são os produtos da iGreen?",
-  "Como funciona o plano de carreira?",
-  "Qual a comissão por indicação de cliente?",
-  "O que são royalties de equipe?",
+  "Como funciona a Conexão Green para o cliente?",
+  "Quais as comissões de cada produto?",
+  "Explique o plano de carreira completo",
+  "Como funciona a Conexão Expansão?",
+  "Quais distribuidoras são atendidas?",
+  "Como usar o painel para gerenciar clientes?",
+  "Me dê dicas de abordagem para vender",
+  "Qual a diferença entre CP e CI?",
 ];
 
 export function AIChatPanel({ open, onClose }: AIChatPanelProps) {
