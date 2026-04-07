@@ -340,65 +340,79 @@ Deno.serve(async (req) => {
       );
     }
 
-    // === EXPLORE NETWORK MODE ===
-    if (mode === "explore_network") {
-      console.log("=== EXPLORE NETWORK MODE ===");
-      const endpoints = [
-        `/v1/consultant-network/${consultorId}`,
-        `/v1/consultant-network`,
-        `/v1/consultant/network/${consultorId}`,
-        `/v1/consultant/${consultorId}/downline`,
-        `/v1/consultant/${consultorId}/mapa-rede`,
-        `/v1/mapa-rede`,
-        `/v1/mapa-rede/${consultorId}`,
-        `/v1/rede`,
-        `/v1/rede/${consultorId}`,
-        `/v1/network-map/${consultorId}`,
-        `/v1/network-map`,
-        `/v1/sponsors/${consultorId}`,
-        `/v1/sponsored/${consultorId}`,
-        `/v1/direct/${consultorId}`,
-        `/v1/diretos/${consultorId}`,
-        `/v1/licenciado/${consultorId}`,
-        `/v1/licenciado/${consultorId}/rede`,
-        `/v1/licenciado/rede`,
-        `/v1/tree`,
-        `/v1/tree/${consultorId}`,
-      ];
-
-      const results: Record<string, unknown>[] = [];
-
-      for (const ep of endpoints) {
-        try {
-          const url = `${API_BASE.replace('/v1', '')}${ep}`;
-          console.log(`Trying: ${url}`);
-          const res = await fetch(url, { headers: authHeaders });
-          const status = res.status;
-          let body: unknown = null;
-          const text = await res.text();
-          try { body = JSON.parse(text); } catch { body = text.substring(0, 500); }
-          
-          const isSuccess = status >= 200 && status < 300;
-          console.log(`  → ${status} ${isSuccess ? '✅' : '❌'} ${typeof body === 'object' ? JSON.stringify(body).substring(0, 300) : String(body).substring(0, 300)}`);
-          
-          results.push({ endpoint: ep, status, success: isSuccess, preview: typeof body === 'object' ? JSON.stringify(body).substring(0, 500) : String(body).substring(0, 500) });
-          
-          if (isSuccess && typeof body === 'object' && body !== null) {
-            // Found a working endpoint! Log full structure
-            const full = JSON.stringify(body);
-            console.log(`  🎯 WORKING ENDPOINT: ${ep}`);
-            console.log(`  Keys: ${Array.isArray(body) ? `Array[${(body as unknown[]).length}] first keys: ${(body as unknown[]).length > 0 ? JSON.stringify(Object.keys((body as unknown[])[0] as Record<string,unknown>)) : 'empty'}` : JSON.stringify(Object.keys(body as Record<string,unknown>))}`);
-            console.log(`  Full response (first 2000 chars): ${full.substring(0, 2000)}`);
-          }
-        } catch (err) {
-          console.log(`  → ERROR: ${err}`);
-          results.push({ endpoint: ep, status: 0, success: false, error: String(err) });
+    // === SYNC NETWORK MODE ===
+    if (mode === "explore_network" || mode === "sync_network") {
+      console.log("=== SYNC NETWORK MODE ===");
+      try {
+        const netRes = await fetch(`${API_BASE}/network-map`, { headers: authHeaders });
+        if (!netRes.ok) {
+          console.error(`Network map failed: ${netRes.status}`);
+          return new Response(
+            JSON.stringify({ success: false, error: "Não foi possível buscar o mapa de rede." }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
         }
-      }
 
-      return new Response(JSON.stringify({ mode: "explore_network", consultant_id_igreen: consultorId, results }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+        const rawNet = await netRes.json();
+        const netData = Array.isArray(rawNet) ? rawNet : (rawNet.data || []);
+        console.log(`Network map: ${netData.length} members found`);
+
+        if (netData.length > 0) {
+          console.log(`Network member keys: ${JSON.stringify(Object.keys(netData[0]))}`);
+        }
+
+        const netRecords = netData.map((m: Record<string, unknown>) => ({
+          consultant_id: consultantId,
+          igreen_id: m.idconsultor || m.id,
+          name: m.nome || "Sem nome",
+          phone: normalizePhone(String(m.celular || "")),
+          sponsor_id: m.idpatrocinador || null,
+          nivel: m.nivel ?? 0,
+          data_ativo: safeStr(m.data_ativo) || null,
+          cidade: safeStr(m.cidade) || null,
+          uf: safeStr(m.uf) || null,
+          clientes_ativos: m.cliativo ?? 0,
+          gp: safeNum(m.gp) ?? 0,
+          gi: safeNum(m.gi) ?? 0,
+          qtde_diretos: m.qtde_diretos ?? 0,
+          inicio_rapido: safeStr(m.inicio_rapido) || null,
+          diretos_inicio_rapido: m.diretos_inicio_rapido ?? 0,
+          diretos_mes: m.diretos_mes ?? 0,
+          total_pontos: safeNum(m.total_pontos) ?? 0,
+          updated_at: new Date().toISOString(),
+        }));
+
+        // Upsert in batches
+        let netUpdated = 0;
+        for (let i = 0; i < netRecords.length; i += 50) {
+          const batch = netRecords.slice(i, i + 50);
+          const { data, error } = await supabase
+            .from("network_members")
+            .upsert(batch, { onConflict: "consultant_id,igreen_id", ignoreDuplicates: false })
+            .select("id");
+          if (error) {
+            console.error(`Network upsert error at ${i}:`, error);
+          } else {
+            netUpdated += (data?.length || 0);
+          }
+        }
+
+        console.log(`Network sync completed: ${netUpdated} members saved`);
+        return new Response(JSON.stringify({
+          success: true,
+          mode: "sync_network",
+          total_members: netData.length,
+          updated: netUpdated,
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      } catch (err) {
+        console.error("Network sync error:", err);
+        return new Response(
+          JSON.stringify({ success: false, error: err instanceof Error ? err.message : "Erro ao sincronizar rede" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     // Step 3: Fetch ALL customer data (paginated)
