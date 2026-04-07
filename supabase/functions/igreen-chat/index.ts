@@ -114,13 +114,21 @@ SEÇÃO 3 — PRODUTOS iGREEN (8 produtos detalhados)
 - Diferenciais: 5G, sem fidelidade (troque de plano a qualquer momento sem multa), plataforma digital 24h, acompanhamento de consumo em tempo real
 - Comissão CP: R$ 7,00 a R$ 14,00 recorrente por plano + R$ 10,00 na ativação de chip físico
 - Comissão CI: R$ 1,00 recorrente
-- Promoções vigentes (Março 2026):
-  - Portabilidade Turbinada PRO: R$ 54,90 por portabilidade concluída (após 2 portabilidades, vale independente do plano)
-  - Voucher Telecom: 1º mês grátis no plano Start para portabilidade (limitado a 3.000 primeiras)
-  - Cashback Telecom: Cliente indicando outro cliente ganha R$ 3,50 recorrente; licenciado também ganha R$ 3,50 de bônus extra recorrente
-- Licença iGreen Telecom: R$ 549,00 (50% de desconto, era R$ 1.098) ou 12x de R$ 54,90
+- Promoções vigentes (Abril 2026):
+  - Opção 1 - Voucher 1º Mês GRÁTIS: Cliente contratando plano Start com portabilidade ganha 1 mês grátis (sem bônus no mês gratuito)
+  - Opção 2 - Comissão Turbinada PRO: Cliente pagando o 1º mês, licenciado recebe R$54,90 de comissão no 1º mês (independente do plano)
+  - Cashback Telecom: Cliente indicando outro cliente ganha R$3,50 recorrente; licenciado também ganha R$3,50 de bônus extra recorrente (enquanto o indicado pagar, recebe ao infinito)
+- Planos Globais (Roaming Internacional):
+  - Plano Start: U$44,00 (EUA, Canadá e México)
+  - Plano Global: U$70,00 (180 países)
+- Licença iGreen Telecom: R$549,00 (50% de desconto, era R$1.098) ou 12x de R$54,90 — VÁLIDO ATÉ 10/04/2026
   - Inclui: eSIM ilimitado + 10 chips físicos, acesso ao App Connect (Conexão Telecom, Conexão Expansão, Material de Apoio), treinamentos, suporte, I.A. da iGreen, iGreen Club
+  - Comissão Expansão Telecom: GP R$75, GI R$25, RO R$75, EQ R$25
+  - Upgrade para Licença Connect (Full): R$1.649,00 (a qualquer momento, pagando a diferença)
 - SAC 24h: 0800 183 00 80
+
+### PRODUTO 9: Telecom Pré-Cadastro
+- Toda ativação realizada no Pré-Cadastro GANHA 1.000 kWh de pontuação
 
 ==========================================================
 SEÇÃO 4 — A MATEMÁTICA DOS GANHOS (RECORRÊNCIA, DIFERENCIAL E BÔNUS)
@@ -239,7 +247,7 @@ SEÇÃO 8 — INVESTIMENTO DA LICENÇA
 SEÇÃO 9 — DISTRIBUIDORAS E ESTADOS ATENDIDOS (Conexão Green)
 ==========================================================
 
-A iGreen atende nos seguintes estados com as seguintes distribuidoras (dados da APN Março 2026):
+A iGreen atende nos seguintes estados com as seguintes distribuidoras (dados da APN/Newsletter Abril 2026):
 
 | Estado | Distribuidora(s) |
 |--------|-----------------|
@@ -345,6 +353,85 @@ R: MVNO na rede Surf Telecom. Planos de R$ 54,90 a R$ 79,90 com WhatsApp/ligaç�
 
 P: Como funciona o diferencial "ao infinito"?
 R: O ganho de graduação vai ao infinito de profundidade ENQUANTO ninguém com seu mesmo nível existir abaixo de você. Se um liderado te equipara, o diferencial zera naquela linha e entra o Bônus de Equiparação (percentual menor sobre volume massivo).
+
+==========================================================
+==========================================================
+SEÇÃO 14 — PROMOÇÕES ABRIL 2026 (Newsletter Oficial)
+==========================================================
+
+### CONEXÃO LIVRE (Mercado Livre de Energia)
+- PROMOÇÃO PRORROGADA - Bônus Extra Mercado Livre: A cada conta do cliente GANHE 10% (bônus pago uma única vez na validação do contrato)
+- Recorrência Imediata e Garantida: Após aprovação do cliente, o valor da recorrência fica DISPONÍVEL NA HORA, sem esperar prazo de migração
+- Colaboradores na iGreen Club: Todos os clientes varejistas do Mercado Livre que fecharem contrato recebem acesso ao iGreen Club para todos os seus colaboradores
+
+### CONEXÃO SOLAR
+- Promoção Conexão Solar Abril 2026:
+  - Bônus B Recorrente: +50% sobre a fatura iGreen/Revo, 48 parcelas, da primeira fatura
+  - Colaboradores na iGreen Club: Acesso para todos os colaboradores dos clientes
+- Plano Conexão Solar 6 Anos: Parcelas a partir de R$634,50/mês, economia estimada de R$546.042,84 em 30 anos
+  - Pagamento só começa após instalação e energização
+  - Sem juros abusivos, proteção contra inflação energética, reajuste pelo IPCA
+
+### CONEXÃO PLACAS
+- Comissão Conexão Placas: A cada conta do cliente GANHE 10% (por tempo INDETERMINADO, pago uma única vez na validação do contrato)
+- BÔNUS ABRIL 2026: 4 vendas no mês de Abril = GANHA 1 DRONE DJI NEO
+
+### CONEXÃO GREEN
+- PROMOÇÃO PRORROGADA - Bônus Extra Mercado Livre: A cada conta do cliente GANHE 10% (uma única vez na validação)
+- Cashback Energy (Bônus de Cashback Recorrente):
+  - 2% do cliente + 2% do cliente do cliente + 4% total = GANHE
+  - Enquanto o cliente indicado continuar pagando, o licenciado recebe cashback recorrente sobre TODAS as indicações ativas ATÉ O INFINITO
+  - Promoção por tempo limitado
+- Colaboradores na iGreen Club: Clientes Conexão Green + Portabilidade Telecom somam para desbloquear o Bônus Extra
+  - Portabilidades Telecom também contam para alcance da meta na Tabela de Clientes
+  - *Bônus Extra estornado se cliente cancelar antes do 1º boleto ou não pagar em até 30 dias
+
+### TABELA BÔNUS EXTRA CONEXÃO GREEN (Abril 2026):
+**Grupo 1** (AL Equatorial, BA Coelba, CE Enel, GO Equatorial, MG CEMIG, MS Energisa, MT Energisa, PE Neoenergia, PI Equatorial, PR Copel, RJ/MG Energisa Minas Rio, RN Cosern, SP CPFL Paulista, TO Energisa):
+| Clientes | 1-9 | 10-39 | 40-99 | 100-199 | 200+ |
+| Bônus Extra | Até 4% | 20% (10%+10%) | 40% (20%+20%) | 50% (30%+20%) | 60% (40%+20%) |
+
+**Grupo 2** (PB Energisa, SP/MS Elektro, Energisa Sul Sudeste, RS RGE, SC Celesc):
+| Clientes | 1-9 | 10-39 | 40+ |
+| Bônus Extra | Até 4% | 20% (10%+10%) | 40% (20%+20%) |
+
+### CAMPANHA CONEXÃO GREEN 2026:
+- Etapa 1 - Imediato: Na validação conforme a tabela
+- Etapa 2 - Garantido (PRO): 50% da recorrência padrão até o 1º boleto
+- Etapa 3 - Complementar (PRO): O restante quitado no 1º boleto pago do cliente, após quitação a recorrência padrão fica ativa
+
+### BÔNUS LÍDER CONEXÃO GREEN:
+- Diretores e acima: 5% de royalties sobre todas as contas validadas de licenciados que ativarem a campanha de +40 contas (Grupo 1)
+
+### CONEXÃO TELECOM
+- Válido para portabilidades:
+  - Opção 1: 1º mês GRÁTIS no Plano Start (sem bônus no mês gratuito)
+  - Opção 2: Comissão Turbinada PRO - R$54,90 de comissão no 1º mês (independente do plano)
+- Cashback Telecom: R$3,50 (licenciado) + R$3,50 (cliente do cliente) = R$7,00 GANHE. Recorrente ao infinito.
+- Licença Telecom: R$549 (50% off até 10/04/2026) ou 12x de R$54,90
+
+### CONEXÃO EXPANSÃO - MARATONA 90 DIAS:
+- **1ª Fase (10 dias)**: 5 clientes (Green ou Telecom Portabilidade) + 2 licenciados diretos ativos = Qualificação S-EXPANSÃO + R$2.000 em bônus
+- **2ª Fase (30 dias)**: 3 novos licenciados ativos (5 clientes cada) + 2 diretos até S-Expansão = Qualificação G-EXPANSÃO + Bônus complementar (total R$5.000)
+- **3ª Fase (60 dias)**: 7 licenciados diretos ativos, sendo 2 G-Expansão = Qualificação E-EXPANSÃO + VIAGEM PARA O CRUZEIRO + Participação no Pote Milionário
+- **4ª Fase (90 dias)**: 10 licenciados diretos ativos, sendo 2 G-Expansão + 2 E-Expansão = VIAGEM SNOW
+
+### PROMOÇÃO LICENÇA CONNECT (Expansão):
+- Conecte 2 novos diretos PRO em Abril = GANHA 1 Voucher Licença Connect para presentear (sem bônus incluso, não vale para Green Points e PRO, expira em 30 dias)
+
+### MARATONA EXPERT 4.0 (Expansão Abril 2026):
+- 10 novos licenciados Connect (Full), todos se tornarem PRO até a convenção = GANHA UMA CABINE DE CRUZEIRO PARA 2 PESSOAS
+- Regras: Presença + check-in na Convenção iGreen Expert 4.0 (você + pelo menos 5 conectados), Licenças Telecom não válidas, não acumulativo
+
+### COMO SER LICENCIADO PRO:
+- Realizar uma destas ações: 5 Conexões Green OU 1 Conexão Placa OU 1 Conexão Livre OU 2 Conexões Expansão
+- Status PRO atualizado por ciclo mensal
+
+### EVENTO:
+- Abertura Oficial iGreen USA: 05 de Maio de 2026
+  - Local: Royal Business Center Orlando - 2121 S Hiawassee Rd Suite 120, Orlando, FL 32835
+  - A partir das 19h00, estacionamento gratuito com 120 vagas
+  - Cadastro: eventos.igreenenergy.com.br/evento/abertura-oficial-usa
 
 ==========================================================
 REGRAS DE RESPOSTA DA IA
