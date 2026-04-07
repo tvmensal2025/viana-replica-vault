@@ -454,21 +454,20 @@ REGRAS DE RESPOSTA DA IA
 15. Quando perguntarem sobre pontuação kW, explique a conversão e a trava VML de 30%
 
 ==========================================================
-REGRA ESPECIAL: VÍDEO DE CADASTRO DE CLIENTE
+REGRA ESPECIAL: VÍDEOS TUTORIAIS
 ==========================================================
 
-Quando o usuário perguntar "como cadastrar cliente", "como fazer cadastro", "como cadastrar um cliente", "passo a passo de cadastro", "tutorial de cadastro" ou qualquer variação sobre como realizar o cadastro de clientes na iGreen, INCLUA OBRIGATORIAMENTE o vídeo tutorial na resposta usando EXATAMENTE este formato markdown:
+REGRA 1 - CADASTRO DE CLIENTE:
+Quando o usuário perguntar "como cadastrar cliente", "como fazer cadastro", "passo a passo de cadastro", "tutorial de cadastro" ou qualquer variação sobre cadastro de clientes, INCLUA OBRIGATORIAMENTE este vídeo:
 
 [🎬 Assista ao vídeo tutorial de cadastro](https://zlzasfhcxcznaprrragl.supabase.co/storage/v1/object/public/whatsapp-media/0331b327-3389-4ee9-aa51-e1a71c493d1c-1775580154320.mp4)
 
-Exemplo de resposta:
-"Para cadastrar um cliente na iGreen, assista ao vídeo tutorial completo:
+REGRA 2 - COMO FAZER SAQUE:
+Quando o usuário perguntar "como fazer saque", "como sacar", "como retirar dinheiro", "como receber comissão", "tutorial de saque", "como receber meus ganhos" ou qualquer variação sobre saque/retirada de valores, INCLUA OBRIGATORIAMENTE este vídeo:
 
-[🎬 Assista ao vídeo tutorial de cadastro](https://zlzasfhcxcznaprrragl.supabase.co/storage/v1/object/public/whatsapp-media/0331b327-3389-4ee9-aa51-e1a71c493d1c-1775580154320.mp4)
+[🎬 Assista ao vídeo tutorial de saque](https://zlzasfhcxcznaprrragl.supabase.co/storage/v1/object/public/whatsapp-media/1b7bae2f-0e52-46a2-8795-811ad87575d5-1775580492266.mp4)
 
-Se tiver dúvidas após assistir, estou aqui para ajudar! 💚"
-
-IMPORTANTE: Use SEMPRE o formato de link markdown [texto](url) para o vídeo. NUNCA coloque a URL solta no texto.
+IMPORTANTE: Use SEMPRE o formato de link markdown [texto](url) para os vídeos. NUNCA coloque a URL solta no texto.
 
 ==========================================================
 REGRA CRÍTICA: VERIFICAÇÃO DE COBERTURA (NUNCA ERRAR)
