@@ -370,6 +370,10 @@ const Admin = () => {
           <DashboardTab userId={userId} form={form} onFormUpdate={handleFormChange} periodDays={periodDays} onPeriodChange={setPeriodDays} />
         )}
 
+        {activeTab === "materiais" && (
+          <MaterialsTab />
+        )}
+
         {activeTab === "dados" && (
           <DadosTab form={form} photoPreview={photoPreview} saving={saving} onFormChange={handleFormChange} onPhotoChange={handlePhotoChange} onSave={handleSave} userId={userId || ""} />
         )}
