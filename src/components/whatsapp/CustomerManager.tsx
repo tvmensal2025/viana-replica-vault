@@ -229,14 +229,14 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
         </div>
 
         {/* Search */}
-        <div className="px-5 pt-4 pb-3">
-          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_240px]">
+        <div className="px-4 sm:px-5 pt-3 sm:pt-4 pb-2 sm:pb-3">
+          <div className="grid gap-2 sm:gap-3 sm:grid-cols-[minmax(0,1fr)_240px]">
             <div className="relative">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
-              <Input placeholder="Buscar por nome, telefone, email ou CPF..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10 h-10 rounded-xl bg-secondary/30 border-border/50 focus:border-primary/40 text-sm" />
+              <Input placeholder="Buscar nome, telefone, CPF..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10 h-9 sm:h-10 rounded-xl bg-secondary/30 border-border/50 focus:border-primary/40 text-sm" />
             </div>
             <Select value={selectedLicenciado} onValueChange={setSelectedLicenciado}>
-              <SelectTrigger className="h-10 rounded-xl bg-secondary/30 border-border/50 text-sm">
+              <SelectTrigger className="h-9 sm:h-10 rounded-xl bg-secondary/30 border-border/50 text-sm">
                 <div className="flex items-center gap-2 truncate">
                   <Filter className="w-4 h-4 text-muted-foreground" />
                   <SelectValue placeholder="Filtrar licenciado" />
@@ -254,7 +254,7 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
         </div>
 
         {/* Clickable Status Filters */}
-        <div className="flex gap-2 px-5 pb-3 flex-wrap">
+        <div className="flex gap-1.5 sm:gap-2 px-4 sm:px-5 pb-2 sm:pb-3 overflow-x-auto no-scrollbar" style={{ WebkitOverflowScrolling: 'touch' }}>
           {filterButtons.map((f) => (
             <button
               key={f.key}
