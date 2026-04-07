@@ -218,23 +218,59 @@ export function WhatsAppTab({ userId, pendingChatPhone, pendingChatMessage, onPe
         {activeSubTab === "conversas" && (
           isConnected && instanceName ? (
             <div className="flex h-full">
-              <div className="w-[300px] shrink-0">
-                <ChatSidebar
-                  chats={chats}
-                  isLoading={chatsLoading}
-                  selectedJid={selectedChatJid}
-                  onSelectChat={handleSelectChat}
-                  consultantId={userId}
-                />
-              </div>
-              <ChatView
-                instanceName={instanceName}
-                chat={selectedChat}
-                templates={templates}
-                consultantId={userId}
-                initialMessage={pendingMessage}
-                key={`chat-${selectedChatJid}-${pendingMessageKey}`}
-              />
+              {/* Mobile: show sidebar OR chat, not both */}
+              {isMobile ? (
+                selectedChatJid ? (
+                  <div className="flex flex-col h-full w-full">
+                    <button
+                      onClick={() => setSelectedChatJid(null)}
+                      className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-primary bg-card border-b border-border shrink-0"
+                    >
+                      ← Voltar às conversas
+                    </button>
+                    <div className="flex-1 min-h-0">
+                      <ChatView
+                        instanceName={instanceName}
+                        chat={selectedChat}
+                        templates={templates}
+                        consultantId={userId}
+                        initialMessage={pendingMessage}
+                        key={`chat-${selectedChatJid}-${pendingMessageKey}`}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="w-full h-full">
+                    <ChatSidebar
+                      chats={chats}
+                      isLoading={chatsLoading}
+                      selectedJid={selectedChatJid}
+                      onSelectChat={handleSelectChat}
+                      consultantId={userId}
+                    />
+                  </div>
+                )
+              ) : (
+                <>
+                  <div className="w-[300px] shrink-0">
+                    <ChatSidebar
+                      chats={chats}
+                      isLoading={chatsLoading}
+                      selectedJid={selectedChatJid}
+                      onSelectChat={handleSelectChat}
+                      consultantId={userId}
+                    />
+                  </div>
+                  <ChatView
+                    instanceName={instanceName}
+                    chat={selectedChat}
+                    templates={templates}
+                    consultantId={userId}
+                    initialMessage={pendingMessage}
+                    key={`chat-${selectedChatJid}-${pendingMessageKey}`}
+                  />
+                </>
+              )}
             </div>
           ) : (
             <div className="p-4 overflow-auto h-full">
