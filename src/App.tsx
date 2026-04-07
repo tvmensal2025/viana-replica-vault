@@ -8,6 +8,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 const ConsultantPage = lazy(() => import("./pages/ConsultantPage"));
 const LicenciadaPage = lazy(() => import("./pages/LicenciadaPage"));
 const LicenciadaPreview = lazy(() => import("./pages/LicenciadaPreview"));
+const AssistentePage = lazy(() => import("./pages/AssistentePage"));
 const Auth = lazy(() => import("./pages/Auth"));
 const Admin = lazy(() => import("./pages/Admin"));
 const SuperAdmin = lazy(() => import("./pages/SuperAdmin"));
@@ -26,6 +27,7 @@ const App = () => (
             <Route path="/auth" element={<Auth />} />
             <Route path="/admin" element={<Admin />} />
             <Route path="/super-admin" element={<SuperAdmin />} />
+            <Route path="/assistente" element={<AssistentePage />} />
             <Route path="/licenciada/preview" element={<LicenciadaPreview />} />
             <Route path="/licenciada/:licenca" element={<LicenciadaPage />} />
             <Route path="/:licenca" element={<ConsultantPage />} />
