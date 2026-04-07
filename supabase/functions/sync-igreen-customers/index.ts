@@ -326,6 +326,67 @@ Deno.serve(async (req) => {
       );
     }
 
+    // === EXPLORE NETWORK MODE ===
+    if (mode === "explore_network") {
+      console.log("=== EXPLORE NETWORK MODE ===");
+      const endpoints = [
+        `/v1/network/${consultorId}`,
+        `/v1/rede/${consultorId}`,
+        `/v1/mapa-rede/${consultorId}`,
+        `/v1/team/${consultorId}`,
+        `/v1/equipe/${consultorId}`,
+        `/v1/downline/${consultorId}`,
+        `/v1/licenciados/${consultorId}`,
+        `/v1/consultant/${consultorId}/network`,
+        `/v1/consultant/${consultorId}/team`,
+        `/v1/consultant/${consultorId}/rede`,
+        `/v1/consultant/network`,
+        `/v1/consultant/rede`,
+        `/v1/consultant/team`,
+        `/v1/network`,
+        `/v1/rede`,
+        `/v1/mapa-rede`,
+        `/v1/tree/${consultorId}`,
+        `/v1/arvore/${consultorId}`,
+        `/v1/sponsor/${consultorId}`,
+        `/v1/patrocinados/${consultorId}`,
+      ];
+
+      const results: Record<string, unknown>[] = [];
+
+      for (const ep of endpoints) {
+        try {
+          const url = `${API_BASE.replace('/v1', '')}${ep}`;
+          console.log(`Trying: ${url}`);
+          const res = await fetch(url, { headers: authHeaders });
+          const status = res.status;
+          let body: unknown = null;
+          const text = await res.text();
+          try { body = JSON.parse(text); } catch { body = text.substring(0, 500); }
+          
+          const isSuccess = status >= 200 && status < 300;
+          console.log(`  → ${status} ${isSuccess ? '✅' : '❌'} ${typeof body === 'object' ? JSON.stringify(body).substring(0, 300) : String(body).substring(0, 300)}`);
+          
+          results.push({ endpoint: ep, status, success: isSuccess, preview: typeof body === 'object' ? JSON.stringify(body).substring(0, 500) : String(body).substring(0, 500) });
+          
+          if (isSuccess && typeof body === 'object' && body !== null) {
+            // Found a working endpoint! Log full structure
+            const full = JSON.stringify(body);
+            console.log(`  🎯 WORKING ENDPOINT: ${ep}`);
+            console.log(`  Keys: ${Array.isArray(body) ? `Array[${(body as unknown[]).length}] first keys: ${(body as unknown[]).length > 0 ? JSON.stringify(Object.keys((body as unknown[])[0] as Record<string,unknown>)) : 'empty'}` : JSON.stringify(Object.keys(body as Record<string,unknown>))}`);
+            console.log(`  Full response (first 2000 chars): ${full.substring(0, 2000)}`);
+          }
+        } catch (err) {
+          console.log(`  → ERROR: ${err}`);
+          results.push({ endpoint: ep, status: 0, success: false, error: String(err) });
+        }
+      }
+
+      return new Response(JSON.stringify({ mode: "explore_network", consultant_id_igreen: consultorId, results }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Step 3: Fetch ALL customer data (paginated)
     console.log("Fetching customer data...");
     let allCustomers: Record<string, unknown>[] = [];
