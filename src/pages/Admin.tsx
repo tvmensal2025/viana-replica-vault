@@ -21,6 +21,7 @@ import { NotificationCenter } from "@/components/admin/NotificationCenter";
 import { useNotifications } from "@/hooks/useNotifications";
 import { AIChatPanel } from "@/components/admin/AIChatPanel";
 import { MaterialsTab } from "@/components/admin/MaterialsTab";
+import { NetworkPanel } from "@/components/admin/NetworkPanel";
 
 function buildPendingConsultantDefaults(uid: string, email?: string | null) {
   const rawBase = (email?.split("@")[0] || `consultor-${uid.slice(0, 8)}`)
