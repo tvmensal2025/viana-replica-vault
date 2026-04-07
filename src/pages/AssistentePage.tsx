@@ -152,7 +152,31 @@ export default function AssistentePage() {
                 }`}
               >
                 <div className="prose prose-invert prose-sm max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 prose-p:my-1.5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0 prose-strong:text-white prose-headings:text-white">
-                  <ReactMarkdown>{msg.text}</ReactMarkdown>
+                  <ReactMarkdown
+                    components={{
+                      a: ({ href, children }) => {
+                        if (href && /\.(mp4|webm|mov)(\?|$)/i.test(href)) {
+                          return (
+                            <video
+                              controls
+                              playsInline
+                              className="rounded-lg max-w-full mt-2 mb-1"
+                              preload="metadata"
+                            >
+                              <source src={href} type="video/mp4" />
+                            </video>
+                          );
+                        }
+                        return (
+                          <a href={href} target="_blank" rel="noopener noreferrer" className="text-emerald-400 underline">
+                            {children}
+                          </a>
+                        );
+                      },
+                    }}
+                  >
+                    {msg.text}
+                  </ReactMarkdown>
                 </div>
               </div>
             </div>
