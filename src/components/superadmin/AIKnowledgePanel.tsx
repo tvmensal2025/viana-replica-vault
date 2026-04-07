@@ -71,32 +71,24 @@ export function AIKnowledgePanel() {
         const formData = new FormData();
         formData.append("file", file);
 
-        const { data, error } = await supabase.functions.invoke("extract-pdf-text", {
-          body: formData,
-        });
+        const response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/extract-pdf-text`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            },
+            body: formData,
+          }
+        );
 
-        if (error) throw error;
+        const data = await response.json();
 
-        const extractedText = data?.text || "";
-
-        if (extractedText.length < 20) {
-          // If basic extraction failed, read as base64 and try AI
-          toast({
-            title: `⚠️ ${file.name}`,
-            description: "PDF com pouco texto extraído. Tente copiar o conteúdo manualmente no campo de texto.",
-            variant: "destructive",
-          });
-          continue;
+        if (!response.ok) {
+          throw new Error(data?.error || `Erro ${response.status}`);
         }
 
-        // Now use AI to organize the content
-        const aiResponse = await supabase.functions.invoke("igreen-chat", {
-          body: {
-            message: `Organize o seguinte conteúdo extraído de um PDF chamado "${file.name}" em formato limpo e estruturado para servir como base de conhecimento. Mantenha TODAS as informações importantes (valores, datas, regras, comissões, produtos, etc). Remova apenas lixo de formatação. Responda APENAS com o conteúdo organizado, sem explicações:\n\n${extractedText.substring(0, 15000)}`,
-          },
-        });
-
-        const organizedText = aiResponse.data?.reply || extractedText;
+        const organizedText = data?.text || "";
 
         newDocs.push({
           name: file.name,
