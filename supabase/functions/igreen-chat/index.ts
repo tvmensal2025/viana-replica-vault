@@ -103,16 +103,23 @@ SEÇÃO 3 — PRODUTOS iGREEN (8 produtos detalhados)
 - Bônus de Graduação (Ao Infinito): De R$ 50 a R$ 225 extras por licença, dependendo do nível (Sênior a Acionista), pagos pelo sistema de Diferencial
 
 ### PRODUTO 8: Conexão Telecom (MVNO)
-- Operadora móvel virtual na rede Surf Telecom, maior cobertura 5G do Brasil
-- Planos com Portabilidade:
-  - Start 11GB: R$ 54,90 (6GB base + 5GB bônus)
-  - Mega 15GB: R$ 59,90 (10GB base + 5GB bônus)
-  - Giga 20GB: R$ 69,90 (15GB base + 5GB bônus)
-  - Ultra 28GB: R$ 79,90 (23GB base + 5GB bônus)
-- WhatsApp e Ligações ilimitadas + Internet acumulativa
-- Lojistas: Comissão vitalícia sobre todas as recargas
-- Comissão CP: R$ 7,00 recorrente + R$ 10,00 na ativação
+- Operadora móvel virtual na rede Surf Telecom, maior cobertura 5G do Brasil (1.342 cidades com 5G, 5.570 cidades com 4G)
+- Planos com Portabilidade (+5GB bônus):
+  - Start 11GB: R$ 54,90/mês (6GB base + 5GB bônus portabilidade) | Sem port: R$ 59,90 com 6GB
+  - Mega 15GB: R$ 59,90/mês (10GB base + 5GB bônus) | Sem port: R$ 64,90 com 10GB
+  - Giga 20GB: R$ 69,90/mês (15GB base + 5GB bônus) | Sem port: R$ 74,90 com 15GB
+  - Ultra 28GB: R$ 79,90/mês (23GB base + 5GB bônus) | Sem port: R$ 84,90 com 23GB
+  - Infinity 50GB: R$ 99,90/mês (45GB base + 5GB bônus) | Sem port: R$ 104,90 com 45GB
+- Todos os planos incluem: WhatsApp ILIMITADO, Ligações ILIMITADAS, Internet ACUMULADA (dados não usados passam pro próximo mês), iGreen Club GRÁTIS
+- Diferenciais: 5G, sem fidelidade (troque de plano a qualquer momento sem multa), plataforma digital 24h, acompanhamento de consumo em tempo real
+- Comissão CP: R$ 7,00 a R$ 14,00 recorrente por plano + R$ 10,00 na ativação de chip físico
 - Comissão CI: R$ 1,00 recorrente
+- Promoções vigentes (Março 2026):
+  - Portabilidade Turbinada PRO: R$ 54,90 por portabilidade concluída (após 2 portabilidades, vale independente do plano)
+  - Voucher Telecom: 1º mês grátis no plano Start para portabilidade (limitado a 3.000 primeiras)
+  - Cashback Telecom: Cliente indicando outro cliente ganha R$ 3,50 recorrente; licenciado também ganha R$ 3,50 de bônus extra recorrente
+- Licença iGreen Telecom: R$ 549,00 (50% de desconto, era R$ 1.098) ou 12x de R$ 54,90
+  - Inclui: eSIM ilimitado + 10 chips físicos, acesso ao App Connect (Conexão Telecom, Conexão Expansão, Material de Apoio), treinamentos, suporte, I.A. da iGreen, iGreen Club
 - SAC 24h: 0800 183 00 80
 
 ==========================================================
