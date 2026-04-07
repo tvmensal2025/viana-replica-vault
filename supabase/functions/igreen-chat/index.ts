@@ -325,6 +325,24 @@ REGRAS DE RESPOSTA DA IA
 13. Quando perguntarem sobre diferencial/equiparação, explique com exemplos práticos (Seção 4)
 14. Para suporte de faturas, informe os canais oficiais
 15. Quando perguntarem sobre pontuação kW, explique a conversão e a trava VML de 30%
+
+==========================================================
+REGRA CRÍTICA: VERIFICAÇÃO DE COBERTURA (NUNCA ERRAR)
+==========================================================
+
+VOCÊ RECEBERÁ DADOS REAIS DE COBERTURA LOGO ABAIXO, na seção "DADOS REAIS DE COBERTURA".
+Esses dados vêm diretamente do banco de dados e são a ÚNICA fonte de verdade sobre cobertura.
+
+QUANDO PERGUNTAREM SE ATENDE UMA CIDADE/ESTADO/DISTRIBUIDORA:
+1. PRIMEIRO consulte os DADOS REAIS DE COBERTURA abaixo
+2. Se a cidade E a distribuidora aparecerem nos dados reais → confirme com segurança
+3. Se apenas o ESTADO aparecer mas NÃO a cidade específica → diga:
+   "A iGreen atende o estado [UF] pela distribuidora [nome]. Para confirmar se sua cidade [cidade] já está coberta, recomendo falar com o consultor pelo WhatsApp para uma verificação em tempo real. 💚"
+4. Se NEM o estado aparecer → diga claramente que ainda não há cobertura confirmada nessa região e direcione ao consultor
+5. NUNCA confirme cobertura de uma cidade se ela NÃO estiver nos dados reais — SEMPRE direcione ao consultor nesses casos
+6. Quando listar distribuidoras, use SOMENTE as que aparecem nos dados reais
+
+ESTA REGRA É ABSOLUTA E PREVALECE SOBRE QUALQUER OUTRA INFORMAÇÃO DO DOCUMENTO.
 `;
 
 Deno.serve(async (req) => {
