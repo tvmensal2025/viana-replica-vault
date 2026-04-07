@@ -1,14 +1,23 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Brain, Save, Loader2, Info, Lightbulb } from "lucide-react";
+import { Brain, Save, Loader2, Info, Lightbulb, Upload, FileText, X, CheckCircle } from "lucide-react";
+
+interface UploadedDoc {
+  name: string;
+  text: string;
+  date: string;
+}
 
 export function AIKnowledgePanel() {
   const [extraKnowledge, setExtraKnowledge] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -17,14 +26,14 @@ export function AIKnowledgePanel() {
 
   const loadKnowledge = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("settings")
-      .select("value")
-      .eq("key", "ai_knowledge_extra")
-      .maybeSingle();
+    const [extraRes, docsRes] = await Promise.all([
+      supabase.from("settings").select("value").eq("key", "ai_knowledge_extra").maybeSingle(),
+      supabase.from("settings").select("value").eq("key", "ai_knowledge_docs").maybeSingle(),
+    ]);
 
-    if (data?.value) {
-      setExtraKnowledge(data.value);
+    if (extraRes.data?.value) setExtraKnowledge(extraRes.data.value);
+    if (docsRes.data?.value) {
+      try { setUploadedDocs(JSON.parse(docsRes.data.value)); } catch {}
     }
     setLoading(false);
   };
@@ -39,9 +48,127 @@ export function AIKnowledgePanel() {
     if (error) {
       toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "✅ Conhecimento da IA atualizado!", description: "As mudanças já estão ativas para todos os consultores." });
+      toast({ title: "✅ Conhecimento da IA atualizado!", description: "As mudanças já estão ativas." });
     }
     setSaving(false);
+  };
+
+  const handlePDFUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setUploading(true);
+    const newDocs: UploadedDoc[] = [];
+
+    for (const file of Array.from(files)) {
+      if (!file.name.toLowerCase().endsWith(".pdf")) {
+        toast({ title: "Arquivo ignorado", description: `${file.name} não é PDF`, variant: "destructive" });
+        continue;
+      }
+
+      try {
+        // Read file as text and send to AI to extract/summarize
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const { data, error } = await supabase.functions.invoke("extract-pdf-text", {
+          body: formData,
+        });
+
+        if (error) throw error;
+
+        const extractedText = data?.text || "";
+
+        if (extractedText.length < 20) {
+          // If basic extraction failed, read as base64 and try AI
+          toast({
+            title: `⚠️ ${file.name}`,
+            description: "PDF com pouco texto extraído. Tente copiar o conteúdo manualmente no campo de texto.",
+            variant: "destructive",
+          });
+          continue;
+        }
+
+        // Now use AI to organize the content
+        const aiResponse = await supabase.functions.invoke("igreen-chat", {
+          body: {
+            message: `Organize o seguinte conteúdo extraído de um PDF chamado "${file.name}" em formato limpo e estruturado para servir como base de conhecimento. Mantenha TODAS as informações importantes (valores, datas, regras, comissões, produtos, etc). Remova apenas lixo de formatação. Responda APENAS com o conteúdo organizado, sem explicações:\n\n${extractedText.substring(0, 15000)}`,
+          },
+        });
+
+        const organizedText = aiResponse.data?.reply || extractedText;
+
+        newDocs.push({
+          name: file.name,
+          text: organizedText,
+          date: new Date().toISOString(),
+        });
+
+        toast({ title: `✅ ${file.name} processado!`, description: `${organizedText.length} caracteres extraídos e organizados.` });
+      } catch (err: any) {
+        console.error("PDF upload error:", err);
+        toast({ title: `Erro em ${file.name}`, description: err.message || "Falha ao processar", variant: "destructive" });
+      }
+    }
+
+    if (newDocs.length > 0) {
+      const allDocs = [...uploadedDocs, ...newDocs];
+      setUploadedDocs(allDocs);
+
+      // Save docs list
+      await supabase.from("settings").upsert(
+        { key: "ai_knowledge_docs", value: JSON.stringify(allDocs) } as any,
+        { onConflict: "key" }
+      );
+
+      // Append all doc contents to extra knowledge
+      const docsText = newDocs.map(d => `\n\n--- DOCUMENTO: ${d.name} (${new Date(d.date).toLocaleDateString("pt-BR")}) ---\n${d.text}`).join("");
+      const updatedKnowledge = extraKnowledge + docsText;
+      setExtraKnowledge(updatedKnowledge);
+
+      await supabase
+        .from("settings")
+        .update({ value: updatedKnowledge } as any)
+        .eq("key", "ai_knowledge_extra");
+
+      toast({ title: "🧠 IA atualizada!", description: `${newDocs.length} documento(s) integrado(s) ao conhecimento.` });
+    }
+
+    setUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const removeDoc = async (index: number) => {
+    const doc = uploadedDocs[index];
+    const newDocs = uploadedDocs.filter((_, i) => i !== index);
+    setUploadedDocs(newDocs);
+
+    // Remove doc content from knowledge
+    const marker = `--- DOCUMENTO: ${doc.name}`;
+    const lines = extraKnowledge.split("\n");
+    const filteredLines: string[] = [];
+    let skipping = false;
+
+    for (const line of lines) {
+      if (line.includes(marker)) {
+        skipping = true;
+        continue;
+      }
+      if (skipping && line.startsWith("--- DOCUMENTO:")) {
+        skipping = false;
+      }
+      if (!skipping) filteredLines.push(line);
+    }
+
+    const updatedKnowledge = filteredLines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+    setExtraKnowledge(updatedKnowledge);
+
+    await Promise.all([
+      supabase.from("settings").update({ value: JSON.stringify(newDocs) } as any).eq("key", "ai_knowledge_docs"),
+      supabase.from("settings").update({ value: updatedKnowledge } as any).eq("key", "ai_knowledge_extra"),
+    ]);
+
+    toast({ title: "Documento removido", description: `${doc.name} foi removido do conhecimento da IA.` });
   };
 
   const charCount = extraKnowledge.length;
@@ -71,9 +198,63 @@ export function AIKnowledgePanel() {
               <li>FAQ e objeções comuns</li>
               <li>Funcionalidades do painel do consultor</li>
             </ul>
-            <p className="text-primary font-medium">O campo abaixo é para informações EXTRAS que você quer adicionar além do conhecimento base.</p>
+            <p className="text-primary font-medium">Envie PDFs ou escreva no campo abaixo para adicionar informações EXTRAS.</p>
           </div>
         </div>
+      </div>
+
+      {/* PDF Upload Section */}
+      <div className="rounded-xl border border-primary/30 bg-card p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <Upload className="w-5 h-5 text-primary" />
+          <p className="text-sm font-semibold text-foreground">Upload de PDFs — A IA lê e aprende automaticamente</p>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Envie PDFs com tabelas de comissão, scripts de venda, regulamentos, treinamentos, etc. 
+          A IA extrai o conteúdo, organiza e integra ao seu conhecimento. Os documentos mais recentes têm prioridade.
+        </p>
+
+        <div className="flex gap-3 items-center">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf"
+            multiple
+            onChange={handlePDFUpload}
+            className="hidden"
+          />
+          <Button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            variant="outline"
+            className="gap-2 border-primary/40 hover:bg-primary/10"
+          >
+            {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+            {uploading ? "Processando PDF..." : "Enviar PDF(s)"}
+          </Button>
+          <span className="text-xs text-muted-foreground">Aceita múltiplos PDFs de uma vez</span>
+        </div>
+
+        {/* Uploaded docs list */}
+        {uploadedDocs.length > 0 && (
+          <div className="space-y-2 mt-3">
+            <p className="text-xs font-medium text-muted-foreground">Documentos integrados ({uploadedDocs.length}):</p>
+            {uploadedDocs.map((doc, i) => (
+              <div key={i} className="flex items-center justify-between bg-primary/5 border border-primary/20 rounded-lg px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-primary" />
+                  <span className="text-sm text-foreground">{doc.name}</span>
+                  <span className="text-xs text-muted-foreground">
+                    ({new Date(doc.date).toLocaleDateString("pt-BR")}) — {doc.text.length.toLocaleString("pt-BR")} chars
+                  </span>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => removeDoc(i)} className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive">
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Tips */}
@@ -102,7 +283,7 @@ export function AIKnowledgePanel() {
       ) : (
         <div className="space-y-3">
           <label className="text-sm font-medium text-foreground">
-            Conhecimento Extra da IA
+            Conhecimento Extra da IA (texto manual + conteúdo dos PDFs)
           </label>
           <Textarea
             value={extraKnowledge}
