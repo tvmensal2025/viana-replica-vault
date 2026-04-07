@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import type { Database } from "@/integrations/supabase/types";
-import { LogOut, BarChart3, LinkIcon, Settings, Monitor, MessageSquare, LayoutGrid, Users, Copy, Download, X, History, Sparkles, FolderDown } from "lucide-react";
+import { LogOut, BarChart3, LinkIcon, Settings, Monitor, MessageSquare, LayoutGrid, Users, Copy, Download, X, History, Sparkles, FolderDown, Network } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { WhatsAppTab } from "@/components/whatsapp/WhatsAppTab";
 import { WhatsAppErrorBoundary } from "@/components/whatsapp/WhatsAppErrorBoundary";
