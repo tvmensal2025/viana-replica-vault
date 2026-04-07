@@ -516,6 +516,72 @@ export type Database = {
         }
         Relationships: []
       }
+      network_members: {
+        Row: {
+          cidade: string | null
+          clientes_ativos: number | null
+          consultant_id: string
+          data_ativo: string | null
+          diretos_inicio_rapido: number | null
+          diretos_mes: number | null
+          gi: number | null
+          gp: number | null
+          id: string
+          igreen_id: number
+          inicio_rapido: string | null
+          name: string
+          nivel: number | null
+          phone: string | null
+          qtde_diretos: number | null
+          sponsor_id: number | null
+          total_pontos: number | null
+          uf: string | null
+          updated_at: string
+        }
+        Insert: {
+          cidade?: string | null
+          clientes_ativos?: number | null
+          consultant_id: string
+          data_ativo?: string | null
+          diretos_inicio_rapido?: number | null
+          diretos_mes?: number | null
+          gi?: number | null
+          gp?: number | null
+          id?: string
+          igreen_id: number
+          inicio_rapido?: string | null
+          name: string
+          nivel?: number | null
+          phone?: string | null
+          qtde_diretos?: number | null
+          sponsor_id?: number | null
+          total_pontos?: number | null
+          uf?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cidade?: string | null
+          clientes_ativos?: number | null
+          consultant_id?: string
+          data_ativo?: string | null
+          diretos_inicio_rapido?: number | null
+          diretos_mes?: number | null
+          gi?: number | null
+          gp?: number | null
+          id?: string
+          igreen_id?: number
+          inicio_rapido?: string | null
+          name?: string
+          nivel?: number | null
+          phone?: string | null
+          qtde_diretos?: number | null
+          sponsor_id?: number | null
+          total_pontos?: number | null
+          uf?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       page_events: {
         Row: {
           consultant_id: string
