@@ -194,26 +194,27 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
 
       <div className="relative">
         {/* Header */}
-        <div className="flex items-center justify-between p-5 pb-4 border-b border-border/50">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 sm:p-5 pb-3 sm:pb-4 border-b border-border/50 gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center border border-primary/15 shadow-lg shadow-primary/5">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center border border-primary/15 shadow-lg shadow-primary/5 shrink-0">
               <Users className="w-5 h-5 text-primary" />
             </div>
-            <div>
-              <h3 className="font-bold text-foreground text-lg tracking-tight">
+            <div className="min-w-0">
+              <h3 className="font-bold text-foreground text-base sm:text-lg tracking-tight">
                 Clientes
                 <span className="ml-2 text-sm font-normal text-muted-foreground">({customers.length})</span>
               </h3>
-              <p className="text-[11px] text-muted-foreground">
-                Gerencie sua carteira de clientes
-                {lastSync && <span className="ml-2 text-muted-foreground/60">• Última sync: {new Date(lastSync).toLocaleString("pt-BR")}</span>}
+              <p className="text-[11px] text-muted-foreground truncate">
+                Gerencie sua carteira
+                {lastSync && <span className="hidden sm:inline ml-2 text-muted-foreground/60">• Última sync: {new Date(lastSync).toLocaleString("pt-BR")}</span>}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button onClick={handleSyncIgreen} size="sm" variant="outline" className="gap-2 rounded-xl font-semibold h-9 px-4 border-green-500/20 text-green-600 hover:bg-green-500/10" disabled={syncing || syncCooldown > 0}>
-              {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-              {syncing ? "Sincronizando..." : syncCooldown > 0 ? `Aguarde ${syncCooldown}s` : "Sincronizar iGreen"}
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button onClick={handleSyncIgreen} size="sm" variant="outline" className="gap-1.5 rounded-xl font-semibold h-8 sm:h-9 px-3 sm:px-4 text-xs sm:text-sm border-green-500/20 text-green-600 hover:bg-green-500/10" disabled={syncing || syncCooldown > 0}>
+              {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+              <span className="hidden sm:inline">{syncing ? "Sincronizando..." : syncCooldown > 0 ? `Aguarde ${syncCooldown}s` : "Sincronizar iGreen"}</span>
+              <span className="sm:hidden">{syncing ? "Sync..." : syncCooldown > 0 ? `${syncCooldown}s` : "Sync"}</span>
             </Button>
             <CustomerImportExport
               customers={customers}
@@ -221,8 +222,8 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
               consultantId={consultantId}
               onCustomersChange={onCustomersChange}
             />
-            <Button onClick={() => setShowAddDialog(true)} size="sm" className="gap-2 rounded-xl font-semibold shadow-lg shadow-primary/15 h-9 px-4">
-              <UserPlus className="w-4 h-4" /> Novo Cliente
+            <Button onClick={() => setShowAddDialog(true)} size="sm" className="gap-1.5 rounded-xl font-semibold shadow-lg shadow-primary/15 h-8 sm:h-9 px-3 sm:px-4 text-xs sm:text-sm">
+              <UserPlus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Novo Cliente</span><span className="sm:hidden">Novo</span>
             </Button>
           </div>
         </div>
