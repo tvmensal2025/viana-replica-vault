@@ -405,6 +405,10 @@ const Admin = () => {
           />
         )}
 
+        {userId && activeTab === "rede" && (
+          <NetworkPanel customers={customers} />
+        )}
+
         {userId && activeTab === "whatsapp" && (
           <WhatsAppErrorBoundary>
             <WhatsAppTab
