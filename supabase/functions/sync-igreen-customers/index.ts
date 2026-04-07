@@ -180,11 +180,13 @@ Deno.serve(async (req) => {
     let portalPassword = Deno.env.get("IGREEN_PORTAL_PASSWORD");
     let consultantId: string | null = null;
 
+    let mode = "sync"; // "sync" or "explore_network"
     try {
       const body = await req.json();
       if (body.portal_email) portalEmail = body.portal_email;
       if (body.portal_password) portalPassword = body.portal_password;
       if (body.consultant_id) consultantId = body.consultant_id;
+      if (body.mode) mode = body.mode;
     } catch (_) { /* no body or invalid json */ }
 
     if (!portalEmail || !portalPassword) {
