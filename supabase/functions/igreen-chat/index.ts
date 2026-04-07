@@ -47,12 +47,25 @@ SEÇÃO 3 — PRODUTOS iGREEN (8 produtos detalhados)
 - Público: Residências, comércios e propriedades rurais de baixa tensão (Grupo B)
 - Sem taxa de adesão, sem mensalidade, 100% online e gratuito
 - Dinâmica de Pagamento (varia por distribuidora):
-  - **Distribuidoras com BOLETO ÚNICO** (1 boleto só): O cliente recebe apenas UM boleto da distribuidora já com o desconto aplicado. Exemplos: CEMIG, Energisa, Equatorial, entre outras.
-  - **Distribuidoras com 2 BOLETOS**: O cliente recebe DOIS boletos separados:
+  - **Distribuidoras com BOLETO ÚNICO** (1 boleto só — o desconto já vem aplicado na fatura da distribuidora):
+    • MG CEMIG – opcional
+    • ES (EDP) – Geral
+    • AL (Equatorial) – Geral
+    • PI (Equatorial) – Geral
+    • RJ ENEL – acima de 300 kWh
+    • CPFL PAULISTA (SP) – acima de 150 kWh
+    • RS CEEE – acima de 150 kWh
+    • RS RGE – Geral
+    • TO (Energisa) – Geral
+    • PR COPEL – acima de 150 kWh
+    • RN (Cosern/Neoenergia) – acima de 150 kWh
+    • MG/RJ ENERGISA MINAS RIO – acima de 150 kWh
+    • MA (Equatorial) – acima de 350 kWh
+    • GO (Equatorial) – Geral
+  - **Distribuidoras com 2 BOLETOS** (todas as demais não listadas acima): O cliente recebe DOIS boletos separados:
     1. Boleto da Distribuidora: Taxas fixas (iluminação pública, impostos, disponibilidade)
     2. Boleto da iGreen: Energia consumida com o desconto aplicado
-    Exemplos: CPFL, Elektro, EDP, entre outras.
-  - IMPORTANTE: Sempre informar ao cliente qual modelo se aplica à distribuidora da região dele.
+  - IMPORTANTE: Sempre informar ao cliente qual modelo (boleto único ou 2 boletos) se aplica à distribuidora da região dele.
 - Diferenciais: Cashback sustentável por indicações e acesso ao iGreen Club
 - Comissão CP (Conexão Própria):
   - 4% recorrente: MG (CEMIG), MG (Energisa), RJ (Enel), RJ (Energisa), SP (Elektro, Energisa, EDP, CPFL), GO (Equatorial), MT, MS, AL, CE, PE, RN, PI, PB, MA, BA, PA, RS (RGE), PR, SC, TO
