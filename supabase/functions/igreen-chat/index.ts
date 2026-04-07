@@ -444,7 +444,7 @@ Deno.serve(async (req) => {
         body: JSON.stringify({
           system_instruction: { parts: [{ text: fullKnowledge }] },
           contents,
-          generationConfig: { temperature: 0.7, maxOutputTokens: 1200, topP: 0.9 },
+          generationConfig: { temperature: 0.4, maxOutputTokens: 1200, topP: 0.85 },
         }),
       }
     );
