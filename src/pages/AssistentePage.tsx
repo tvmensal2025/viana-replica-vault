@@ -89,7 +89,9 @@ export default function AssistentePage() {
                 ? "bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-br-lg shadow-lg shadow-emerald-500/15"
                 : "bg-white/[0.05] text-white/85 rounded-bl-lg border border-white/[0.06]"
             }`}>
-              <p className="whitespace-pre-wrap">{msg.text}</p>
+              <div className="prose prose-invert prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-li:my-0.5 prose-strong:text-white prose-headings:text-white">
+                <ReactMarkdown>{msg.text}</ReactMarkdown>
+              </div>
             </div>
             {msg.role === "user" && (
               <div className="h-8 w-8 rounded-xl bg-white/[0.06] border border-white/[0.06] flex items-center justify-center shrink-0 mt-1">
