@@ -31,6 +31,7 @@ const SUB_TABS: { key: SubTab; label: string; icon: React.ElementType }[] = [
 ];
 
 export function WhatsAppTab({ userId, pendingChatPhone, pendingChatMessage, onPendingChatConsumed, customers = [] }: WhatsAppTabProps) {
+  const isMobile = useIsMobile();
   const {
     connectionStatus,
     instanceName,
