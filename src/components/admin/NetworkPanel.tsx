@@ -210,7 +210,7 @@ function StatBox({ label, value, highlight }: { label: string; value: string; hi
 
 /* ── Org Chart Node ── */
 function OrgChartNode({ node, depth = 0, onSelect }: { node: TreeNode; depth?: number; onSelect: (m: NetworkMember) => void }) {
-  const [expanded, setExpanded] = useState(depth < 2);
+  const [expanded, setExpanded] = useState(depth === 0);
   const hasChildren = node.children.length > 0;
 
   return (
