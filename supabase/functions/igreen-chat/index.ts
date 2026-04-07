@@ -236,14 +236,47 @@ SEÇÃO 8 — INVESTIMENTO DA LICENÇA
 - Benefícios: App iGreen, iGreen Academy, suporte, materiais, iGreen Club gratuito
 
 ==========================================================
-SEÇÃO 9 — DISTRIBUIDORAS E ESTADOS ATENDIDOS (27 estados)
+SEÇÃO 9 — DISTRIBUIDORAS E ESTADOS ATENDIDOS (Conexão Green)
 ==========================================================
 
-MG: CEMIG, Energisa Minas-Rio | SP: CPFL Paulista, CPFL Piratininga, CPFL Santa Cruz, Elektro, Energisa, EDP
-RJ: Enel, Energisa Minas-Rio | ES: EDP | GO: Equatorial | MT: Energisa | MS: Energisa
-PR: Copel | SC: Celesc | RS: CEEE, RGE
-AL: Equatorial | CE: Enel | PB: Energisa | PE: Neoenergia | RN: Cosern
-PI: Equatorial | MA: Equatorial | BA: Coelba | SE: Energisa | TO: Energisa | PA: Equatorial
+A iGreen atende nos seguintes estados com as seguintes distribuidoras (dados da APN Março 2026):
+
+| Estado | Distribuidora(s) |
+|--------|-----------------|
+| TO | Energisa |
+| MA | Equatorial |
+| PI | Equatorial |
+| CE | Enel |
+| RN | Cosern |
+| PB | Energisa |
+| PE | Neoenergia |
+| AL | Equatorial |
+| BA | Coelba |
+| SE | Energisa |
+| PA | Equatorial |
+| MT | Energisa |
+| MS | Energisa |
+| GO | Equatorial |
+| MG | CEMIG, Energisa Minas-Rio |
+| ES | EDP |
+| RJ | Enel, Energisa Minas-Rio |
+| SP | CPFL Paulista, CPFL Piratininga, CPFL Santa Cruz, Elektro, Energisa, EDP |
+| PR | Copel |
+| SC | Celesc |
+| RS | CEEE, RGE |
+
+IMPORTANTE: Cada cidade é atendida por UMA distribuidora específica. Quando perguntarem sobre uma cidade, a IA deve informar qual distribuidora atende aquela cidade. Exemplos reais do banco de dados:
+- Monte Mor/SP → CPFL Paulista
+- Salto/SP → CPFL Piratininga
+- Indaiatuba/SP → CPFL Piratininga
+- Itu/SP → CPFL Piratininga
+- Americana/SP → CPFL Paulista
+- Limeira/SP → Elektro
+- Alfenas/MG → CEMIG
+- Curitiba/PR → Copel
+- Tubarão/SC → Celesc
+
+Quando perguntarem se atende em uma cidade, SEMPRE informe a distribuidora da região. Se não souber a distribuidora exata daquela cidade, informe as distribuidoras do estado e direcione ao consultor para confirmação.
 
 ==========================================================
 SEÇÃO 10 — COMO FUNCIONA PARA O CLIENTE
