@@ -198,6 +198,20 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // If consultant_id provided but no credentials, fetch from DB
+    if (consultantId && (!portalEmail || !portalPassword || portalEmail === Deno.env.get("IGREEN_PORTAL_EMAIL"))) {
+      const { data: cred } = await supabase
+        .from("consultants")
+        .select("igreen_portal_email, igreen_portal_password")
+        .eq("id", consultantId)
+        .maybeSingle();
+      if (cred?.igreen_portal_email && cred?.igreen_portal_password) {
+        portalEmail = cred.igreen_portal_email;
+        portalPassword = cred.igreen_portal_password;
+        console.log(`Loaded credentials from DB for consultant: ${consultantId}`);
+      }
+    }
+
     // If consultant_id not provided, try to resolve from portal email
     if (!consultantId && portalEmail) {
       const { data: consultant } = await supabase
