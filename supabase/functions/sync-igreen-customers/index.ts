@@ -180,11 +180,13 @@ Deno.serve(async (req) => {
     let portalPassword = Deno.env.get("IGREEN_PORTAL_PASSWORD");
     let consultantId: string | null = null;
 
+    let mode = "sync"; // "sync" or "explore_network"
     try {
       const body = await req.json();
       if (body.portal_email) portalEmail = body.portal_email;
       if (body.portal_password) portalPassword = body.portal_password;
       if (body.consultant_id) consultantId = body.consultant_id;
+      if (body.mode) mode = body.mode;
     } catch (_) { /* no body or invalid json */ }
 
     if (!portalEmail || !portalPassword) {
@@ -195,6 +197,20 @@ Deno.serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // If consultant_id provided but no credentials, fetch from DB
+    if (consultantId && (!portalEmail || !portalPassword || portalEmail === Deno.env.get("IGREEN_PORTAL_EMAIL"))) {
+      const { data: cred } = await supabase
+        .from("consultants")
+        .select("igreen_portal_email, igreen_portal_password")
+        .eq("id", consultantId)
+        .maybeSingle();
+      if (cred?.igreen_portal_email && cred?.igreen_portal_password) {
+        portalEmail = cred.igreen_portal_email;
+        portalPassword = cred.igreen_portal_password;
+        console.log(`Loaded credentials from DB for consultant: ${consultantId}`);
+      }
+    }
 
     // If consultant_id not provided, try to resolve from portal email
     if (!consultantId && portalEmail) {
@@ -322,6 +338,67 @@ Deno.serve(async (req) => {
         JSON.stringify({ success: false, error: "ID do consultor não encontrado na resposta da API iGreen. Verifique suas credenciais.", debug_keys: Object.keys(consultantData) }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // === EXPLORE NETWORK MODE ===
+    if (mode === "explore_network") {
+      console.log("=== EXPLORE NETWORK MODE ===");
+      const endpoints = [
+        `/v1/network/${consultorId}`,
+        `/v1/customer-map/${consultorId}/network`,
+        `/v1/customer-map/${consultorId}?type=rede`,
+        `/v1/customer-map/${consultorId}?type=network`,
+        `/v1/consultant-map/${consultorId}`,
+        `/v1/consultants/${consultorId}`,
+        `/v1/consultants/${consultorId}/rede`,
+        `/v1/consultants`,
+        `/v1/rede-consultor/${consultorId}`,
+        `/v1/mapa/${consultorId}`,
+        `/v1/mapa-consultor/${consultorId}`,
+        `/v1/indicados/${consultorId}`,
+        `/v1/indicacao/${consultorId}`,
+        `/v1/affiliates/${consultorId}`,
+        `/v1/sub-consultants/${consultorId}`,
+        `/v1/graduated/${consultorId}`,
+        `/v1/graduacao/${consultorId}`,
+        `/v1/minha-rede/${consultorId}`,
+        `/v1/minha-equipe/${consultorId}`,
+        `/v1/customer-map/network/${consultorId}`,
+      ];
+
+      const results: Record<string, unknown>[] = [];
+
+      for (const ep of endpoints) {
+        try {
+          const url = `${API_BASE.replace('/v1', '')}${ep}`;
+          console.log(`Trying: ${url}`);
+          const res = await fetch(url, { headers: authHeaders });
+          const status = res.status;
+          let body: unknown = null;
+          const text = await res.text();
+          try { body = JSON.parse(text); } catch { body = text.substring(0, 500); }
+          
+          const isSuccess = status >= 200 && status < 300;
+          console.log(`  → ${status} ${isSuccess ? '✅' : '❌'} ${typeof body === 'object' ? JSON.stringify(body).substring(0, 300) : String(body).substring(0, 300)}`);
+          
+          results.push({ endpoint: ep, status, success: isSuccess, preview: typeof body === 'object' ? JSON.stringify(body).substring(0, 500) : String(body).substring(0, 500) });
+          
+          if (isSuccess && typeof body === 'object' && body !== null) {
+            // Found a working endpoint! Log full structure
+            const full = JSON.stringify(body);
+            console.log(`  🎯 WORKING ENDPOINT: ${ep}`);
+            console.log(`  Keys: ${Array.isArray(body) ? `Array[${(body as unknown[]).length}] first keys: ${(body as unknown[]).length > 0 ? JSON.stringify(Object.keys((body as unknown[])[0] as Record<string,unknown>)) : 'empty'}` : JSON.stringify(Object.keys(body as Record<string,unknown>))}`);
+            console.log(`  Full response (first 2000 chars): ${full.substring(0, 2000)}`);
+          }
+        } catch (err) {
+          console.log(`  → ERROR: ${err}`);
+          results.push({ endpoint: ep, status: 0, success: false, error: String(err) });
+        }
+      }
+
+      return new Response(JSON.stringify({ mode: "explore_network", consultant_id_igreen: consultorId, results }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Step 3: Fetch ALL customer data (paginated)
