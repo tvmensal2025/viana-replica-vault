@@ -406,7 +406,7 @@ const Admin = () => {
         )}
 
         {userId && activeTab === "rede" && (
-          <NetworkPanel customers={customers} />
+          <NetworkPanel consultantId={userId} />
         )}
 
         {userId && activeTab === "whatsapp" && (
