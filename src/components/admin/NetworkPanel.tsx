@@ -1,172 +1,206 @@
-import { useMemo } from "react";
-import { Users, UserCheck, Clock, AlertTriangle, CheckCircle2, XCircle, FileText } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { Users, UserCheck, AlertTriangle, CheckCircle2, RefreshCw, Loader2, Search, TrendingUp } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useToast } from "@/components/ui/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
-interface Customer {
+interface NetworkMember {
   id: string;
+  igreen_id: number;
   name: string;
-  phone_whatsapp: string;
-  status: string;
-  registered_by_name?: string | null;
-  registered_by_igreen_id?: string | null;
-  andamento_igreen?: string | null;
-  data_cadastro?: string | null;
-  data_ativo?: string | null;
+  phone: string | null;
+  sponsor_id: number | null;
+  nivel: number;
+  data_ativo: string | null;
+  cidade: string | null;
+  uf: string | null;
+  clientes_ativos: number;
+  gp: number;
+  gi: number;
+  qtde_diretos: number;
+  total_pontos: number;
+  updated_at: string;
 }
 
 interface NetworkPanelProps {
-  customers: Customer[];
+  consultantId: string;
 }
 
-interface LicenciadoSummary {
-  name: string;
-  igreenId: string | null;
-  totalClients: number;
-  approved: number;
-  pending: number;
-  awaitingSignature: number;
-  devolutiva: number;
-  rejected: number;
-  lead: number;
-  lastRegister: string | null;
-}
+export function NetworkPanel({ consultantId }: NetworkPanelProps) {
+  const [members, setMembers] = useState<NetworkMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [search, setSearch] = useState("");
+  const { toast } = useToast();
 
-export function NetworkPanel({ customers }: NetworkPanelProps) {
-  const licenciados = useMemo(() => {
-    const map = new Map<string, LicenciadoSummary>();
-
-    for (const c of customers) {
-      const licName = c.registered_by_name || "Sem licenciado";
-      const key = licName.toLowerCase().trim();
-
-      if (!map.has(key)) {
-        map.set(key, {
-          name: licName,
-          igreenId: c.registered_by_igreen_id || null,
-          totalClients: 0,
-          approved: 0,
-          pending: 0,
-          awaitingSignature: 0,
-          devolutiva: 0,
-          rejected: 0,
-          lead: 0,
-          lastRegister: null,
-        });
-      }
-
-      const lic = map.get(key)!;
-      lic.totalClients++;
-
-      if (c.status === "approved") lic.approved++;
-      else if (c.status === "pending") lic.pending++;
-      else if (c.status === "awaiting_signature") lic.awaitingSignature++;
-      else if (c.status === "devolutiva") lic.devolutiva++;
-      else if (c.status === "rejected") lic.rejected++;
-      else if (c.status === "lead") lic.lead++;
-
-      if (!lic.igreenId && c.registered_by_igreen_id) {
-        lic.igreenId = c.registered_by_igreen_id;
-      }
-
-      if (c.data_cadastro && (!lic.lastRegister || c.data_cadastro > lic.lastRegister)) {
-        lic.lastRegister = c.data_cadastro;
-      }
+  const fetchMembers = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("network_members" as any)
+        .select("*")
+        .eq("consultant_id", consultantId)
+        .order("nivel", { ascending: true });
+      if (error) throw error;
+      setMembers((data as unknown as NetworkMember[]) || []);
+    } catch {
+      /* silently handle */
+    } finally {
+      setLoading(false);
     }
+  };
 
-    return Array.from(map.values()).sort((a, b) => b.totalClients - a.totalClients);
-  }, [customers]);
+  useEffect(() => { fetchMembers(); }, [consultantId]);
 
-  const totalClients = customers.length;
-  const totalLicenciados = licenciados.filter(l => l.name !== "Sem licenciado").length;
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      const { data: consultant } = await supabase
+        .from("consultants")
+        .select("igreen_portal_email, igreen_portal_password")
+        .eq("id", consultantId)
+        .maybeSingle();
+
+      const email = (consultant as any)?.igreen_portal_email;
+      const password = (consultant as any)?.igreen_portal_password;
+
+      if (!email || !password) {
+        toast({ title: "⚠️ Credenciais não configuradas", description: "Preencha email e senha do portal na aba Dados.", variant: "destructive" });
+        setSyncing(false);
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke("sync-igreen-customers", {
+        body: { mode: "sync_network", consultant_id: consultantId, portal_email: email, portal_password: password },
+      });
+
+      if (error) throw error;
+      if (data?.success) {
+        toast({ title: "✅ Rede sincronizada!", description: `${data.total_members} licenciados encontrados.` });
+        await fetchMembers();
+      } else {
+        toast({ title: "⚠️ Erro", description: data?.error || "Erro desconhecido", variant: "destructive" });
+      }
+    } catch (err) {
+      toast({ title: "Erro", description: err instanceof Error ? err.message : "Erro", variant: "destructive" });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return members;
+    const q = search.toLowerCase();
+    return members.filter(m =>
+      m.name.toLowerCase().includes(q) ||
+      String(m.igreen_id).includes(q) ||
+      (m.cidade || "").toLowerCase().includes(q) ||
+      (m.phone || "").includes(q)
+    );
+  }, [members, search]);
+
+  const totalClientes = members.reduce((sum, m) => sum + m.clientes_ativos, 0);
+  const totalGP = members.reduce((sum, m) => sum + m.gp, 0);
+  const totalGI = members.reduce((sum, m) => sum + m.gi, 0);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">
       {/* Summary Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <SummaryCard icon={Users} label="Licenciados" value={totalLicenciados} color="text-primary" />
-        <SummaryCard icon={UserCheck} label="Total Clientes" value={totalClients} color="text-green-500" />
-        <SummaryCard icon={CheckCircle2} label="Aprovados" value={customers.filter(c => c.status === "approved").length} color="text-emerald-500" />
-        <SummaryCard icon={AlertTriangle} label="Devolutivas" value={customers.filter(c => c.status === "devolutiva").length} color="text-red-400" />
+        <SummaryCard icon={Users} label="Licenciados" value={members.length} color="text-primary" />
+        <SummaryCard icon={UserCheck} label="Clientes Ativos" value={totalClientes} color="text-green-500" />
+        <SummaryCard icon={TrendingUp} label="GP Total" value={totalGP.toLocaleString("pt-BR")} color="text-blue-500" />
+        <SummaryCard icon={CheckCircle2} label="GI Total" value={totalGI.toLocaleString("pt-BR")} color="text-emerald-500" />
       </div>
 
-      {/* Licenciados Table */}
+      {/* Table */}
       <div className="rounded-2xl border border-border bg-card overflow-hidden">
-        <div className="p-4 border-b border-border/50 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center border border-primary/15">
-            <Users className="w-5 h-5 text-primary" />
+        <div className="p-4 border-b border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center border border-primary/15">
+              <Users className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <h3 className="font-bold text-foreground text-base">Mapa de Rede</h3>
+              <p className="text-xs text-muted-foreground">{members.length} licenciados na sua rede</p>
+            </div>
           </div>
-          <div>
-            <h3 className="font-bold text-foreground text-base">Rede de Licenciados</h3>
-            <p className="text-xs text-muted-foreground">{totalLicenciados} licenciados na sua rede</p>
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1 sm:flex-initial">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
+              <Input
+                placeholder="Buscar nome, ID, cidade..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="pl-9 h-9 rounded-xl bg-secondary/30 border-border/50 text-sm w-full sm:w-56"
+              />
+            </div>
+            <Button onClick={handleSync} size="sm" variant="outline" disabled={syncing} className="gap-1.5 rounded-xl font-semibold h-9 px-4 text-xs border-green-500/20 text-green-600 hover:bg-green-500/10">
+              {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+              {syncing ? "Sincronizando..." : "Sincronizar Rede"}
+            </Button>
           </div>
         </div>
 
-        {licenciados.length === 0 ? (
+        {members.length === 0 ? (
           <div className="text-center py-12">
             <Users className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
-            <p className="text-sm text-muted-foreground">Nenhum licenciado encontrado. Sincronize os clientes primeiro.</p>
+            <p className="text-sm text-muted-foreground mb-3">Nenhum licenciado encontrado.</p>
+            <Button onClick={handleSync} size="sm" disabled={syncing} className="gap-1.5 rounded-xl">
+              <RefreshCw className="w-3.5 h-3.5" /> Sincronizar agora
+            </Button>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-secondary/30 text-muted-foreground text-xs">
-                  <th className="text-left px-4 py-2.5 font-medium">Licenciado</th>
-                  <th className="text-center px-2 py-2.5 font-medium">Código</th>
-                  <th className="text-center px-2 py-2.5 font-medium">Total</th>
-                  <th className="text-center px-2 py-2.5 font-medium hidden sm:table-cell">
-                    <span className="flex items-center justify-center gap-1"><CheckCircle2 className="w-3 h-3 text-green-500" /> Aprov.</span>
-                  </th>
-                  <th className="text-center px-2 py-2.5 font-medium hidden sm:table-cell">
-                    <span className="flex items-center justify-center gap-1"><Clock className="w-3 h-3 text-yellow-500" /> Pend.</span>
-                  </th>
-                  <th className="text-center px-2 py-2.5 font-medium hidden sm:table-cell">
-                    <span className="flex items-center justify-center gap-1"><FileText className="w-3 h-3 text-orange-500" /> Assin.</span>
-                  </th>
-                  <th className="text-center px-2 py-2.5 font-medium hidden sm:table-cell">
-                    <span className="flex items-center justify-center gap-1"><AlertTriangle className="w-3 h-3 text-red-500" /> Dev.</span>
-                  </th>
-                  <th className="text-center px-2 py-2.5 font-medium hidden md:table-cell">
-                    <span className="flex items-center justify-center gap-1"><XCircle className="w-3 h-3 text-red-400" /> Rep.</span>
-                  </th>
-                  <th className="text-center px-2 py-2.5 font-medium hidden md:table-cell">Leads</th>
-                  <th className="text-right px-4 py-2.5 font-medium hidden lg:table-cell">Último Cadastro</th>
+                  <th className="text-center px-2 py-2.5 font-medium w-12">Nível</th>
+                  <th className="text-center px-2 py-2.5 font-medium w-16">ID</th>
+                  <th className="text-left px-3 py-2.5 font-medium">Nome</th>
+                  <th className="text-center px-2 py-2.5 font-medium hidden sm:table-cell">Patrocinador</th>
+                  <th className="text-center px-2 py-2.5 font-medium hidden md:table-cell">Celular</th>
+                  <th className="text-center px-2 py-2.5 font-medium hidden sm:table-cell">Cidade</th>
+                  <th className="text-center px-2 py-2.5 font-medium w-10 hidden sm:table-cell">UF</th>
+                  <th className="text-center px-2 py-2.5 font-medium">Cli. Ativos</th>
+                  <th className="text-center px-2 py-2.5 font-medium hidden lg:table-cell">GP</th>
+                  <th className="text-center px-2 py-2.5 font-medium hidden lg:table-cell">GI</th>
+                  <th className="text-center px-2 py-2.5 font-medium hidden lg:table-cell">Diretos</th>
+                  <th className="text-center px-2 py-2.5 font-medium hidden xl:table-cell">Pontos</th>
                 </tr>
               </thead>
               <tbody>
-                {licenciados.map((lic, i) => (
-                  <tr key={lic.name + i} className="border-t border-border/30 hover:bg-secondary/20 transition-colors">
-                    <td className="px-4 py-3">
-                      <span className="font-medium text-foreground">{lic.name}</span>
-                    </td>
-                    <td className="text-center px-2 py-3">
-                      <span className="text-xs text-muted-foreground font-mono">{lic.igreenId || "—"}</span>
-                    </td>
-                    <td className="text-center px-2 py-3">
-                      <span className="font-bold text-primary">{lic.totalClients}</span>
-                    </td>
-                    <td className="text-center px-2 py-3 hidden sm:table-cell">
-                      <StatusBadge count={lic.approved} color="bg-green-500/15 text-green-500" />
-                    </td>
-                    <td className="text-center px-2 py-3 hidden sm:table-cell">
-                      <StatusBadge count={lic.pending} color="bg-yellow-500/15 text-yellow-500" />
-                    </td>
-                    <td className="text-center px-2 py-3 hidden sm:table-cell">
-                      <StatusBadge count={lic.awaitingSignature} color="bg-orange-500/15 text-orange-500" />
-                    </td>
-                    <td className="text-center px-2 py-3 hidden sm:table-cell">
-                      <StatusBadge count={lic.devolutiva} color="bg-red-500/15 text-red-500" />
-                    </td>
-                    <td className="text-center px-2 py-3 hidden md:table-cell">
-                      <StatusBadge count={lic.rejected} color="bg-red-400/15 text-red-400" />
-                    </td>
-                    <td className="text-center px-2 py-3 hidden md:table-cell">
-                      <StatusBadge count={lic.lead} color="bg-blue-500/15 text-blue-500" />
-                    </td>
-                    <td className="text-right px-4 py-3 hidden lg:table-cell">
-                      <span className="text-xs text-muted-foreground">
-                        {lic.lastRegister ? formatDate(lic.lastRegister) : "—"}
+                {filtered.map((m, i) => (
+                  <tr key={m.id} className="border-t border-border/30 hover:bg-secondary/20 transition-colors">
+                    <td className="text-center px-2 py-2.5">
+                      <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
+                        m.nivel === 0 ? "bg-primary/20 text-primary" : "bg-secondary text-muted-foreground"
+                      }`}>
+                        {m.nivel}
                       </span>
                     </td>
+                    <td className="text-center px-2 py-2.5 font-mono text-xs text-muted-foreground">{m.igreen_id}</td>
+                    <td className="px-3 py-2.5 font-medium text-foreground">{m.name}</td>
+                    <td className="text-center px-2 py-2.5 font-mono text-xs text-muted-foreground hidden sm:table-cell">{m.sponsor_id || "—"}</td>
+                    <td className="text-center px-2 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{formatPhone(m.phone)}</td>
+                    <td className="text-center px-2 py-2.5 text-xs text-muted-foreground hidden sm:table-cell">{m.cidade || "—"}</td>
+                    <td className="text-center px-2 py-2.5 text-xs text-muted-foreground hidden sm:table-cell">{m.uf || "—"}</td>
+                    <td className="text-center px-2 py-2.5">
+                      <span className="font-bold text-green-500">{m.clientes_ativos}</span>
+                    </td>
+                    <td className="text-center px-2 py-2.5 text-xs hidden lg:table-cell">{m.gp.toLocaleString("pt-BR")}</td>
+                    <td className="text-center px-2 py-2.5 text-xs hidden lg:table-cell">{m.gi.toLocaleString("pt-BR")}</td>
+                    <td className="text-center px-2 py-2.5 text-xs hidden lg:table-cell">{m.qtde_diretos}</td>
+                    <td className="text-center px-2 py-2.5 text-xs hidden xl:table-cell">{m.total_pontos.toLocaleString("pt-BR")}</td>
                   </tr>
                 ))}
               </tbody>
@@ -178,7 +212,7 @@ export function NetworkPanel({ customers }: NetworkPanelProps) {
   );
 }
 
-function SummaryCard({ icon: Icon, label, value, color }: { icon: any; label: string; value: number; color: string }) {
+function SummaryCard({ icon: Icon, label, value, color }: { icon: any; label: string; value: number | string; color: string }) {
   return (
     <div className="rounded-xl border border-border bg-card p-3 sm:p-4">
       <div className="flex items-center gap-2 mb-1">
@@ -190,20 +224,10 @@ function SummaryCard({ icon: Icon, label, value, color }: { icon: any; label: st
   );
 }
 
-function StatusBadge({ count, color }: { count: number; color: string }) {
-  if (count === 0) return <span className="text-muted-foreground/40">0</span>;
-  return (
-    <span className={`inline-flex items-center justify-center min-w-[24px] px-1.5 py-0.5 rounded-md text-xs font-semibold ${color}`}>
-      {count}
-    </span>
-  );
-}
-
-function formatDate(dateStr: string) {
-  try {
-    const d = new Date(dateStr);
-    return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" });
-  } catch {
-    return dateStr;
-  }
+function formatPhone(phone: string | null) {
+  if (!phone || phone.length < 10) return "—";
+  const clean = phone.replace(/^55/, "");
+  if (clean.length === 11) return `(${clean.slice(0,2)}) ${clean.slice(2,7)}-${clean.slice(7)}`;
+  if (clean.length === 10) return `(${clean.slice(0,2)}) ${clean.slice(2,6)}-${clean.slice(6)}`;
+  return phone;
 }
