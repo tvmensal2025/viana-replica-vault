@@ -25,7 +25,15 @@ import {
   X,
   Zap,
   Search,
+  MoreVertical,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Textarea } from "@/components/ui/textarea";
 import { StageAutoMessageConfig } from "./StageAutoMessageConfig";
 import { AddLeadDialog } from "./AddLeadDialog";
 import { DropConfirmDialog } from "./DropConfirmDialog";
@@ -81,6 +89,9 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
   const [dragOverStageId, setDragOverStageId] = useState<string | null>(null);
   const [pendingDrop, setPendingDrop] = useState<{ dealId: string; stageKey: string; stageId: string; stageLabel: string } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [editingDeal, setEditingDeal] = useState<CrmDealRow | null>(null);
+  const [editForm, setEditForm] = useState({ phone: "", notes: "" });
+  const [deletingDealId, setDeletingDealId] = useState<string | null>(null);
   const { toast } = useToast();
 
   const fetchStages = useCallback(async () => {
@@ -234,6 +245,23 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
 
         if (result?.status === "sent") sentCount++;
         else if (result) failedCount++;
+      }
+
+      // Log to crm_auto_message_log so Histórico tab shows these messages
+      if (sentCount > 0) {
+        const firstMsg = messagesToSend[0];
+        const previewText = (firstMsg?.message_text || "")
+          .replace(/\{\{nome\}\}/g, displayName)
+          .replace(/\{\{telefone\}\}/g, phone);
+        await supabase.from("crm_auto_message_log").insert({
+          deal_id: deal.id,
+          consultant_id: consultantId,
+          stage_key: stage.stage_key,
+          remote_jid: deal.remote_jid,
+          customer_name: customerName || null,
+          message_preview: previewText ? previewText.slice(0, 200) : null,
+          status: failedCount > 0 ? "partial" : "sent",
+        });
       }
 
       if (failedCount > 0) {
@@ -474,6 +502,52 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
     toast({ title: "Ordem das colunas atualizada!" });
   };
 
+  // ── Deal Edit / Delete ──
+
+  const openEditDeal = (deal: CrmDealRow) => {
+    setEditForm({
+      phone: deal.remote_jid?.split("@")[0] || "",
+      notes: deal.notes || "",
+    });
+    setEditingDeal(deal);
+  };
+
+  const handleSaveEditDeal = async () => {
+    if (!editingDeal) return;
+    const newJid = editForm.phone.replace(/\D/g, "");
+    const { error } = await supabase
+      .from("crm_deals")
+      .update({
+        remote_jid: newJid ? `${newJid}@s.whatsapp.net` : editingDeal.remote_jid,
+        notes: editForm.notes || null,
+      })
+      .eq("id", editingDeal.id);
+    if (error) {
+      toast({ title: "Erro ao editar deal", variant: "destructive" });
+    } else {
+      setDeals((prev) =>
+        prev.map((d) =>
+          d.id === editingDeal.id
+            ? { ...d, remote_jid: newJid ? `${newJid}@s.whatsapp.net` : d.remote_jid, notes: editForm.notes || null }
+            : d
+        )
+      );
+      toast({ title: "Deal atualizado!" });
+    }
+    setEditingDeal(null);
+  };
+
+  const handleDeleteDeal = async (dealId: string) => {
+    const { error } = await supabase.from("crm_deals").delete().eq("id", dealId);
+    if (error) {
+      toast({ title: "Erro ao excluir deal", variant: "destructive" });
+    } else {
+      setDeals((prev) => prev.filter((d) => d.id !== dealId));
+      toast({ title: "Deal excluído!" });
+    }
+    setDeletingDealId(null);
+  };
+
   return (
     <div className="space-y-3">
       {/* Header */}
@@ -685,7 +759,7 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
                       key={deal.id}
                       draggable
                       onDragStart={() => handleDragStart(deal.id)}
-                      className="p-2.5 cursor-grab active:cursor-grabbing bg-card border-border hover:border-primary/30 transition-colors"
+                      className="p-2.5 cursor-grab active:cursor-grabbing bg-card border-border hover:border-primary/30 transition-colors group"
                     >
                       <div className="flex items-start gap-2">
                         <GripVertical className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
@@ -713,6 +787,32 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
                             </p>
                           )}
                         </div>
+                        {/* 3-dot menu */}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              className="h-6 w-6 flex items-center justify-center rounded hover:bg-secondary/80 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                              onClick={(e) => e.stopPropagation()}
+                              onMouseDown={(e) => e.stopPropagation()}
+                            >
+                              <MoreVertical className="h-3.5 w-3.5 text-muted-foreground" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-36">
+                            <DropdownMenuItem
+                              className="text-xs gap-2 cursor-pointer"
+                              onClick={(e) => { e.stopPropagation(); openEditDeal(deal); }}
+                            >
+                              <Pencil className="h-3 w-3" /> Editar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-xs gap-2 cursor-pointer text-destructive focus:text-destructive"
+                              onClick={(e) => { e.stopPropagation(); setDeletingDealId(deal.id); }}
+                            >
+                              <Trash2 className="h-3 w-3" /> Excluir
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </Card>
                   ))}
@@ -744,6 +844,72 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
           dealOrigin={(deals.find((d) => d.id === pendingDrop.dealId) as any)?.deal_origin}
         />
       )}
+
+      {/* Edit deal dialog */}
+      <Dialog open={!!editingDeal} onOpenChange={(o) => !o && setEditingDeal(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-sm flex items-center gap-2">
+              <Pencil className="h-4 w-4" /> Editar Deal
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <label className="text-[11px] font-medium text-foreground">Telefone</label>
+              <Input
+                value={editForm.phone}
+                onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))}
+                placeholder="5511999999999"
+                className="h-8 text-xs"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-medium text-foreground">Observações</label>
+              <Textarea
+                value={editForm.notes}
+                onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))}
+                placeholder="Notas sobre o lead..."
+                className="text-xs min-h-[80px] resize-none"
+              />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setEditingDeal(null)}>
+                Cancelar
+              </Button>
+              <Button size="sm" className="h-8 text-xs" onClick={handleSaveEditDeal}>
+                Salvar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete deal confirmation */}
+      <Dialog open={!!deletingDealId} onOpenChange={(o) => !o && setDeletingDealId(null)}>
+        <DialogContent className="max-w-xs">
+          <DialogHeader>
+            <DialogTitle className="text-sm flex items-center gap-2 text-destructive">
+              <Trash2 className="h-4 w-4" /> Excluir Deal
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground">
+            Tem certeza que deseja excluir este deal? Essa ação não pode ser desfeita.
+          </p>
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setDeletingDealId(null)}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => deletingDealId && handleDeleteDeal(deletingDealId)}
+            >
+              Excluir
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

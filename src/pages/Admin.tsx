@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import type { Database } from "@/integrations/supabase/types";
-import { LogOut, BarChart3, LinkIcon, Settings, Monitor, MessageSquare, LayoutGrid, Users, Copy, Download, X, History } from "lucide-react";
+import { LogOut, BarChart3, LinkIcon, Settings, Monitor, MessageSquare, LayoutGrid, Users, Copy, Download, X, History, Sparkles } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { WhatsAppTab } from "@/components/whatsapp/WhatsAppTab";
 import { WhatsAppErrorBoundary } from "@/components/whatsapp/WhatsAppErrorBoundary";
@@ -17,6 +17,9 @@ import { DashboardTab } from "@/components/admin/DashboardTab";
 import { DadosTab } from "@/components/admin/DadosTab";
 import { LinksTab } from "@/components/admin/LinksTab";
 import { PreviewTab } from "@/components/admin/PreviewTab";
+import { NotificationCenter } from "@/components/admin/NotificationCenter";
+import { useNotifications } from "@/hooks/useNotifications";
+import { AIChatPanel } from "@/components/admin/AIChatPanel";
 
 function buildPendingConsultantDefaults(uid: string, email?: string | null) {
   const rawBase = (email?.split("@")[0] || `consultor-${uid.slice(0, 8)}`)
@@ -52,6 +55,7 @@ const Admin = () => {
   const [pendingChatPhone, setPendingChatPhone] = useState<string | null>(null);
   const [pendingChatMessage, setPendingChatMessage] = useState<string | undefined>(undefined);
   const [qrModal, setQrModal] = useState<{ url: string; label: string } | null>(null);
+  const [aiChatOpen, setAiChatOpen] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [form, setForm] = useState({ ...DEFAULT_CONSULTANT_FORM });
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -72,6 +76,9 @@ const Admin = () => {
 
   // Customers state (shared between Clientes tab and WhatsAppTab)
   const [customers, setCustomers] = useState<any[]>([]);
+
+  // Notifications
+  const { notifications, unreadCount, markAllRead, markRead, clearAll } = useNotifications(userId);
 
   const fetchCustomers = React.useCallback(async () => {
     if (!userId) return;
@@ -305,10 +312,32 @@ const Admin = () => {
               <p className="text-xs text-muted-foreground">{form.name || "Bem-vindo"}</p>
             </div>
           </div>
-          <Button variant="ghost" size="sm" onClick={handleLogout} className="text-muted-foreground hover:text-foreground gap-2">
-            <LogOut className="w-4 h-4" />
-            <span className="hidden sm:inline">Sair</span>
-          </Button>
+          <div className="flex items-center gap-2">
+            {/* AI Chat button */}
+            <button
+              onClick={() => setAiChatOpen(true)}
+              className="relative p-2 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+              aria-label="Assistente iGreen IA"
+              title="Assistente iGreen IA"
+            >
+              <Sparkles className="h-5 w-5" />
+            </button>
+            <NotificationCenter
+              notifications={notifications}
+              unreadCount={unreadCount}
+              onMarkAllRead={markAllRead}
+              onMarkRead={markRead}
+              onClearAll={clearAll}
+              onAction={(n) => {
+                if (n.type === "new_lead" || n.type === "deal_moved") setActiveTab("crm");
+                else if (n.type === "devolutiva" || n.type === "status_change" || n.type === "new_customer") setActiveTab("clientes");
+              }}
+            />
+            <Button variant="ghost" size="sm" onClick={handleLogout} className="text-muted-foreground hover:text-foreground gap-2">
+              <LogOut className="w-4 h-4" />
+              <span className="hidden sm:inline">Sair</span>
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -426,6 +455,9 @@ const Admin = () => {
           </div>
         </div>
       )}
+
+      {/* AI Chat Panel */}
+      <AIChatPanel open={aiChatOpen} onClose={() => setAiChatOpen(false)} />
     </div>
   );
 };

@@ -59,15 +59,18 @@ const LicHeroSection = ({ cadastroUrl, whatsappUrl, consultantId }: LicHeroSecti
         <div className="absolute -bottom-60 -left-40 w-[600px] h-[600px] rounded-full opacity-[0.05]" style={{ background: 'radial-gradient(circle, hsl(130, 100%, 36%), transparent 70%)' }} />
       </div>
 
-      <div className="section-container text-center py-6 md:py-12 relative z-10">
-        <div className="badge-green mx-auto mb-4 animate-fade-in">
-          <span className="glow-dot" />
-          Oportunidade exclusiva
+      <div className="section-container text-center py-4 sm:py-6 md:py-12 relative z-10">
+        {/* Badge + Logo compact on mobile */}
+        <div className="flex items-center justify-center gap-3 mb-2 md:mb-4 md:flex-col md:gap-0">
+          <div className="badge-green animate-fade-in md:mb-4 !py-1 !px-3 md:!py-2 md:!px-4">
+            <span className="glow-dot" />
+            <span className="text-[10px] md:text-xs">Oportunidade exclusiva</span>
+          </div>
+          <img src="/images/logo-colorida-igreen.png" alt="iGreen Energy Logo" className="w-20 md:w-56 animate-fade-in" />
         </div>
 
-        <img src="/images/logo-colorida-igreen.png" alt="iGreen Energy Logo" className="mx-auto mb-4 w-36 md:w-56 animate-fade-in" />
-
-        <h1 className="font-heading font-black mb-3 text-2xl md:text-4xl lg:text-[3.2rem] leading-[1.15] max-w-5xl mx-auto text-foreground">
+        {/* Title - compact on mobile */}
+        <h1 className="font-heading font-black mb-2 md:mb-3 text-lg sm:text-2xl md:text-4xl lg:text-[3.2rem] leading-[1.15] max-w-5xl mx-auto text-foreground px-2">
           Seja um Licenciado iGreen Energy e receba{" "}
           <span className="relative inline-block" style={{ color: 'hsl(var(--primary))' }}>
             comissões recorrentes e vitalícias
@@ -76,40 +79,43 @@ const LicHeroSection = ({ cadastroUrl, whatsappUrl, consultantId }: LicHeroSecti
           todos os meses
         </h1>
 
-        <p className="text-foreground/70 text-base md:text-xl max-w-3xl mx-auto mb-4 leading-relaxed">
+        {/* Subtitle - hidden on mobile to save space */}
+        <p className="hidden sm:block text-foreground/70 text-base md:text-xl max-w-3xl mx-auto mb-4 leading-relaxed">
           O mercado de energia solar está explodindo no Brasil. Quem está aproveitando agora já está faturando — <strong className="text-foreground">esse é o seu momento.</strong>
         </p>
 
-        <div className="max-w-4xl mx-auto mb-4 rounded-2xl overflow-hidden relative" style={{ boxShadow: 'var(--shadow-green-lg)' }}>
-          <div className="absolute inset-0 rounded-2xl border border-primary/20 z-10 pointer-events-none" />
-          <video controls className="w-full aspect-video relative z-0">
+        {/* Video - priority on mobile */}
+        <div className="max-w-4xl mx-auto mb-3 md:mb-4 rounded-xl md:rounded-2xl overflow-hidden relative" style={{ boxShadow: 'var(--shadow-green-lg)' }}>
+          <div className="absolute inset-0 rounded-xl md:rounded-2xl border border-primary/20 z-10 pointer-events-none" />
+          <video controls playsInline className="w-full aspect-video relative z-0">
             <source src="https://igreen-minio.b099mi.easypanel.host/igreen/Licenciado_iGreen_Energy.mp4" type="video/mp4" />
           </video>
         </div>
 
+        {/* CTA */}
         <a
           href={WHATSAPP}
           target="_blank"
           rel="noopener noreferrer"
-          className="btn-cta-lg animate-pulse-green"
+          className="btn-cta-lg animate-pulse-green !py-2.5 sm:!py-3 !px-5 sm:!px-8 !text-sm sm:!text-base inline-block"
           onClick={() => handleClick("whatsapp")}
         >
           🚀 Quero ser Licenciado
         </a>
 
         {/* Social proof stats */}
-        <div className="grid grid-cols-3 gap-6 md:gap-12 max-w-3xl mx-auto mt-8 pt-6 border-t border-border">
+        <div className="grid grid-cols-3 gap-4 md:gap-12 max-w-3xl mx-auto mt-6 md:mt-8 pt-4 md:pt-6 border-t border-border">
           <div>
             <AnimatedCounter target={600} suffix="mil+" />
-            <p className="stat-label text-xs md:text-sm mt-2 text-muted-foreground uppercase tracking-wider font-heading">Clientes ativos</p>
+            <p className="stat-label text-[10px] md:text-sm mt-1 md:mt-2 text-muted-foreground uppercase tracking-wider font-heading">Clientes ativos</p>
           </div>
           <div>
             <AnimatedCounter target={500} suffix="+" />
-            <p className="stat-label text-xs md:text-sm mt-2 text-muted-foreground uppercase tracking-wider font-heading">Usinas solares</p>
+            <p className="stat-label text-[10px] md:text-sm mt-1 md:mt-2 text-muted-foreground uppercase tracking-wider font-heading">Usinas solares</p>
           </div>
           <div>
             <AnimatedCounter target={27} />
-            <p className="stat-label text-xs md:text-sm mt-2 text-muted-foreground uppercase tracking-wider font-heading">Estados</p>
+            <p className="stat-label text-[10px] md:text-sm mt-1 md:mt-2 text-muted-foreground uppercase tracking-wider font-heading">Estados</p>
           </div>
         </div>
       </div>
