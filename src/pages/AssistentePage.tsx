@@ -167,6 +167,18 @@ export default function AssistentePage() {
                             </video>
                           );
                         }
+                        const ytMatch = href?.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/);
+                        if (ytMatch) {
+                          return (
+                            <iframe
+                              src={`https://www.youtube.com/embed/${ytMatch[1]}`}
+                              title={typeof children === 'string' ? children : 'YouTube video'}
+                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                              allowFullScreen
+                              className="rounded-lg w-full aspect-video mt-2 mb-1"
+                            />
+                          );
+                        }
                         return (
                           <a href={href} target="_blank" rel="noopener noreferrer" className="text-emerald-400 underline">
                             {children}
