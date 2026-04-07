@@ -11,11 +11,32 @@ interface UploadedDoc {
   date: string;
 }
 
+async function extractTextFromPDF(file: File): Promise<string> {
+  const pdfjsLib = await import("pdfjs-dist");
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const textParts: string[] = [];
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const pageText = content.items
+      .map((item: any) => item.str)
+      .join(" ");
+    if (pageText.trim()) textParts.push(`[Página ${i}]\n${pageText}`);
+  }
+
+  return textParts.join("\n\n");
+}
+
 export function AIKnowledgePanel() {
   const [extraKnowledge, setExtraKnowledge] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState("");
   const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -67,28 +88,32 @@ export function AIKnowledgePanel() {
       }
 
       try {
-        // Read file as text and send to AI to extract/summarize
-        const formData = new FormData();
-        formData.append("file", file);
+        setUploadProgress(`Lendo ${file.name}...`);
 
-        const response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/extract-pdf-text`,
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            },
-            body: formData,
-          }
-        );
+        // Step 1: Extract text client-side with pdf.js
+        const rawText = await extractTextFromPDF(file);
 
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data?.error || `Erro ${response.status}`);
+        if (rawText.length < 30) {
+          toast({
+            title: `⚠️ ${file.name}`,
+            description: "PDF parece ser uma imagem escaneada. Copie o conteúdo manualmente.",
+            variant: "destructive",
+          });
+          continue;
         }
 
-        const organizedText = data?.text || "";
+        setUploadProgress(`Organizando ${file.name} com IA...`);
+
+        // Step 2: Send text to AI to organize
+        const { data: aiData, error: aiError } = await supabase.functions.invoke("igreen-chat", {
+          body: {
+            message: `Organize o seguinte conteúdo extraído de um PDF chamado "${file.name}" em formato limpo e estruturado para servir como base de conhecimento. Mantenha TODAS as informações importantes (valores, datas, regras, comissões, produtos, percentuais, tabelas, etc). Remova apenas lixo de formatação (cabeçalhos repetidos, números de página). Responda APENAS com o conteúdo organizado, sem explicações:\n\n${rawText.substring(0, 20000)}`,
+          },
+        });
+
+        if (aiError) throw aiError;
+
+        const organizedText = aiData?.reply || rawText;
 
         newDocs.push({
           name: file.name,
@@ -96,7 +121,7 @@ export function AIKnowledgePanel() {
           date: new Date().toISOString(),
         });
 
-        toast({ title: `✅ ${file.name} processado!`, description: `${organizedText.length} caracteres extraídos e organizados.` });
+        toast({ title: `✅ ${file.name} processado!`, description: `${organizedText.length.toLocaleString("pt-BR")} caracteres extraídos.` });
       } catch (err: any) {
         console.error("PDF upload error:", err);
         toast({ title: `Erro em ${file.name}`, description: err.message || "Falha ao processar", variant: "destructive" });
@@ -107,14 +132,14 @@ export function AIKnowledgePanel() {
       const allDocs = [...uploadedDocs, ...newDocs];
       setUploadedDocs(allDocs);
 
-      // Save docs list
       await supabase.from("settings").upsert(
         { key: "ai_knowledge_docs", value: JSON.stringify(allDocs) } as any,
         { onConflict: "key" }
       );
 
-      // Append all doc contents to extra knowledge
-      const docsText = newDocs.map(d => `\n\n--- DOCUMENTO: ${d.name} (${new Date(d.date).toLocaleDateString("pt-BR")}) ---\n${d.text}`).join("");
+      const docsText = newDocs.map(d =>
+        `\n\n--- DOCUMENTO: ${d.name} (${new Date(d.date).toLocaleDateString("pt-BR")}) ---\n${d.text}`
+      ).join("");
       const updatedKnowledge = extraKnowledge + docsText;
       setExtraKnowledge(updatedKnowledge);
 
@@ -127,6 +152,7 @@ export function AIKnowledgePanel() {
     }
 
     setUploading(false);
+    setUploadProgress("");
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -135,7 +161,6 @@ export function AIKnowledgePanel() {
     const newDocs = uploadedDocs.filter((_, i) => i !== index);
     setUploadedDocs(newDocs);
 
-    // Remove doc content from knowledge
     const marker = `--- DOCUMENTO: ${doc.name}`;
     const lines = extraKnowledge.split("\n");
     const filteredLines: string[] = [];
@@ -202,8 +227,8 @@ export function AIKnowledgePanel() {
           <p className="text-sm font-semibold text-foreground">Upload de PDFs — A IA lê e aprende automaticamente</p>
         </div>
         <p className="text-xs text-muted-foreground">
-          Envie PDFs com tabelas de comissão, scripts de venda, regulamentos, treinamentos, etc. 
-          A IA extrai o conteúdo, organiza e integra ao seu conhecimento. Os documentos mais recentes têm prioridade.
+          Envie PDFs com tabelas de comissão, scripts de venda, regulamentos, treinamentos, etc.
+          O sistema extrai o texto, a IA organiza e integra ao conhecimento. Documentos mais recentes têm prioridade.
         </p>
 
         <div className="flex gap-3 items-center">
@@ -222,9 +247,9 @@ export function AIKnowledgePanel() {
             className="gap-2 border-primary/40 hover:bg-primary/10"
           >
             {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-            {uploading ? "Processando PDF..." : "Enviar PDF(s)"}
+            {uploading ? uploadProgress || "Processando..." : "Enviar PDF(s)"}
           </Button>
-          <span className="text-xs text-muted-foreground">Aceita múltiplos PDFs de uma vez</span>
+          {!uploading && <span className="text-xs text-muted-foreground">Aceita múltiplos PDFs de uma vez</span>}
         </div>
 
         {/* Uploaded docs list */}
@@ -285,14 +310,9 @@ export function AIKnowledgePanel() {
 Exemplo:
 PROMOÇÕES ATIVAS:
 - Até 30/07/2025: Bônus de R$500 para quem cadastrar 10 clientes no mês
-- Novo plano Telecom: 50GB por R$49,90
 
 EVENTOS:
-- Grand Show dia 20/08 em Uberlândia, MG
-- Live Connect toda segunda às 20h
-
-ATUALIZAÇÕES:
-- Conexão Green agora aceita clientes com mínimo de 100 kWh em MG`}
+- Grand Show dia 20/08 em Uberlândia, MG`}
             className="min-h-[300px] font-mono text-sm"
           />
           <div className="flex items-center justify-between">
