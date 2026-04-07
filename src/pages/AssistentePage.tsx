@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Send, Bot, User, Loader2, Leaf } from "lucide-react";
+import { Send, User, Loader2, Leaf } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 
 interface ChatMessage {
   role: "user" | "assistant";
