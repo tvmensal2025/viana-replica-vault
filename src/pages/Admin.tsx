@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import type { Database } from "@/integrations/supabase/types";
-import { LogOut, BarChart3, LinkIcon, Settings, Monitor, MessageSquare, LayoutGrid, Users, Copy, Download, X, History, Sparkles } from "lucide-react";
+import { LogOut, BarChart3, LinkIcon, Settings, Monitor, MessageSquare, LayoutGrid, Users, Copy, Download, X, History, Sparkles, FolderDown } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { WhatsAppTab } from "@/components/whatsapp/WhatsAppTab";
 import { WhatsAppErrorBoundary } from "@/components/whatsapp/WhatsAppErrorBoundary";
@@ -20,6 +20,7 @@ import { PreviewTab } from "@/components/admin/PreviewTab";
 import { NotificationCenter } from "@/components/admin/NotificationCenter";
 import { useNotifications } from "@/hooks/useNotifications";
 import { AIChatPanel } from "@/components/admin/AIChatPanel";
+import { MaterialsTab } from "@/components/admin/MaterialsTab";
 
 function buildPendingConsultantDefaults(uid: string, email?: string | null) {
   const rawBase = (email?.split("@")[0] || `consultor-${uid.slice(0, 8)}`)
@@ -51,7 +52,7 @@ const Admin = () => {
   const [loading, setLoading] = useState(true);
   const [approved, setApproved] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<"dashboard" | "dados" | "links" | "preview" | "whatsapp" | "crm" | "clientes" | "historico">("dashboard");
+  const [activeTab, setActiveTab] = useState<"materiais" | "dashboard" | "dados" | "links" | "preview" | "whatsapp" | "crm" | "clientes" | "historico">("materiais");
   const [pendingChatPhone, setPendingChatPhone] = useState<string | null>(null);
   const [pendingChatMessage, setPendingChatMessage] = useState<string | undefined>(undefined);
   const [qrModal, setQrModal] = useState<{ url: string; label: string } | null>(null);
@@ -266,6 +267,7 @@ const Admin = () => {
   const slug = form.license || "sua-licenca";
 
   const tabs = [
+    { id: "materiais" as const, label: "Materiais", icon: FolderDown },
     { id: "dashboard" as const, label: "Dashboard", icon: BarChart3 },
     { id: "preview" as const, label: "Preview", icon: Monitor },
     { id: "crm" as const, label: "CRM", icon: LayoutGrid },
