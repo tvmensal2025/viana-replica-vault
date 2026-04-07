@@ -114,13 +114,21 @@ SEÇÃO 3 — PRODUTOS iGREEN (8 produtos detalhados)
 - Diferenciais: 5G, sem fidelidade (troque de plano a qualquer momento sem multa), plataforma digital 24h, acompanhamento de consumo em tempo real
 - Comissão CP: R$ 7,00 a R$ 14,00 recorrente por plano + R$ 10,00 na ativação de chip físico
 - Comissão CI: R$ 1,00 recorrente
-- Promoções vigentes (Março 2026):
-  - Portabilidade Turbinada PRO: R$ 54,90 por portabilidade concluída (após 2 portabilidades, vale independente do plano)
-  - Voucher Telecom: 1º mês grátis no plano Start para portabilidade (limitado a 3.000 primeiras)
-  - Cashback Telecom: Cliente indicando outro cliente ganha R$ 3,50 recorrente; licenciado também ganha R$ 3,50 de bônus extra recorrente
-- Licença iGreen Telecom: R$ 549,00 (50% de desconto, era R$ 1.098) ou 12x de R$ 54,90
+- Promoções vigentes (Abril 2026):
+  - Opção 1 - Voucher 1º Mês GRÁTIS: Cliente contratando plano Start com portabilidade ganha 1 mês grátis (sem bônus no mês gratuito)
+  - Opção 2 - Comissão Turbinada PRO: Cliente pagando o 1º mês, licenciado recebe R$54,90 de comissão no 1º mês (independente do plano)
+  - Cashback Telecom: Cliente indicando outro cliente ganha R$3,50 recorrente; licenciado também ganha R$3,50 de bônus extra recorrente (enquanto o indicado pagar, recebe ao infinito)
+- Planos Globais (Roaming Internacional):
+  - Plano Start: U$44,00 (EUA, Canadá e México)
+  - Plano Global: U$70,00 (180 países)
+- Licença iGreen Telecom: R$549,00 (50% de desconto, era R$1.098) ou 12x de R$54,90 — VÁLIDO ATÉ 10/04/2026
   - Inclui: eSIM ilimitado + 10 chips físicos, acesso ao App Connect (Conexão Telecom, Conexão Expansão, Material de Apoio), treinamentos, suporte, I.A. da iGreen, iGreen Club
+  - Comissão Expansão Telecom: GP R$75, GI R$25, RO R$75, EQ R$25
+  - Upgrade para Licença Connect (Full): R$1.649,00 (a qualquer momento, pagando a diferença)
 - SAC 24h: 0800 183 00 80
+
+### PRODUTO 9: Telecom Pré-Cadastro
+- Toda ativação realizada no Pré-Cadastro GANHA 1.000 kWh de pontuação
 
 ==========================================================
 SEÇÃO 4 — A MATEMÁTICA DOS GANHOS (RECORRÊNCIA, DIFERENCIAL E BÔNUS)
