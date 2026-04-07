@@ -8,6 +8,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 const ConsultantPage = lazy(() => import("./pages/ConsultantPage"));
 const LicenciadaPage = lazy(() => import("./pages/LicenciadaPage"));
 const LicenciadaPreview = lazy(() => import("./pages/LicenciadaPreview"));
+const AssistentePage = lazy(() => import("./pages/AssistentePage"));
 const Auth = lazy(() => import("./pages/Auth"));
 const Admin = lazy(() => import("./pages/Admin"));
 const SuperAdmin = lazy(() => import("./pages/SuperAdmin"));
