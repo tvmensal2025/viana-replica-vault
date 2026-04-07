@@ -52,7 +52,7 @@ const Admin = () => {
   const [loading, setLoading] = useState(true);
   const [approved, setApproved] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<"materiais" | "dashboard" | "dados" | "links" | "preview" | "whatsapp" | "crm" | "clientes" | "historico">("materiais");
+  const [activeTab, setActiveTab] = useState<"materiais" | "dashboard" | "dados" | "links" | "preview" | "whatsapp" | "crm" | "clientes" | "historico">("dashboard");
   const [pendingChatPhone, setPendingChatPhone] = useState<string | null>(null);
   const [pendingChatMessage, setPendingChatMessage] = useState<string | undefined>(undefined);
   const [qrModal, setQrModal] = useState<{ url: string; label: string } | null>(null);
@@ -267,7 +267,6 @@ const Admin = () => {
   const slug = form.license || "sua-licenca";
 
   const tabs = [
-    { id: "materiais" as const, label: "Materiais", icon: FolderDown },
     { id: "dashboard" as const, label: "Dashboard", icon: BarChart3 },
     { id: "preview" as const, label: "Preview", icon: Monitor },
     { id: "crm" as const, label: "CRM", icon: LayoutGrid },
@@ -276,6 +275,7 @@ const Admin = () => {
     { id: "historico" as const, label: "Histórico", icon: History },
     { id: "links" as const, label: "Links", icon: LinkIcon },
     { id: "dados" as const, label: "Dados", icon: Settings },
+    { id: "materiais" as const, label: "Materiais", icon: FolderDown },
   ];
 
   if (loading) {
