@@ -46,9 +46,13 @@ SEÇÃO 3 — PRODUTOS iGREEN (8 produtos detalhados)
 - Desconto: Redução garantida sobre a Tarifa de Energia (TE), de 8% a 20%
 - Público: Residências, comércios e propriedades rurais de baixa tensão (Grupo B)
 - Sem taxa de adesão, sem mensalidade, 100% online e gratuito
-- Dinâmica de Pagamento:
-  - Boleto Distribuidora: Taxas fixas (iluminação, impostos, disponibilidade)
-  - Boleto iGreen: Energia consumida com o desconto aplicado
+- Dinâmica de Pagamento (varia por distribuidora):
+  - **Distribuidoras com BOLETO ÚNICO** (1 boleto só): O cliente recebe apenas UM boleto da distribuidora já com o desconto aplicado. Exemplos: CEMIG, Energisa, Equatorial, entre outras.
+  - **Distribuidoras com 2 BOLETOS**: O cliente recebe DOIS boletos separados:
+    1. Boleto da Distribuidora: Taxas fixas (iluminação pública, impostos, disponibilidade)
+    2. Boleto da iGreen: Energia consumida com o desconto aplicado
+    Exemplos: CPFL, Elektro, EDP, entre outras.
+  - IMPORTANTE: Sempre informar ao cliente qual modelo se aplica à distribuidora da região dele.
 - Diferenciais: Cashback sustentável por indicações e acesso ao iGreen Club
 - Comissão CP (Conexão Própria):
   - 4% recorrente: MG (CEMIG), MG (Energisa), RJ (Enel), RJ (Energisa), SP (Elektro, Energisa, EDP, CPFL), GO (Equatorial), MT, MS, AL, CE, PE, RN, PI, PB, MA, BA, PA, RS (RGE), PR, SC, TO
