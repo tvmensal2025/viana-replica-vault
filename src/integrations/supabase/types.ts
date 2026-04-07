@@ -891,6 +891,15 @@ export type Database = {
       }
     }
     Functions: {
+      get_coverage_summary: {
+        Args: never
+        Returns: {
+          cidades: string
+          distribuidora: string
+          total_clientes: number
+          uf: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
