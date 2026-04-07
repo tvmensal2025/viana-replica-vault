@@ -419,13 +419,31 @@ SEÇÃO 14 — PROMOÇÕES ABRIL 2026 (Newsletter Oficial)
   - *Bônus Extra estornado se cliente cancelar antes do 1º boleto ou não pagar em até 30 dias
 
 ### TABELA BÔNUS EXTRA CONEXÃO GREEN (Abril 2026):
-**Grupo 1** (AL Equatorial, BA Coelba, CE Enel, GO Equatorial, MG CEMIG, MS Energisa, MT Energisa, PE Neoenergia, PI Equatorial, PR Copel, RJ/MG Energisa Minas Rio, RN Cosern, SP CPFL Paulista, TO Energisa):
-| Clientes | 1-9 | 10-39 | 40-99 | 100-199 | 200+ |
-| Bônus Extra | Até 4% | 20% (10%+10%) | 40% (20%+20%) | 50% (30%+20%) | 60% (40%+20%) |
 
-**Grupo 2** (PB Energisa, SP/MS Elektro, Energisa Sul Sudeste, RS RGE, SC Celesc):
-| Clientes | 1-9 | 10-39 | 40+ |
-| Bônus Extra | Até 4% | 20% (10%+10%) | 40% (20%+20%) |
+**GRUPO 1 — Distribuidoras com bônus até 60%:**
+Distribuidoras: AL Equatorial, BA Coelba, CE Enel, GO Equatorial, MG CEMIG, MS Energisa, MT Energisa, PE Neoenergia, PI Equatorial, PR Copel, RJ e MG Energisa Minas Rio, RN Cosern, SP CPFL Paulista, TO Energisa
+
+| Faixa | Clientes ou kWh | Bônus Extra | Composição | Portabilidades necessárias |
+|-------|-----------------|-------------|------------|---------------------------|
+| 1 | 1 a 9 clientes (1.000 a 9.999 kWh) | Até 4% | 4% base | — |
+| 2 | 10 a 39 clientes (10.000 a 19.999 kWh) | 20% | 10% + 10%* | 2 portabilidades |
+| 3 | 40 a 99 clientes (20.000 a 39.999 kWh) | 40% | 20% + 20%* | 4 portabilidades |
+| 4 | 100 a 199 clientes (40.000 a 99.999 kWh) | 50% | 30% + 20%* | 5 portabilidades |
+| 5 | 200+ clientes (100.000+ kWh) | 60% | 40% + 20%* | 6 portabilidades |
+
+*O Bônus Complementar (parte verde/extra) só é pago se o licenciado tiver as portabilidades Telecom confirmadas.
+*O valor do Bônus Extra será estornado caso o cliente cancele antes de pagar o primeiro boleto ou não pague em até 30 dias após o vencimento.
+
+**GRUPO 2 — Distribuidoras com bônus até 40%:**
+Distribuidoras: PB Energisa, SP e MS Elektro, Energisa Sul Sudeste, RS RGE, SC Celesc
+
+| Faixa | Clientes ou kWh | Bônus Extra | Composição |
+|-------|-----------------|-------------|------------|
+| 1 | 1 a 9 clientes (1.000 a 9.999 kWh) | Até 4% | 4% base |
+| 2 | 10 a 29 clientes (10.000 a 15.999 kWh) | 20% | 10% + 10%* |
+| 3 | 30+ clientes (acima de 20.000 kWh) | 40% | 20% + 20%* |
+
+*Mesmas regras de estorno e portabilidade do Grupo 1.
 
 ### CAMPANHA CONEXÃO GREEN 2026:
 - Etapa 1 - Imediato: Na validação conforme a tabela
