@@ -43,7 +43,7 @@ SEÇÃO 3 — PRODUTOS iGREEN (8 produtos detalhados)
 ### PRODUTO 1: Conexão Green (Geração Distribuída - Grupo B / Baixa Tensão)
 - Créditos de energia de fazendas solares injetados na conta do cliente
 - Regra: Zero investimento, zero obras, sem fidelidade
-- Desconto: Redução garantida sobre a Tarifa de Energia (TE), até 15%
+- Desconto: Redução garantida sobre a Tarifa de Energia (TE), de 8% a 20%
 - Público: Residências, comércios e propriedades rurais de baixa tensão (Grupo B)
 - Sem taxa de adesão, sem mensalidade, 100% online e gratuito
 - Dinâmica de Pagamento:
