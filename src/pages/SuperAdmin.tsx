@@ -9,8 +9,9 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  Shield, Users, CheckCircle, XCircle, LogOut, Loader2, UserCheck, UserX, BarChart3, KeyRound,
+  Shield, Users, CheckCircle, XCircle, LogOut, Loader2, UserCheck, UserX, BarChart3, KeyRound, Brain,
 } from "lucide-react";
+import { AIKnowledgePanel } from "@/components/superadmin/AIKnowledgePanel";
 
 interface ConsultantRow {
   id: string;
@@ -28,6 +29,7 @@ const SuperAdmin = () => {
   const [loadingData, setLoadingData] = useState(true);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [resettingId, setResettingId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"consultores" | "ia">("consultores");
   const accessDeniedToastShownRef = useRef(false);
   const { isAdmin, loading: roleLoading } = useUserRole(userId);
   const navigate = useNavigate();
@@ -41,7 +43,6 @@ const SuperAdmin = () => {
         navigate("/auth", { replace: true });
         return;
       }
-
       setUserId(session.user.id);
       setAuthLoading(false);
     });
@@ -53,7 +54,6 @@ const SuperAdmin = () => {
         navigate("/auth", { replace: true });
         return;
       }
-
       setUserId(session.user.id);
       setAuthLoading(false);
     });
@@ -113,7 +113,6 @@ const SuperAdmin = () => {
   const handleResetPassword = async (consultantId: string, consultantName: string) => {
     setResettingId(consultantId);
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
       const { data, error } = await supabase.functions.invoke("admin-reset-password", {
         body: {
           consultant_id: consultantId,
@@ -155,6 +154,11 @@ const SuperAdmin = () => {
   const approvedCount = consultants.filter(c => c.approved).length;
   const pendingCount = consultants.filter(c => !c.approved).length;
 
+  const tabs = [
+    { id: "consultores" as const, label: "Consultores", icon: Users },
+    { id: "ia" as const, label: "IA / Conhecimento", icon: Brain },
+  ];
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -164,7 +168,7 @@ const SuperAdmin = () => {
             <Shield className="w-6 h-6 text-primary" />
             <div>
               <h1 className="text-base font-bold font-heading text-foreground leading-tight">Super Admin</h1>
-              <p className="text-xs text-muted-foreground">Gerenciamento de acessos</p>
+              <p className="text-xs text-muted-foreground">Gerenciamento da plataforma</p>
             </div>
           </div>
           <Button variant="ghost" size="sm" onClick={handleLogout} className="text-muted-foreground hover:text-foreground gap-2">
@@ -174,119 +178,146 @@ const SuperAdmin = () => {
         </div>
       </header>
 
+      {/* Tab Navigation */}
+      <nav className="border-b border-border bg-card/50">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="flex">
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center gap-2 px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-all ${
+                    isActive ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
+                  }`}>
+                  <Icon className="w-4 h-4" />
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </nav>
+
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-        {/* Stats */}
-        <div className="grid grid-cols-3 gap-4">
-          <div className="rounded-xl border border-border bg-card p-4 flex items-center gap-3">
-            <Users className="w-8 h-8 text-primary" />
-            <div>
-              <p className="text-2xl font-bold text-foreground">{consultants.length}</p>
-              <p className="text-xs text-muted-foreground">Total Consultores</p>
+        {activeTab === "consultores" && (
+          <>
+            {/* Stats */}
+            <div className="grid grid-cols-3 gap-4">
+              <div className="rounded-xl border border-border bg-card p-4 flex items-center gap-3">
+                <Users className="w-8 h-8 text-primary" />
+                <div>
+                  <p className="text-2xl font-bold text-foreground">{consultants.length}</p>
+                  <p className="text-xs text-muted-foreground">Total Consultores</p>
+                </div>
+              </div>
+              <div className="rounded-xl border border-border bg-card p-4 flex items-center gap-3">
+                <CheckCircle className="w-8 h-8 text-green-500" />
+                <div>
+                  <p className="text-2xl font-bold text-foreground">{approvedCount}</p>
+                  <p className="text-xs text-muted-foreground">Aprovados</p>
+                </div>
+              </div>
+              <div className="rounded-xl border border-border bg-card p-4 flex items-center gap-3">
+                <XCircle className="w-8 h-8 text-orange-500" />
+                <div>
+                  <p className="text-2xl font-bold text-foreground">{pendingCount}</p>
+                  <p className="text-xs text-muted-foreground">Pendentes</p>
+                </div>
+              </div>
             </div>
-          </div>
-          <div className="rounded-xl border border-border bg-card p-4 flex items-center gap-3">
-            <CheckCircle className="w-8 h-8 text-green-500" />
-            <div>
-              <p className="text-2xl font-bold text-foreground">{approvedCount}</p>
-              <p className="text-xs text-muted-foreground">Aprovados</p>
-            </div>
-          </div>
-          <div className="rounded-xl border border-border bg-card p-4 flex items-center gap-3">
-            <XCircle className="w-8 h-8 text-orange-500" />
-            <div>
-              <p className="text-2xl font-bold text-foreground">{pendingCount}</p>
-              <p className="text-xs text-muted-foreground">Pendentes</p>
-            </div>
-          </div>
-        </div>
 
-        {/* Consultants Table */}
-        <div className="rounded-xl border border-border bg-card overflow-hidden">
-          <div className="p-4 border-b border-border">
-            <h2 className="font-heading font-bold text-foreground flex items-center gap-2">
-              <BarChart3 className="w-4 h-4 text-primary" />
-              Consultores Cadastrados
-            </h2>
-          </div>
+            {/* Consultants Table */}
+            <div className="rounded-xl border border-border bg-card overflow-hidden">
+              <div className="p-4 border-b border-border">
+                <h2 className="font-heading font-bold text-foreground flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-primary" />
+                  Consultores Cadastrados
+                </h2>
+              </div>
 
-          {loadingData ? (
-            <div className="p-8 flex justify-center">
-              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              {loadingData ? (
+                <div className="p-8 flex justify-center">
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nome</TableHead>
+                      <TableHead>Licença</TableHead>
+                      <TableHead>Telefone</TableHead>
+                      <TableHead>Cadastro</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {consultants.map((c) => (
+                      <TableRow key={c.id}>
+                        <TableCell className="font-medium">{c.name}</TableCell>
+                        <TableCell className="text-muted-foreground">{c.license}</TableCell>
+                        <TableCell className="text-muted-foreground">{c.phone}</TableCell>
+                        <TableCell className="text-muted-foreground text-xs">
+                          {c.created_at ? new Date(c.created_at).toLocaleDateString("pt-BR") : "—"}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={c.approved ? "default" : "secondary"} className={c.approved ? "bg-green-500/20 text-green-700 border-green-500/30" : "bg-orange-500/20 text-orange-700 border-orange-500/30"}>
+                            {c.approved ? "Aprovado" : "Pendente"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleResetPassword(c.id, c.name)}
+                              disabled={resettingId === c.id}
+                              className="gap-1.5"
+                              title="Enviar email de redefinição de senha"
+                            >
+                              {resettingId === c.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <KeyRound className="w-3.5 h-3.5" />
+                              )}
+                              Resetar Senha
+                            </Button>
+                            <Button
+                              variant={c.approved ? "outline" : "default"}
+                              size="sm"
+                              onClick={() => toggleApproval(c.id, c.approved)}
+                              disabled={togglingId === c.id}
+                              className="gap-1.5"
+                            >
+                              {togglingId === c.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : c.approved ? (
+                                <UserX className="w-3.5 h-3.5" />
+                              ) : (
+                                <UserCheck className="w-3.5 h-3.5" />
+                              )}
+                              {c.approved ? "Revogar" : "Aprovar"}
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {consultants.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                          Nenhum consultor cadastrado
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              )}
             </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nome</TableHead>
-                  <TableHead>Licença</TableHead>
-                  <TableHead>Telefone</TableHead>
-                  <TableHead>Cadastro</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {consultants.map((c) => (
-                  <TableRow key={c.id}>
-                    <TableCell className="font-medium">{c.name}</TableCell>
-                    <TableCell className="text-muted-foreground">{c.license}</TableCell>
-                    <TableCell className="text-muted-foreground">{c.phone}</TableCell>
-                    <TableCell className="text-muted-foreground text-xs">
-                      {c.created_at ? new Date(c.created_at).toLocaleDateString("pt-BR") : "—"}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={c.approved ? "default" : "secondary"} className={c.approved ? "bg-green-500/20 text-green-700 border-green-500/30" : "bg-orange-500/20 text-orange-700 border-orange-500/30"}>
-                        {c.approved ? "Aprovado" : "Pendente"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleResetPassword(c.id, c.name)}
-                          disabled={resettingId === c.id}
-                          className="gap-1.5"
-                          title="Enviar email de redefinição de senha"
-                        >
-                          {resettingId === c.id ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          ) : (
-                            <KeyRound className="w-3.5 h-3.5" />
-                          )}
-                          Resetar Senha
-                        </Button>
-                        <Button
-                          variant={c.approved ? "outline" : "default"}
-                          size="sm"
-                          onClick={() => toggleApproval(c.id, c.approved)}
-                          disabled={togglingId === c.id}
-                          className="gap-1.5"
-                        >
-                          {togglingId === c.id ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          ) : c.approved ? (
-                            <UserX className="w-3.5 h-3.5" />
-                          ) : (
-                            <UserCheck className="w-3.5 h-3.5" />
-                          )}
-                          {c.approved ? "Revogar" : "Aprovar"}
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {consultants.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                      Nenhum consultor cadastrado
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </div>
+          </>
+        )}
+
+        {activeTab === "ia" && <AIKnowledgePanel />}
       </main>
     </div>
   );

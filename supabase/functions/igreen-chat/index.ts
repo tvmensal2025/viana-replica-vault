@@ -1,3 +1,5 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -272,11 +274,7 @@ Este sistema é uma plataforma completa para consultores/licenciados iGreen, com
 - QR Codes personalizados
 
 ### Materiais para Download
-- Materiais Verdes (Conexão Green)
-- Materiais Cada Livre (Conexão Livre)
-- Materiais Solares (Conexão Solar/Placas)
-- Materiais iGreen Telecom (Conexão Telecom)
-- Disponíveis na aba "Materiais" do painel
+- Disponíveis na aba "Materiais" do painel — abre Google Drive com todos os materiais organizados
 
 ==========================================================
 SEÇÃO 12 — PERGUNTAS FREQUENTES E OBJEÇÕES
@@ -349,6 +347,24 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Load extra knowledge from database
+    let extraKnowledge = "";
+    try {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+      if (supabaseUrl && supabaseKey) {
+        const sb = createClient(supabaseUrl, supabaseKey);
+        const { data } = await sb.from("settings").select("value").eq("key", "ai_knowledge_extra").maybeSingle();
+        if (data?.value) {
+          extraKnowledge = `\n\n==========================================================\nCONHECIMENTO EXTRA (atualizado pelo administrador)\n==========================================================\n\n${data.value}`;
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load extra knowledge:", e);
+    }
+
+    const fullKnowledge = IGREEN_KNOWLEDGE + extraKnowledge;
+
     const contents = [];
     if (history && Array.isArray(history)) {
       for (const msg of history.slice(-14)) {
@@ -366,7 +382,7 @@ Deno.serve(async (req) => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          system_instruction: { parts: [{ text: IGREEN_KNOWLEDGE }] },
+          system_instruction: { parts: [{ text: fullKnowledge }] },
           contents,
           generationConfig: { temperature: 0.7, maxOutputTokens: 1200, topP: 0.9 },
         }),
