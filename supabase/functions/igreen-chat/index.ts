@@ -367,23 +367,63 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Load extra knowledge from database
+    // Load extra knowledge + real coverage data from database
     let extraKnowledge = "";
+    let coverageData = "";
     try {
       const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
       const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
       if (supabaseUrl && supabaseKey) {
         const sb = createClient(supabaseUrl, supabaseKey);
-        const { data } = await sb.from("settings").select("value").eq("key", "ai_knowledge_extra").maybeSingle();
-        if (data?.value) {
-          extraKnowledge = `\n\n==========================================================\nCONHECIMENTO EXTRA (atualizado pelo administrador)\n==========================================================\n\n${data.value}`;
+
+        // Load admin extra knowledge
+        const { data: extraData } = await sb.from("settings").select("value").eq("key", "ai_knowledge_extra").maybeSingle();
+        if (extraData?.value) {
+          extraKnowledge = `\n\n==========================================================\nCONHECIMENTO EXTRA (atualizado pelo administrador)\n==========================================================\n\n${extraData.value}`;
+        }
+
+        // Load REAL coverage data from active customers
+        const { data: coverageRows } = await sb.rpc("get_coverage_summary" as any);
+        if (coverageRows && Array.isArray(coverageRows) && coverageRows.length > 0) {
+          const lines = (coverageRows as any[]).map((r: any) =>
+            `- ${r.distribuidora} | ${r.uf} | Cidades confirmadas: ${r.cidades} (${r.total_clientes} clientes ativos)`
+          );
+          coverageData = `\n\n==========================================================\nDADOS REAIS DE COBERTURA (fonte: banco de dados atualizado)\n==========================================================\n\nEstas são as distribuidoras e cidades onde a iGreen TEM clientes ativos confirmados:\n\n${lines.join("\n")}`;
+        } else {
+          // Fallback: query directly if RPC doesn't exist
+          const { data: rawCoverage } = await sb
+            .from("customers")
+            .select("distribuidora, address_state, address_city")
+            .not("distribuidora", "is", null)
+            .not("address_state", "is", null)
+            .eq("status", "active");
+
+          if (rawCoverage && rawCoverage.length > 0) {
+            const coverageMap = new Map<string, { cities: Set<string>; count: number }>();
+            for (const c of rawCoverage) {
+              const key = `${c.distribuidora}|${c.address_state}`;
+              if (!coverageMap.has(key)) coverageMap.set(key, { cities: new Set(), count: 0 });
+              const entry = coverageMap.get(key)!;
+              if (c.address_city) entry.cities.add(c.address_city);
+              entry.count++;
+            }
+            const lines: string[] = [];
+            for (const [key, val] of coverageMap.entries()) {
+              const [dist, uf] = key.split("|");
+              const cityList = [...val.cities].sort().slice(0, 20).join(", ");
+              lines.push(`- ${dist} | ${uf} | Cidades: ${cityList} (${val.count} clientes)`);
+            }
+            if (lines.length > 0) {
+              coverageData = `\n\n==========================================================\nDADOS REAIS DE COBERTURA (fonte: banco de dados atualizado)\n==========================================================\n\nEstas são as distribuidoras e cidades onde a iGreen TEM clientes ativos confirmados:\n\n${lines.join("\n")}`;
+            }
+          }
         }
       }
     } catch (e) {
-      console.error("Failed to load extra knowledge:", e);
+      console.error("Failed to load extra knowledge/coverage:", e);
     }
 
-    const fullKnowledge = IGREEN_KNOWLEDGE + extraKnowledge;
+    const fullKnowledge = IGREEN_KNOWLEDGE + extraKnowledge + coverageData;
 
     const contents = [];
     if (history && Array.isArray(history)) {
