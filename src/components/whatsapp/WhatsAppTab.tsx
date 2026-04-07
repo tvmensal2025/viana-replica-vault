@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useWhatsApp } from "@/hooks/useWhatsApp";
 import { useTemplates } from "@/hooks/useTemplates";
 import { useChats } from "@/hooks/useChats";
