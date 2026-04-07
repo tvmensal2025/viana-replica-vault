@@ -53,7 +53,7 @@ const Admin = () => {
   const [loading, setLoading] = useState(true);
   const [approved, setApproved] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<"materiais" | "dashboard" | "dados" | "links" | "preview" | "whatsapp" | "crm" | "clientes" | "historico">("dashboard");
+  const [activeTab, setActiveTab] = useState<"materiais" | "dashboard" | "dados" | "links" | "preview" | "whatsapp" | "crm" | "clientes" | "historico" | "rede">("dashboard");
   const [pendingChatPhone, setPendingChatPhone] = useState<string | null>(null);
   const [pendingChatMessage, setPendingChatMessage] = useState<string | undefined>(undefined);
   const [qrModal, setQrModal] = useState<{ url: string; label: string } | null>(null);
