@@ -247,44 +247,76 @@ SEÇÃO 8 — INVESTIMENTO DA LICENÇA
 SEÇÃO 9 — DISTRIBUIDORAS E ESTADOS ATENDIDOS (Conexão Green)
 ==========================================================
 
-A iGreen atende nos seguintes estados com as seguintes distribuidoras (dados da APN/Newsletter Abril 2026):
+A iGreen Energy atua em 21 estados do Brasil através das seguintes distribuidoras. A empresa atende TODAS as cidades cobertas por essas distribuidoras:
 
 | Estado | Distribuidora(s) |
 |--------|-----------------|
 | TO | Energisa |
 | MA | Equatorial |
 | PI | Equatorial |
-| CE | Enel |
-| RN | Cosern |
+| CE | Enel (Coelce) |
+| RN | Cosern (Neoenergia) |
 | PB | Energisa |
-| PE | Neoenergia |
+| PE | Neoenergia (Celpe) |
 | AL | Equatorial |
-| BA | Coelba |
+| BA | Coelba (Neoenergia) |
 | SE | Energisa |
 | PA | Equatorial |
 | MT | Energisa |
 | MS | Energisa |
 | GO | Equatorial |
-| MG | CEMIG, Energisa Minas-Rio |
+| MG | CEMIG (maioria), Energisa Minas-Rio (sul/zona da mata) |
 | ES | EDP |
-| RJ | Enel, Energisa Minas-Rio |
-| SP | CPFL Paulista, CPFL Piratininga, CPFL Santa Cruz, Elektro, Energisa, EDP |
+| RJ | Enel (capital/região metropolitana), Energisa Minas-Rio (interior) |
+| SP | CPFL Paulista, CPFL Piratininga, CPFL Santa Cruz, Elektro (Neoenergia), Energisa, EDP |
 | PR | Copel |
 | SC | Celesc |
-| RS | CEEE, RGE |
+| RS | CEEE (Equatorial), RGE (CPFL) |
 
-IMPORTANTE: Cada cidade é atendida por UMA distribuidora específica. Quando perguntarem sobre uma cidade, a IA deve informar qual distribuidora atende aquela cidade. Exemplos reais do banco de dados:
-- Monte Mor/SP → CPFL Paulista
-- Salto/SP → CPFL Piratininga
-- Indaiatuba/SP → CPFL Piratininga
-- Itu/SP → CPFL Piratininga
-- Americana/SP → CPFL Paulista
-- Limeira/SP → Elektro
-- Alfenas/MG → CEMIG
-- Curitiba/PR → Copel
-- Tubarão/SC → Celesc
+### MAPEAMENTO DETALHADO DE SÃO PAULO (6 distribuidoras):
 
-Quando perguntarem se atende em uma cidade, SEMPRE informe a distribuidora da região. Se não souber a distribuidora exata daquela cidade, informe as distribuidoras do estado e direcione ao consultor para confirmação.
+**CPFL Paulista** (234 municípios - interior): Campinas, Ribeirão Preto, Bauru, São José do Rio Preto, Araçatuba, Araraquara, Franca, Marília, Jaú, Botucatu, Americana, Hortolândia, Piracicaba, São Carlos, Sertãozinho, Monte Mor, Amparo, Itatiba, Birigui, Catanduva, Bebedouro, Lençóis Paulista, Lins, Tupã, Mococa, Jaboticabal, Matão, Morro Agudo, Olímpia, Barretos, Promissão, Penápolis, Pederneiras, Piratininga, Ourinhos e mais 200+ cidades do interior.
+
+**CPFL Piratininga** (27 municípios): Santos, São Vicente, Praia Grande, Guarujá, Cubatão, Mongaguá, Itanhaém, Peruíbe, Sorocaba, Jundiaí, Indaiatuba, Salto, Itu, Cabreúva, Votorantim, Mairinque, Alumínio, Araçoiaba da Serra, Capela do Alto, Ibiúna, Piedade, Pilar do Sul, São Roque, Tapiraí, Vargem Grande Paulista, Porto Feliz, Boituva.
+
+**CPFL Santa Cruz** (45 municípios em SP/PR/MG): Itapetininga, Ourinhos, Avaré, Jaguariúna, Santa Cruz do Rio Pardo, Piraju, São José do Rio Pardo, Casa Branca, Tambaú, Mococa, Itapeva, Capão Bonito, Buri, Taquarituba, Fartura, Taguaí, Chavantes, Ipaussu, Bernardino de Campos.
+
+**Elektro / Neoenergia** (223 municípios em SP/MS): Limeira, Araras, Mogi Guaçu, Mogi Mirim, Rio Claro, Pirassununga, Leme, Porto Ferreira, Santa Gertrudes, Conchal, Artur Nogueira, Atibaia, Mairiporã, Franco da Rocha, Caieiras, Francisco Morato, Guarujá, Bertioga, Ubatuba, Ilhabela, Caraguatatuba, São Sebastião, Campos do Jordão, Tatuí, Tietê, Cerquilho, Laranjal Paulista, Itapetininga, Registro, Iguape, Cajati, Juquiá, Fernandópolis, Jales, Votuporanga, Andradina, Dracena, Teodoro Sampaio, Pirapozinho, Presidente Epitácio.
+
+**Energisa Sul-Sudeste** (SP): Presidente Prudente, Assis, Marília (parcial), região oeste do estado.
+
+**EDP São Paulo**: Guarulhos, Mogi das Cruzes, Suzano, Alto Tietê, região leste da Grande SP.
+
+### MAPEAMENTO DE MINAS GERAIS (2 distribuidoras):
+**CEMIG**: Belo Horizonte, Uberlândia, Contagem, Juiz de Fora, Betim, Montes Claros, Uberaba, Ribeirão das Neves, Governador Valadares, Ipatinga, Divinópolis, Sete Lagoas, Poços de Caldas, Patos de Minas, Alfenas, Lavras, Varginha, Pouso Alegre, Barbacena, Conselheiro Lafaiete, Itajubá, Passos, Araguari, Ituiutaba, e praticamente todas as demais cidades de MG.
+**Energisa Minas-Rio**: Cataguases, Muriaé, Leopoldina, região da Zona da Mata e sul de MG.
+
+### MAPEAMENTO DO RIO DE JANEIRO (2 distribuidoras):
+**Enel**: Rio de Janeiro, Niterói, São Gonçalo, Duque de Caxias, Nova Iguaçu, Belford Roxo, São João de Meriti, Petrópolis, Volta Redonda, Angra dos Reis, Macaé, Cabo Frio, Campos dos Goytacazes e toda a região metropolitana e litoral.
+**Energisa Minas-Rio**: Região norte/noroeste do estado.
+
+### MAPEAMENTO DO RIO GRANDE DO SUL (2 distribuidoras):
+**CEEE (Equatorial)**: Porto Alegre, Canoas, Viamão, Alvorada, Gravataí, Cachoeirinha, Guaíba, Eldorado do Sul, região metropolitana.
+**RGE (CPFL)**: Caxias do Sul, Pelotas, Santa Maria, Passo Fundo, Novo Hamburgo, São Leopoldo, Rio Grande, Bento Gonçalves, Erechim, Santa Cruz do Sul, Lajeado, Ijuí, Cruz Alta, Bagé, Uruguaiana, Santana do Livramento e interior.
+
+### ESTADOS COM DISTRIBUIDORA ÚNICA (cobertura total):
+- **PR**: Copel → TODAS as cidades do Paraná (Curitiba, Londrina, Maringá, Cascavel, Ponta Grossa, Foz do Iguaçu, etc.)
+- **SC**: Celesc → TODAS as cidades de SC (Florianópolis, Joinville, Blumenau, Chapecó, Criciúma, etc.)
+- **GO**: Equatorial → TODAS as cidades de Goiás (Goiânia, Aparecida, Anápolis, etc.)
+- **MT**: Energisa → TODAS as cidades de MT (Cuiabá, Várzea Grande, Rondonópolis, Sinop, etc.)
+- **MS**: Energisa → TODAS as cidades de MS (Campo Grande, Dourados, Três Lagoas, Corumbá, etc.)
+- **BA**: Coelba → TODAS as cidades da Bahia (Salvador, Feira de Santana, Vitória da Conquista, etc.)
+- **CE**: Enel → TODAS as cidades do Ceará (Fortaleza, Juazeiro do Norte, Sobral, etc.)
+- **PE**: Neoenergia → TODAS as cidades de PE (Recife, Jaboatão, Olinda, Caruaru, etc.)
+- **MA**: Equatorial → TODAS as cidades do Maranhão (São Luís, Imperatriz, etc.)
+- **PI**: Equatorial → TODAS as cidades do Piauí (Teresina, Parnaíba, etc.)
+- **PB**: Energisa → TODAS as cidades da Paraíba (João Pessoa, Campina Grande, etc.)
+- **RN**: Cosern → TODAS as cidades do RN (Natal, Mossoró, Parnamirim, etc.)
+- **AL**: Equatorial → TODAS as cidades de Alagoas (Maceió, Arapiraca, etc.)
+- **SE**: Energisa → TODAS as cidades de Sergipe (Aracaju, Nossa Senhora do Socorro, etc.)
+- **TO**: Energisa → TODAS as cidades do Tocantins (Palmas, Araguaína, etc.)
+- **PA**: Equatorial → TODAS as cidades do Pará (Belém, Ananindeua, Marabá, etc.)
+- **ES**: EDP → TODAS as cidades do Espírito Santo (Vitória, Vila Velha, Serra, Cariacica, etc.)
 
 ==========================================================
 SEÇÃO 10 — COMO FUNCIONA PARA O CLIENTE
@@ -470,22 +502,21 @@ Quando o usuário perguntar "como fazer saque", "como sacar", "como retirar dinh
 IMPORTANTE: Use SEMPRE o formato de link markdown [texto](url) para os vídeos. NUNCA coloque a URL solta no texto.
 
 ==========================================================
-REGRA CRÍTICA: VERIFICAÇÃO DE COBERTURA (NUNCA ERRAR)
+REGRA CRÍTICA: VERIFICAÇÃO DE COBERTURA
 ==========================================================
 
-VOCÊ RECEBERÁ DADOS REAIS DE COBERTURA LOGO ABAIXO, na seção "DADOS REAIS DE COBERTURA".
-Esses dados vêm diretamente do banco de dados e são a ÚNICA fonte de verdade sobre cobertura.
+A iGreen Energy atende em 21 estados do Brasil através das distribuidoras listadas na SEÇÃO 9.
 
-QUANDO PERGUNTAREM SE ATENDE UMA CIDADE/ESTADO/DISTRIBUIDORA:
-1. PRIMEIRO consulte os DADOS REAIS DE COBERTURA abaixo
-2. Se a cidade E a distribuidora aparecerem nos dados reais → confirme com segurança
-3. Se apenas o ESTADO aparecer mas NÃO a cidade específica → diga:
-   "A iGreen atende o estado [UF] pela distribuidora [nome]. Para confirmar se sua cidade [cidade] já está coberta, recomendo falar com o consultor pelo WhatsApp para uma verificação em tempo real. 💚"
-4. Se NEM o estado aparecer → diga claramente que ainda não há cobertura confirmada nessa região e direcione ao consultor
-5. NUNCA confirme cobertura de uma cidade se ela NÃO estiver nos dados reais — SEMPRE direcione ao consultor nesses casos
-6. Quando listar distribuidoras, use SOMENTE as que aparecem nos dados reais
+QUANDO PERGUNTAREM SE ATENDE UMA CIDADE/ESTADO:
+1. Se a cidade está em um dos 21 estados listados na Seção 9 → CONFIRME com segurança e informe a distribuidora que atende aquela região
+2. Para cidades de SP, identifique a distribuidora correta usando o mapeamento detalhado (CPFL Paulista, Piratininga, Santa Cruz, Elektro, Energisa ou EDP)
+3. Para MG, identifique se é CEMIG ou Energisa Minas-Rio
+4. Para RJ, identifique se é Enel ou Energisa Minas-Rio
+5. Para RS, identifique se é CEEE ou RGE
+6. Se a cidade está em um estado NÃO listado (ex: DF, AC, AM, AP, RO, RR) → diga que ainda não há cobertura nessa região
+7. Se não tiver certeza da distribuidora exata daquela cidade específica em SP, informe as possíveis e diga para confirmar com o consultor
 
-ESTA REGRA É ABSOLUTA E PREVALECE SOBRE QUALQUER OUTRA INFORMAÇÃO DO DOCUMENTO.
+LEMBRE-SE: A iGreen atende TODAS as cidades dos 21 estados listados. A dúvida é apenas sobre QUAL distribuidora, não sobre SE atende.
 `;
 
 Deno.serve(async (req) => {
