@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, lazy, Suspense } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -6,11 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { Database } from "@/integrations/supabase/types";
 import { LogOut, BarChart3, LinkIcon, Settings, Monitor, MessageSquare, LayoutGrid, Users, Copy, Download, X, History, Sparkles, FolderDown, Network } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { WhatsAppTab } from "@/components/whatsapp/WhatsAppTab";
 import { WhatsAppErrorBoundary } from "@/components/whatsapp/WhatsAppErrorBoundary";
-import { KanbanBoard } from "@/components/whatsapp/KanbanBoard";
-import { CustomerManager } from "@/components/whatsapp/CustomerManager";
-import { AutoMessageLog } from "@/components/whatsapp/AutoMessageLog";
 import { useWhatsApp } from "@/hooks/useWhatsApp";
 import { QRCodeSVG } from "qrcode.react";
 import { DashboardTab } from "@/components/admin/DashboardTab";
@@ -20,8 +16,13 @@ import { PreviewTab } from "@/components/admin/PreviewTab";
 import { NotificationCenter } from "@/components/admin/NotificationCenter";
 import { useNotifications } from "@/hooks/useNotifications";
 import { AIChatPanel } from "@/components/admin/AIChatPanel";
-import { MaterialsTab } from "@/components/admin/MaterialsTab";
-import { NetworkPanel } from "@/components/admin/NetworkPanel";
+
+const WhatsAppTab = lazy(() => import("@/components/whatsapp/WhatsAppTab").then(m => ({ default: m.WhatsAppTab })));
+const KanbanBoard = lazy(() => import("@/components/whatsapp/KanbanBoard").then(m => ({ default: m.KanbanBoard })));
+const CustomerManager = lazy(() => import("@/components/whatsapp/CustomerManager").then(m => ({ default: m.CustomerManager })));
+const AutoMessageLog = lazy(() => import("@/components/whatsapp/AutoMessageLog").then(m => ({ default: m.AutoMessageLog })));
+const MaterialsTab = lazy(() => import("@/components/admin/MaterialsTab").then(m => ({ default: m.MaterialsTab })));
+const NetworkPanel = lazy(() => import("@/components/admin/NetworkPanel").then(m => ({ default: m.NetworkPanel })));
 
 function buildPendingConsultantDefaults(uid: string, email?: string | null) {
   const rawBase = (email?.split("@")[0] || `consultor-${uid.slice(0, 8)}`)
