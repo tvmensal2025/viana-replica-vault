@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { PaginatedList } from "@/components/ui/PaginatedList";
 import {
   UserPlus, Users, Search, Loader2, RefreshCw, Filter,
 } from "lucide-react";
