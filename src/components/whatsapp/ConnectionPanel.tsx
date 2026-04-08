@@ -166,6 +166,13 @@ export function ConnectionPanel({
   const showDiagnostic = connectionLog.length > 0 && (isLoading || error || connectionStatus === "connecting" || operationalHealth !== "healthy");
   const isAutoReconnecting = isLoading && connectionLog.some((l) => l.includes("🔄"));
   const showResetButton = onSafeReset && (operationalHealth === "reset_recommended" || operationalHealth === "degraded" || consecutiveTimeouts >= 3);
+  const showLoadingState = isLoading && !qrCode;
+  const showErrorState = !showLoadingState && !isLoading && !!error;
+  const showDisconnectedWithoutInstance = !showLoadingState && !showErrorState && !isLoading && connectionStatus === "disconnected" && !instanceName;
+  const showDisconnectedWithInstance = !showLoadingState && !showErrorState && !isLoading && connectionStatus === "disconnected" && !!instanceName;
+  const showConnectingWithoutQr = !showLoadingState && !showErrorState && connectionStatus === "connecting" && !qrCode;
+  const showConnectingWithQr = !showLoadingState && !showErrorState && connectionStatus === "connecting" && !!qrCode;
+  const showConnectedState = !showLoadingState && !showErrorState && !isLoading && connectionStatus === "connected";
 
   useEffect(() => {
     if (qrCode) setQrExpired(false);
@@ -196,7 +203,7 @@ export function ConnectionPanel({
         </div>
 
         {/* Loading / Auto-reconnecting */}
-        {isLoading && !qrCode && (
+        {showLoadingState && (
           <div className="flex flex-col items-center justify-center py-10 gap-4">
             <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-green-500/15 to-green-600/5 flex items-center justify-center border border-green-500/10">
               {operationalHealth === "resetting" ? (
@@ -243,7 +250,7 @@ export function ConnectionPanel({
         )}
 
         {/* Error */}
-        {!isLoading && error && (
+        {showErrorState && (
           <div className="flex flex-col items-center justify-center py-8 gap-5">
             <div className="w-full rounded-xl bg-red-500/5 border border-red-500/20 px-5 py-4 text-center backdrop-blur-sm">
               <p className="text-sm text-red-400 font-medium">{error}</p>
@@ -266,7 +273,7 @@ export function ConnectionPanel({
         )}
 
         {/* Disconnected — no instance */}
-        {!isLoading && !error && connectionStatus === "disconnected" && !instanceName && (
+        {showDisconnectedWithoutInstance && (
           <div className="flex flex-col items-center justify-center py-10 gap-5">
             <div className="relative">
               <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-secondary to-secondary/50 flex items-center justify-center border border-border/50">
@@ -287,7 +294,7 @@ export function ConnectionPanel({
         )}
 
         {/* Disconnected — instance exists (auto-reconnect exhausted) */}
-        {!isLoading && !error && connectionStatus === "disconnected" && instanceName && (
+        {showDisconnectedWithInstance && (
           <div className="flex flex-col items-center justify-center py-10 gap-5">
             <div className="relative">
               <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-secondary to-secondary/50 flex items-center justify-center border border-border/50">
@@ -319,7 +326,7 @@ export function ConnectionPanel({
         )}
 
         {/* Connecting — waiting for QR */}
-        {!error && connectionStatus === "connecting" && !qrCode && (
+        {showConnectingWithoutQr && (
           <div className="flex flex-col items-center justify-center py-10 gap-5 text-center">
             <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-green-500/15 to-green-600/5 flex items-center justify-center border border-green-500/10">
               <Loader2 className="w-8 h-8 text-green-400 animate-spin" />
@@ -365,7 +372,7 @@ export function ConnectionPanel({
         )}
 
         {/* Connecting — QR code */}
-        {!error && connectionStatus === "connecting" && qrCode && (
+        {showConnectingWithQr && (
           <div className="flex flex-col items-center justify-center py-8 gap-5">
             <div className={`relative rounded-2xl border-2 ${qrExpired ? "border-red-500/30 opacity-40" : "border-green-500/20"} bg-white p-4 shadow-xl shadow-green-500/5 transition-all`}>
               <img
@@ -418,7 +425,7 @@ export function ConnectionPanel({
         )}
 
         {/* Connected */}
-        {!isLoading && !error && connectionStatus === "connected" && (
+        {showConnectedState && (
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-3 px-4 rounded-xl bg-green-500/5 border border-green-500/15">
             <div className="flex items-center gap-4">
               <div className="relative">
