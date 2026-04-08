@@ -55,6 +55,10 @@ export default function AssistentePage() {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages]);
 
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(messages)); } catch { /* quota */ }
+  }, [messages]);
+
   const sendMessage = useCallback(
     async (text: string) => {
       if (!text.trim() || loading) return;
