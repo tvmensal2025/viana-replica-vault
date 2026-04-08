@@ -21,13 +21,26 @@ const SUGGESTIONS = [
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-export default function AssistentePage() {
-  const [messages, setMessages] = useState<ChatMessage[]>([
+const STORAGE_KEY = "igreen-chat-history";
+
+function loadSavedMessages(): ChatMessage[] {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved) as ChatMessage[];
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch { /* ignore */ }
+  return [
     {
       role: "assistant",
       text: "Olá! 👋 Sou a assistente virtual da **iGreen Energy**.\n\nPosso te ajudar com dúvidas sobre:\n- 💡 Economia na conta de luz\n- 🌱 Nossos produtos e serviços\n- 📈 Plano de carreira\n- 📍 Cobertura na sua região\n\nComo posso te ajudar hoje?",
     },
-  ]);
+  ];
+}
+
+export default function AssistentePage() {
+  const [messages, setMessages] = useState<ChatMessage[]>(loadSavedMessages);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
