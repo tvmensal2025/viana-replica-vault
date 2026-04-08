@@ -271,33 +271,34 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
           ))}
         </div>
 
-        {/* List */}
+        {/* List with pagination */}
         <div className="px-5 pb-5">
-          <div className="max-h-[calc(100vh-460px)] overflow-y-auto space-y-2 pr-1">
-            {filtered.length === 0 ? (
+          <PaginatedList
+            items={filtered}
+            pageSize={50}
+            renderEmpty={() => (
               <div className="text-center py-12">
                 <div className="w-16 h-16 rounded-2xl bg-secondary/50 flex items-center justify-center mx-auto mb-3">
                   <Users className="w-7 h-7 text-muted-foreground/30" />
                 </div>
                 <p className="text-sm text-muted-foreground">{customers.length === 0 ? "Nenhum cliente cadastrado" : "Nenhum resultado"}</p>
               </div>
-            ) : (
-              filtered.map((c) => (
-                <CustomerListItem
-                  key={c.id}
-                  customer={c}
-                  isExpanded={expandedId === c.id}
-                  profilePic={profilePics[c.id]}
-                  deal={dealsByCustomer[c.id]}
-                  onToggleExpand={() => handleExpandToggle(c.id)}
-                  onEdit={() => setEditingCustomer(c)}
-                  onDelete={() => handleDelete(c.id)}
-                  onOpenWhatsApp={() => handleOpenWhatsApp(c)}
-                  onCopyMessage={() => handleCopyMessage(c)}
-                />
-              ))
             )}
-          </div>
+            renderItem={(c) => (
+              <CustomerListItem
+                key={c.id}
+                customer={c}
+                isExpanded={expandedId === c.id}
+                profilePic={profilePics[c.id]}
+                deal={dealsByCustomer[c.id]}
+                onToggleExpand={() => handleExpandToggle(c.id)}
+                onEdit={() => setEditingCustomer(c)}
+                onDelete={() => handleDelete(c.id)}
+                onOpenWhatsApp={() => handleOpenWhatsApp(c)}
+                onCopyMessage={() => handleCopyMessage(c)}
+              />
+            )}
+          />
         </div>
       </div>
 
