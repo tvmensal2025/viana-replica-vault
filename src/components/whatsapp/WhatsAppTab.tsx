@@ -296,11 +296,13 @@ export function WhatsAppTab({ userId, pendingChatPhone, pendingChatMessage, onPe
         {activeSubTab === "envio_massa" && (
           <div className="p-4 overflow-auto h-full">
             {isConnected && instanceName ? (
-              <BulkSendPanel
+              <BulkBlockSendPanel
                 instanceName={instanceName}
                 customers={customers}
                 templates={templates}
                 applyTemplate={applyTemplate}
+                consultantId={userId}
+                onCreateTemplate={(name, content, mediaType, mediaUrl, imageUrl) => createTemplate(name, content, mediaType, mediaUrl, imageUrl)}
               />
             ) : (
               <div className="flex items-center justify-center h-40 text-sm text-muted-foreground">
