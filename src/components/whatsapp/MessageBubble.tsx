@@ -268,6 +268,30 @@ function StickerViewer({ message, onLoadMedia }: { message: ChatMessage; onLoadM
   );
 }
 
+function LinkifiedText({ text }: { text: string }) {
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+  return (
+    <p className="text-sm whitespace-pre-wrap break-words">
+      {parts.map((part, i) =>
+        urlRegex.test(part) ? (
+          <a
+            key={i}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary underline hover:opacity-80 break-all"
+          >
+            {part}
+          </a>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </p>
+  );
+}
+
 export function MessageBubble({ message, onLoadMedia }: MessageBubbleProps) {
   const { fromMe, text, timestamp, status, mediaType } = message;
   const hasMedia = !!mediaType;
@@ -282,17 +306,14 @@ export function MessageBubble({ message, onLoadMedia }: MessageBubbleProps) {
             : "bg-secondary text-foreground rounded-bl-none"
         }`}
       >
-        {/* Media content */}
         {mediaType === "image" && <ImageViewer message={message} onLoadMedia={onLoadMedia} />}
         {mediaType === "video" && <VideoPlayer message={message} onLoadMedia={onLoadMedia} />}
         {mediaType === "audio" && <AudioPlayer message={message} onLoadMedia={onLoadMedia} />}
         {mediaType === "document" && <DocumentViewer message={message} onLoadMedia={onLoadMedia} />}
         {mediaType === "sticker" && <StickerViewer message={message} onLoadMedia={onLoadMedia} />}
 
-        {/* Text */}
-        {showText && <p className="text-sm whitespace-pre-wrap break-words">{text}</p>}
+        {showText && <LinkifiedText text={text} />}
 
-        {/* Timestamp + status */}
         <div className="flex items-center justify-end gap-1 mt-0.5">
           <span className="text-[10px] text-muted-foreground">{formatTime(timestamp)}</span>
           {fromMe && <StatusIcon status={status} />}
