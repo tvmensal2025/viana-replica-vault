@@ -4,7 +4,7 @@ import { useWhatsApp } from "@/hooks/useWhatsApp";
 import { useTemplates } from "@/hooks/useTemplates";
 import { useChats } from "@/hooks/useChats";
 import { ConnectionPanel } from "./ConnectionPanel";
-import { BulkSendPanel } from "./BulkSendPanel";
+import { BulkBlockSendPanel } from "./BulkBlockSendPanel";
 import { TemplateManager } from "./TemplateManager";
 import { ChatSidebar } from "./ChatSidebar";
 import { ChatView } from "./ChatView";
