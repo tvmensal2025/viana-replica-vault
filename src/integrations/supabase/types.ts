@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_knowledge_sections: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          is_active: boolean
+          position: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          position?: number
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          position?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       consultants: {
         Row: {
           approved: boolean | null
