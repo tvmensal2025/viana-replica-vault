@@ -1,92 +1,153 @@
 
+Objetivo: tornar a conexão WhatsApp realmente confiável e definir a política correta para instância com problema, sem deixar o cliente na mão.
 
-# Proteção Anti-Bloqueio: Análise Profunda e Plano de Blindagem
+Diagnóstico do que está acontecendo agora
+- O sistema já tem uma instância salva no banco: `igreen-0063ce992be3`.
+- O frontend usa nome fixo por consultor (`getFixedInstanceName`), então ele sempre tenta reaproveitar essa instância.
+- Os logs do `evolution-proxy` mostram timeout repetido em `GET /instance/connectionState/igreen-0063ce992be3`.
+- Então o problema principal hoje não é “sumiu a instância no banco”; é que o provedor não está respondendo bem ao check de estado.
+- Excluir a instância imediatamente não é a prática mais segura. Profissionais primeiro tentam recuperação controlada; só recriam quando há forte evidência de corrupção da sessão/instância presa.
 
-## Problemas Críticos Encontrados
+Recomendação profissional
+- Padrão usado por operações maduras:
+  1. Reaproveitar a instância existente
+  2. Tentar regenerar QR / recuperar sessão
+  3. Validar por múltiplos sinais, não só `connectionState`
+  4. Só então executar “reset controlado” da instância
+  5. Criar nova instância apenas como última etapa
+- Motivo:
+  - apagar cedo demais pode piorar o incidente;
+  - pode invalidar sessão que ainda recuperaria sozinha;
+  - pode gerar reconexões desnecessárias e aumentar indisponibilidade.
 
-### 1. SEM ATRASO ENTRE MÍDIAS PARA O MESMO CONTATO
-Em `BulkBlockSendPanel.tsx` linhas 146-172, quando um template tem áudio + imagem + texto, os 3 envios acontecem em sequência **sem nenhum delay entre eles**. O WhatsApp detecta isso como comportamento de bot — nenhum humano envia 3 mensagens em < 1 segundo.
+O que eu construiria
+1. Fluxo de recuperação em 3 níveis
+- Nível 1: Recuperação leve
+  - manter instância atual;
+  - tentar `connectInstance`;
+  - aceitar “already connected”, QR disponível ou estado `open/connecting`.
+- Nível 2: Recuperação guiada
+  - se `connectionState` falhar por timeout repetido, testar também `fetchInstances` e/ou `connectInstance` antes de concluir erro;
+  - mostrar “servidor lento, tentando recuperar” em vez de “conexão perdida”.
+- Nível 3: Reset controlado
+  - botão/admin flow “Resetar conexão com segurança”;
+  - primeiro `logoutInstance`;
+  - depois `deleteInstance`;
+  - limpar registro local em `whatsapp_instances`;
+  - então recriar e gerar novo QR.
 
-### 2. SEM LIMITE DIÁRIO DE ENVIOS
-Não existe controle de quantas mensagens foram enviadas no dia. O WhatsApp bloqueia números que enviam mais de ~250 mensagens/dia para novos números. Sem limite, o usuário pode disparar 500+ mensagens e perder o número.
+2. Critério seguro para excluir a instância
+- Excluir somente quando ocorrer um destes cenários:
+  - timeout contínuo por várias tentativas e nenhuma rota auxiliar responde;
+  - `connectInstance` também falha repetidamente;
+  - QR nunca é gerado após janela limite;
+  - erro explícito de instância quebrada/inexistente/incompatível;
+  - usuário escolhe reset manual após diagnóstico claro.
+- Não excluir automaticamente no primeiro timeout.
 
-### 3. SEM CIRCUIT BREAKER (PARADA AUTOMÁTICA POR FALHAS)
-Se 10 mensagens consecutivas falharem (ex: instância desconectou), o sistema continua tentando enviar todas as restantes. Deveria parar automaticamente após N falhas consecutivas.
+3. Blindagem inspirada em operações profissionais
+- Máquina de estados explícita:
+  - `healthy`
+  - `degraded`
+  - `recovering`
+  - `needs_qr`
+  - `reset_recommended`
+  - `resetting`
+- Circuit breaker para conexão:
+  - após N timeouts consecutivos, parar polling agressivo;
+  - entrar em modo degradado com backoff progressivo.
+- Multi-sinal de saúde:
+  - não depender só de `connectionState`;
+  - combinar `connectionState`, `connectInstance`, e resposta do proxy.
+- UX orientada a ação:
+  - “Recuperar sessão”
+  - “Gerar novo QR”
+  - “Resetar conexão”
+  - cada ação com explicação do impacto.
 
-### 4. SEM DETECÇÃO DE DUPLICATAS
-Se o mesmo número aparecer 2x na lista (ex: colado + importado da base), ele recebe a mensagem 2x. Spam duplicado é o gatilho #1 de bloqueio.
+4. Melhorias específicas no código atual
+- `src/hooks/useWhatsApp.ts`
+  - separar “instância ruim” de “servidor lento”;
+  - contar timeouts consecutivos;
+  - adicionar fallback de diagnóstico antes de marcar como desconectado;
+  - criar função de reset controlado reaproveitando `logoutInstance` + `deleteInstance`.
+- `src/services/evolutionApi.ts`
+  - adicionar chamadas auxiliares tolerantes a timeout para diagnóstico;
+  - permitir respostas estruturadas do proxy com motivo (`timeout`, `fallback`, `connectionClosed`, `notReady`).
+- `supabase/functions/evolution-proxy/index.ts`
+  - aumentar resiliência para `connectionState`;
+  - devolver JSON estruturado com motivo e recomendação, não só timeout genérico;
+  - tentar fallback por endpoint alternativo quando aplicável;
+  - distinguir:
+    - serviço lento,
+    - instância inexistente,
+    - sessão fechada,
+    - erro upstream.
+- `src/components/whatsapp/ConnectionPanel.tsx`
+  - adicionar painel operacional:
+    - status do servidor,
+    - status da instância,
+    - última tentativa,
+    - ação recomendada.
+  - adicionar botão de reset seguro com confirmação forte.
 
-### 5. ATRASO PROGRESSIVO REINICIA A CADA BLOCO
-O `getRandomInterval(i)` usa o índice `i` dentro do bloco, não o índice global. Então o atraso extra por volume reinicia a cada bloco, quando deveria ser acumulativo.
+5. Política recomendada para “nunca deixar o cliente na mão”
+- Regra operacional:
+  - nunca depender de um único check;
+  - nunca derrubar a instância automaticamente por erro transitório;
+  - sempre oferecer recuperação manual segura;
+  - sempre mostrar o próximo passo exato ao usuário.
+- Fallback de atendimento:
+  - se a conexão estiver degradada, bloquear apenas ações que dependem dela;
+  - manter templates, contatos, agendamentos e histórico acessíveis;
+  - exibir status operacional claro no topo do módulo.
 
-### 6. SEM VERIFICAÇÃO DE CONEXÃO ANTES DE CADA BLOCO
-Se o WhatsApp desconectar no meio do envio, o sistema continua enviando para a API e recebendo erros — gerando logs desnecessários e possivelmente causando instabilidade.
-
-### 7. SEM MODO AQUECIMENTO
-Números novos no WhatsApp Business devem começar com poucos envios (10-20/dia) e aumentar gradualmente. Não existe aviso ou controle disso.
-
----
-
-## Plano de Implementação
-
-### Arquivo: `src/components/whatsapp/BulkBlockSendPanel.tsx`
-
-**A. Jitter entre mídias (2-4s entre cada envio para o mesmo contato)**
-Adicionar `await sleep(2000 + Math.random() * 2000)` entre cada chamada de `sendWhatsAppMessage` dentro do loop de envio de mídias (linhas 149-171).
-
-**B. Circuit breaker — parada automática**
-Manter contador de falhas consecutivas. Se atingir 5 falhas seguidas:
-- Pausar automaticamente
-- Mostrar alerta: "⚠️ Muitas falhas consecutivas. Verifique a conexão."
-- Permitir retomar manualmente
-
-**C. Detecção de duplicatas**
-Antes de iniciar o envio, filtrar `validContacts` removendo números duplicados (normalizar para apenas dígitos e deduplicar). Mostrar badge com quantos duplicados foram removidos.
-
-**D. Índice global no atraso progressivo**
-Trocar `getRandomInterval(i)` por `getRandomInterval(globalIndex)` onde `globalIndex` é o acumulador entre todos os blocos.
-
-**E. Limite diário com aviso**
-Adicionar constante `DAILY_SAFE_LIMIT = 200`. Antes de enviar, somar com mensagens já enviadas na sessão. Se ultrapassar, mostrar alerta laranja: "⚠️ Limite seguro diário próximo. Enviar mais pode causar bloqueio." — mas permitir prosseguir com confirmação extra.
-
-**F. Check de conexão antes de cada bloco**
-Antes de iniciar cada bloco, verificar `getConnectionState(instanceName)`. Se não estiver `open`, pausar automaticamente e avisar.
-
-### Arquivo: `src/services/messageSender.ts`
-
-**G. Rate limiting por contato**
-Adicionar um timestamp do último envio por número em um Map local. Se tentar enviar para o mesmo número em < 5s, aguardar automaticamente.
-
-### Arquivo: `src/components/whatsapp/BlockConfigurator.tsx`
-
-**H. Painel de segurança visual**
-Adicionar indicadores visuais:
-- 🟢 "Seguro" (≤100 contatos, intervalo ≥15min)
-- 🟡 "Moderado" (101-200, intervalo ≥10min)  
-- 🔴 "Arriscado" (>200 ou intervalo <10min)
-- Dica: "Recomendamos no máximo 200 envios por dia"
-
-### UI: Resumo antes do envio
-
-Adicionar etapa de confirmação antes de disparar:
+Fluxo recomendado para este projeto
 ```text
-━━━ Confirmar Envio ━━━
-📱 142 contatos (3 duplicados removidos)
-📝 Template: "Proposta Energia Solar"  
-📦 8 blocos de 20 • Intervalo: 15min
-⏱️ Tempo estimado: ~2h 30min
-🛡️ Nível: 🟢 Seguro
-━━━━━━━━━━━━━━━━━━━━━
+Tentativa de conexão
+   ↓
+checkState respondeu?
+   ├─ sim, open → conectado
+   ├─ sim, connecting/close → tentar QR / recuperar
+   └─ não
+       ↓
+   testar connectInstance
+       ├─ retornou QR → needs_qr
+       ├─ already connected → conectado
+       ├─ notReady/timeout → degraded + retry com backoff
+       └─ falha repetida
+           ↓
+       recomendar reset controlado
+           ↓
+       logout + delete + limpar DB + recriar
 ```
 
----
+Resposta objetiva à sua pergunta
+- Sim, pode existir caso em que excluir a instância e abrir nova resolve.
+- Mas o recomendado profissionalmente não é apagar de primeira.
+- O recomendado é:
+  1. tentar recuperar a instância atual;
+  2. validar por mais de um sinal;
+  3. só então executar reset seguro;
+  4. recriar automaticamente se o reset confirmar que ela ficou inutilizável.
 
-## Arquivos Afetados
+Plano enxuto de implementação
+1. Reforçar o proxy para retornar diagnóstico estruturado e diferenciar timeout de instância inválida.
+2. Melhorar o `useWhatsApp` para usar recuperação em camadas, com contadores e backoff.
+3. Criar ação de “Reset seguro da instância” no painel de conexão.
+4. Ajustar a UI para orientar o usuário com status operacional e ação recomendada.
+5. Manter a instância atual como padrão e só recriar quando o diagnóstico realmente justificar.
 
-| Arquivo | Mudança |
-|---------|---------|
-| `BulkBlockSendPanel.tsx` | Jitter entre mídias, circuit breaker, duplicatas, confirmação, limite diário, check conexão |
-| `BlockConfigurator.tsx` | Indicador visual de risco |
-| `messageSender.ts` | Rate limiting por contato |
-| `ContactImporter.tsx` | Deduplicação automática com feedback |
+Detalhes técnicos
+- Evidência atual lida no projeto:
+  - nome fixo da instância: `igreen-0063ce992be3`
+  - registro existe em `whatsapp_instances`
+  - falha atual: timeout repetido no `evolution-proxy` em `/instance/connectionState/...`
+- Isso indica que a melhor próxima implementação é robustez de recuperação e reset seguro, não apenas “trocar instância”.
 
+Se aprovado, eu seguiria exatamente nessa ordem:
+1. Diagnóstico estruturado no proxy
+2. Recuperação em camadas no hook
+3. Botão de reset seguro
+4. Estados visuais operacionais no painel
+5. Regras para nunca apagar automaticamente cedo demais
