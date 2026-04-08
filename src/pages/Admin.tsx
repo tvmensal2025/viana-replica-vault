@@ -380,10 +380,6 @@ const Admin = () => {
           <DashboardTab userId={userId} form={form} onFormUpdate={handleFormChange} periodDays={periodDays} onPeriodChange={setPeriodDays} />
         )}
 
-        {activeTab === "materiais" && (
-          <MaterialsTab />
-        )}
-
         {activeTab === "dados" && (
           <DadosTab form={form} photoPreview={photoPreview} saving={saving} onFormChange={handleFormChange} onPhotoChange={handlePhotoChange} onSave={handleSave} userId={userId || ""} />
         )}
@@ -392,40 +388,46 @@ const Admin = () => {
           <LinksTab slug={slug} baseUrl={baseUrl} onCopy={copyLink} onQrOpen={(url, label) => setQrModal({ url, label })} />
         )}
 
-        {userId && activeTab === "crm" && (
-          <KanbanBoard consultantId={userId} instanceName={instanceName} />
-        )}
+        <Suspense fallback={<div className="flex justify-center py-12"><div className="animate-spin h-8 w-8 border-4 border-green-500 border-t-transparent rounded-full" /></div>}>
+          {activeTab === "materiais" && (
+            <MaterialsTab />
+          )}
 
-        {userId && activeTab === "clientes" && (
-          <CustomerManager
-            customers={customers}
-            consultantId={userId}
-            onCustomersChange={fetchCustomers}
-            instanceName={instanceName}
-            onOpenChat={handleOpenChatFromCustomer}
-          />
-        )}
+          {userId && activeTab === "crm" && (
+            <KanbanBoard consultantId={userId} instanceName={instanceName} />
+          )}
 
-        {userId && activeTab === "rede" && (
-          <NetworkPanel consultantId={userId} />
-        )}
-
-        {userId && activeTab === "whatsapp" && (
-          <WhatsAppErrorBoundary>
-            <WhatsAppTab
-              key="whatsapp-tab"
-              userId={userId}
+          {userId && activeTab === "clientes" && (
+            <CustomerManager
               customers={customers}
-              pendingChatPhone={pendingChatPhone}
-              pendingChatMessage={pendingChatMessage}
-              onPendingChatConsumed={() => { setPendingChatPhone(null); setPendingChatMessage(undefined); }}
+              consultantId={userId}
+              onCustomersChange={fetchCustomers}
+              instanceName={instanceName}
+              onOpenChat={handleOpenChatFromCustomer}
             />
-          </WhatsAppErrorBoundary>
-        )}
+          )}
 
-        {userId && activeTab === "historico" && (
-          <AutoMessageLog consultantId={userId} />
-        )}
+          {userId && activeTab === "rede" && (
+            <NetworkPanel consultantId={userId} />
+          )}
+
+          {userId && activeTab === "whatsapp" && (
+            <WhatsAppErrorBoundary>
+              <WhatsAppTab
+                key="whatsapp-tab"
+                userId={userId}
+                customers={customers}
+                pendingChatPhone={pendingChatPhone}
+                pendingChatMessage={pendingChatMessage}
+                onPendingChatConsumed={() => { setPendingChatPhone(null); setPendingChatMessage(undefined); }}
+              />
+            </WhatsAppErrorBoundary>
+          )}
+
+          {userId && activeTab === "historico" && (
+            <AutoMessageLog consultantId={userId} />
+          )}
+        </Suspense>
 
         {/* Preview Tab */}
         <div className="space-y-4" style={{ display: activeTab === "preview" ? "block" : "none" }}>
