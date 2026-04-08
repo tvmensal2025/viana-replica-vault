@@ -49,9 +49,9 @@ function normalizeEvolutionBaseUrl(rawUrl: string | undefined): string {
 }
 
 function getTimeoutMs(path: string): number {
-  if (path.startsWith("instance/connectionState/")) return 8000;
-  if (path === "instance/fetchInstances") return 10000;
-  if (path.startsWith("instance/connect/")) return 15000;
+  if (path.startsWith("instance/connectionState/")) return 15000;
+  if (path === "instance/fetchInstances") return 15000;
+  if (path.startsWith("instance/connect/")) return 20000;
   if (path === "instance/create") return 30000;
   if (path.startsWith("chat/findChats/")) return 20000;
   if (path.startsWith("chat/findMessages/")) return 20000;
@@ -60,10 +60,10 @@ function getTimeoutMs(path: string): number {
 }
 
 function getMaxAttempts(path: string): number {
-  if (path.startsWith("instance/connectionState/")) return 1;
-  if (path.startsWith("instance/connect/")) return 1;
+  if (path.startsWith("instance/connectionState/")) return 2;
+  if (path.startsWith("instance/connect/")) return 2;
   if (path === "instance/create") return 1;
-  if (path === "instance/fetchInstances") return 1;
+  if (path === "instance/fetchInstances") return 2;
   return 1;
 }
 
