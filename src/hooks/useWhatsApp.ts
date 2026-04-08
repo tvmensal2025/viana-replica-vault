@@ -510,7 +510,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
     };
 
     void poll();
-  }, [addLog, checkState, confirmConnectedState, handleAuthFailure, markConnected, multiSignalCheck, setHealth, setStatus, stopPolling, tryGetQr]);
+  }, [addLog, checkState, confirmConnectedState, handleAuthFailure, haltRecovery, markConnected, multiSignalCheck, resetRecoveryCounter, setHealth, setStatus, stopPolling, tryGetQr]);
 
   /* ── Create & Connect ── */
   const createAndConnect = useCallback(async () => {
@@ -523,7 +523,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
     setQrCode(null);
     setQrGeneratedAt(null);
     instanceSavedRef.current = false;
-      resetRecoveryCounter();
+    resetRecoveryCounter();
     timeoutCountRef.current = 0;
     setConsecutiveTimeouts(0);
     setHealth("healthy");
@@ -594,6 +594,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
         const qr = response?.qrcode?.base64 || null;
 
         if (qr) {
+          resetRecoveryCounter();
           setQrCode(qr);
           setQrGeneratedAt(Date.now());
           setStatus("connecting");
@@ -659,7 +660,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       lockRef.current = false;
       setIsLoading(false);
     }
-  }, [consultantId, addLog, checkState, confirmConnectedState, handleAuthFailure, markConnected, saveInstance, setHealth, setStatus, startPolling, stopPolling, tryGetQr]);
+  }, [consultantId, addLog, checkState, confirmConnectedState, handleAuthFailure, markConnected, resetRecoveryCounter, saveInstance, setHealth, setStatus, startPolling, stopPolling, tryGetQr]);
 
   /* ── Refresh QR ── */
   const refreshQr = useCallback(async () => {
