@@ -380,10 +380,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       }
 
       if (state === "unknown") {
-        addLog("⚠️ Servidor temporariamente indisponível. Tente novamente em alguns segundos.");
-        setStatus("disconnected");
-        setError("Servidor temporariamente indisponível");
-        return;
+        addLog("⚠️ Servidor instável. Tentando criar ou recuperar a conexão...");
       }
 
       addLog("Criando instância...");
