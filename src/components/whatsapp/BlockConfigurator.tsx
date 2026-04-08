@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Layers, Clock, Zap, Info } from "lucide-react";
+import { Layers, Clock, Zap, Info, ShieldCheck, ShieldAlert, AlertTriangle } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { BlockConfig } from "@/types/whatsapp";
 
@@ -8,6 +8,7 @@ interface BlockConfiguratorProps {
   onConfigChange: (config: BlockConfig) => void;
   totalContacts: number;
   disabled?: boolean;
+  dailySentCount?: number;
 }
 
 const BLOCK_SIZES = [10, 20, 30, 40, 50] as const;
@@ -21,6 +22,7 @@ const INTERVAL_OPTIONS = [
 
 const AVG_MSG_INTERVAL_S = 26.5; // avg of 18-35
 const PROGRESSIVE_EXTRA_S = 5;
+const DAILY_SAFE_LIMIT = 200;
 
 function estimateBlockTime(blockSize: number): number {
   let total = 0;
@@ -38,7 +40,22 @@ function formatDuration(seconds: number): string {
   return `${m}min`;
 }
 
-export function BlockConfigurator({ config, onConfigChange, totalContacts, disabled }: BlockConfiguratorProps) {
+type RiskLevel = "safe" | "moderate" | "risky";
+
+function getRiskLevel(totalContacts: number, intervalMinutes: number, dailySent: number): RiskLevel {
+  const totalToday = dailySent + totalContacts;
+  if (totalToday > DAILY_SAFE_LIMIT || intervalMinutes < 10) return "risky";
+  if (totalToday > 100 || intervalMinutes < 15) return "moderate";
+  return "safe";
+}
+
+const RISK_CONFIG: Record<RiskLevel, { label: string; color: string; bg: string; border: string; icon: typeof ShieldCheck; emoji: string }> = {
+  safe: { label: "Seguro", color: "text-green-400", bg: "bg-green-500/10", border: "border-green-500/20", icon: ShieldCheck, emoji: "🟢" },
+  moderate: { label: "Moderado", color: "text-yellow-400", bg: "bg-yellow-500/10", border: "border-yellow-500/20", icon: AlertTriangle, emoji: "🟡" },
+  risky: { label: "Arriscado", color: "text-red-400", bg: "bg-red-500/10", border: "border-red-500/20", icon: ShieldAlert, emoji: "🔴" },
+};
+
+export function BlockConfigurator({ config, onConfigChange, totalContacts, disabled, dailySentCount = 0 }: BlockConfiguratorProps) {
   const stats = useMemo(() => {
     if (totalContacts === 0) return { blocks: 0, lastBlockSize: 0, totalTime: 0 };
     const blocks = Math.ceil(totalContacts / config.blockSize);
@@ -50,6 +67,13 @@ export function BlockConfigurator({ config, onConfigChange, totalContacts, disab
     const totalTime = fullBlocks * blockTime + lastBlockTime + intervalTime;
     return { blocks, lastBlockSize, totalTime };
   }, [totalContacts, config]);
+
+  const risk = useMemo(
+    () => getRiskLevel(totalContacts, config.intervalMinutes, dailySentCount),
+    [totalContacts, config.intervalMinutes, dailySentCount]
+  );
+  const riskCfg = RISK_CONFIG[risk];
+  const RiskIcon = riskCfg.icon;
 
   return (
     <div className="rounded-lg border border-border/50 bg-secondary/10 p-4 space-y-4">
@@ -99,6 +123,34 @@ export function BlockConfigurator({ config, onConfigChange, totalContacts, disab
           </Select>
         </div>
       </div>
+
+      {/* Risk indicator */}
+      {totalContacts > 0 && (
+        <div className={`rounded-lg ${riskCfg.bg} ${riskCfg.border} border p-3 space-y-1`}>
+          <div className={`flex items-center gap-2 text-xs font-bold ${riskCfg.color}`}>
+            <RiskIcon className="w-4 h-4" />
+            {riskCfg.emoji} Nível de risco: {riskCfg.label}
+          </div>
+          {risk === "risky" && (
+            <p className="text-[11px] text-red-300/80">
+              ⚠️ Alto risco de bloqueio. Recomendamos no máximo {DAILY_SAFE_LIMIT} envios/dia com intervalo ≥10min.
+            </p>
+          )}
+          {risk === "moderate" && (
+            <p className="text-[11px] text-yellow-300/80">
+              Atenção: aumente o intervalo entre blocos para maior segurança.
+            </p>
+          )}
+          {risk === "safe" && (
+            <p className="text-[11px] text-green-300/80">
+              Configuração segura. Bom volume com intervalos adequados.
+            </p>
+          )}
+          <p className="text-[10px] text-muted-foreground">
+            Hoje: {dailySentCount} enviadas • Limite recomendado: {DAILY_SAFE_LIMIT}/dia
+          </p>
+        </div>
+      )}
 
       {totalContacts > 0 && (
         <div className="rounded-lg bg-primary/5 border border-primary/20 p-3 space-y-2">

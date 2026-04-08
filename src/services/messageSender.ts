@@ -47,6 +47,24 @@ function isUnavailableResponse(result: unknown): boolean {
   );
 }
 
+// ── Rate limiting per contact ──────────────────────────────────────────
+const lastSendTimestamp = new Map<string, number>();
+const MIN_INTERVAL_PER_CONTACT_MS = 5000;
+
+async function enforcePerContactRateLimit(phone: string): Promise<void> {
+  const normalized = phone.replace(/\D/g, "");
+  const last = lastSendTimestamp.get(normalized);
+  if (last) {
+    const elapsed = Date.now() - last;
+    if (elapsed < MIN_INTERVAL_PER_CONTACT_MS) {
+      const waitMs = MIN_INTERVAL_PER_CONTACT_MS - elapsed;
+      logger.info(`Rate limit: aguardando ${waitMs}ms para ${normalized}`);
+      await new Promise(r => setTimeout(r, waitMs));
+    }
+  }
+  lastSendTimestamp.set(normalized, Date.now());
+}
+
 /**
  * Send a single message through the correct Evolution API endpoint.
  * Returns a typed SendResult instead of throwing on timeout.
@@ -59,6 +77,9 @@ export async function sendWhatsAppMessage(payload: SendPayload): Promise<SendRes
     logger.warn("Número inválido ignorado:", phone);
     return { status: "failed", error: `Número inválido: ${phone}` };
   }
+
+  // Enforce per-contact rate limiting
+  await enforcePerContactRateLimit(phone);
 
   try {
     let result: unknown;
