@@ -1,90 +1,61 @@
 
 
-# Analise: O Que Mais Podemos Melhorar
+# Sistema de Envio em Massa por Blocos
 
-Apos as melhorias ja implementadas (RLS, lazy loading, persistencia do chat, refatoracao do Admin.tsx, PWA manifest, paginacao, knowledge base dinamica), identifiquei os seguintes pontos pendentes:
+## O Que Sera Construido
 
----
+Um novo componente **BulkBlockSendPanel** que substitui o BulkSendPanel atual, com:
 
-## 1. SEGURANCA — Problemas Restantes
+### 1. Importacao de Contatos (3 modos)
+- **Base existente**: usar os clientes ja cadastrados (como hoje, com filtros)
+- **Colar numeros**: textarea onde o usuario cola linhas no formato `nome;telefone` (ou `telefone;nome`)
+- **Importar CSV/Excel**: upload de planilha com colunas `nome` e `telefone`, com modelo para download
 
-O scan de seguranca ainda aponta 3 problemas:
+### 2. Selecao/Criacao de Template
+- Dropdown para selecionar template existente (como hoje)
+- Botao "Criar template rapido" inline — abre mini-form com nome, tipo de midia, upload e conteudo
+- Preview da mensagem estilo WhatsApp com variaveis resolvidas
 
-**1.1 `crm_auto_message_log` — policy publica de INSERT foi removida, mas a de seguranca do scanner esta desatualizada.** Ja corrigido na migration anterior. OK.
+### 3. Configuracao de Blocos
+- Selector de tamanho do bloco: **10, 20, 30, 40, 50** contatos por bloco
+- Intervalo entre blocos: **5min, 10min, 15min, 30min, 1h** (selecionavel)
+- Visualizacao: "X blocos de Y contatos — tempo total estimado: ~Z"
+- Dentro de cada bloco, mantem o intervalo anti-spam existente (18-35s entre mensagens)
 
-**1.2 `settings` — "Authenticated read settings" com `USING (true)`**
-Qualquer usuario autenticado le todas as settings (incluindo tokens de API). Deveria ser restrito a admins + o proprio consultor para suas configs.
-
-**1.3 Leaked Password Protection** — Continua desabilitada. Precisa ser habilitada no dashboard do Supabase (nao e via migration).
-
-**1.4 Security Definer View** — Ha uma view com SECURITY DEFINER que precisa ser investigada e corrigida.
-
----
-
-## 2. CODIGO — Componentes Gigantes
-
-**2.1 `KanbanBoard.tsx` — 915 linhas**
-E o maior componente do sistema. Mistura logica de drag-and-drop, CRUD de stages, CRUD de deals, auto-messages e UI. Deveria ser dividido em:
-- `useKanbanStages` (hook para stages CRUD)
-- `useKanbanDeals` (hook para deals CRUD)
-- `KanbanColumn` (componente de coluna)
-- `KanbanDealCard` (componente de card)
-
-**2.2 `DashboardTab.tsx` — 583 linhas**
-Concentra graficos, KPIs, sync e credenciais. Pode ser dividido em sub-componentes.
-
-**2.3 `MessageComposer.tsx` — 421 linhas**
-Mistura gravacao de audio, upload de midia e composicao de texto.
+### 4. Execucao e Acompanhamento
+- Progresso visual por bloco (Bloco 1/5, Bloco 2/5...)
+- Countdown entre blocos com timer grande
+- Pausa/Cancelamento a qualquer momento
+- Resumo final com enviados/falhos por bloco
 
 ---
 
-## 3. UX — Funcionalidades Faltantes
+## Arquitetura Tecnica
 
-**3.1 Service Worker para PWA**
-O `manifest.json` foi criado mas falta o service worker para cache offline e notificacoes push.
+### Arquivos a criar
+- `src/components/whatsapp/BulkBlockSendPanel.tsx` — componente principal
+- `src/components/whatsapp/ContactImporter.tsx` — sub-componente para os 3 modos de importacao
+- `src/components/whatsapp/BlockConfigurator.tsx` — configuracao de blocos e intervalos
+- `src/components/whatsapp/QuickTemplateForm.tsx` — criacao rapida de template inline
 
-**3.2 Notificacoes nao persistem**
-O `useNotifications` mantem tudo em memoria. Ao recarregar, perde-se o historico.
+### Arquivos a modificar
+- `src/components/whatsapp/WhatsAppTab.tsx` — trocar BulkSendPanel por BulkBlockSendPanel
+- `src/types/whatsapp.ts` — adicionar tipos para BulkContact e BlockConfig
 
-**3.3 Busca global de clientes**
-Nao ha busca/filtro rapido na lista de clientes alem da paginacao.
+### Fluxo
+```text
+[Importar Contatos] → [Selecionar/Criar Template] → [Configurar Blocos] → [Enviar]
+     ↓                        ↓                           ↓
+  Colar / CSV /          Template existente         10/20/30/40/50
+  Base clientes          ou criar rapido            + intervalo 5-60min
+```
 
-**3.4 Export de dados**
-Falta export CSV/Excel dos clientes e deals do CRM.
+### Logica de envio por blocos
+- Divide a lista selecionada em chunks do tamanho configurado
+- Dentro de cada bloco: usa o `getRandomInterval` existente (18-35s + progressivo)
+- Entre blocos: pausa longa configuravel (5-60min)
+- Estado cancelavel via `useRef<boolean>` para abort
 
----
-
-## 4. PERFORMANCE
-
-**4.1 WhatsAppDashboard faz queries N+1**
-Busca customer IDs, depois faz batches de 50 para conversations. Poderia usar uma RPC ou join.
-
-**4.2 Sem cache de dados offline**
-React Query tem cache em memoria, mas nao persiste entre sessoes.
-
----
-
-## Plano de Implementacao (Priorizado)
-
-| Prioridade | Item | Esforco |
-|-----------|------|---------|
-| Alta | Corrigir policy `settings` (restringir a admins) | Pequeno |
-| Alta | Refatorar KanbanBoard.tsx (915 linhas) | Medio |
-| Media | Adicionar service worker para PWA real | Medio |
-| Media | Persistir notificacoes no localStorage | Pequeno |
-| Media | Refatorar DashboardTab.tsx | Medio |
-| Baixa | Otimizar query do WhatsAppDashboard | Pequeno |
-| Baixa | Refatorar MessageComposer.tsx | Medio |
-
-### Fase 1 — Seguranca + Refatoracao critica
-- Migration para restringir `settings` SELECT apenas a admins
-- Dividir `KanbanBoard.tsx` em hooks + sub-componentes
-
-### Fase 2 — PWA + Notificacoes
-- Criar service worker com cache de assets
-- Persistir notificacoes no localStorage
-
-### Fase 3 — Refatoracao secundaria
-- Dividir DashboardTab e MessageComposer
-- Otimizar queries do dashboard WhatsApp
+### Modelo de importacao (download)
+Gera um XLSX com headers: `nome | telefone` e 2 linhas de exemplo
 
