@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, lazy, Suspense } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -6,11 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { Database } from "@/integrations/supabase/types";
 import { LogOut, BarChart3, LinkIcon, Settings, Monitor, MessageSquare, LayoutGrid, Users, Copy, Download, X, History, Sparkles, FolderDown, Network } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { WhatsAppTab } from "@/components/whatsapp/WhatsAppTab";
 import { WhatsAppErrorBoundary } from "@/components/whatsapp/WhatsAppErrorBoundary";
-import { KanbanBoard } from "@/components/whatsapp/KanbanBoard";
-import { CustomerManager } from "@/components/whatsapp/CustomerManager";
-import { AutoMessageLog } from "@/components/whatsapp/AutoMessageLog";
 import { useWhatsApp } from "@/hooks/useWhatsApp";
 import { QRCodeSVG } from "qrcode.react";
 import { DashboardTab } from "@/components/admin/DashboardTab";
@@ -20,8 +16,13 @@ import { PreviewTab } from "@/components/admin/PreviewTab";
 import { NotificationCenter } from "@/components/admin/NotificationCenter";
 import { useNotifications } from "@/hooks/useNotifications";
 import { AIChatPanel } from "@/components/admin/AIChatPanel";
-import { MaterialsTab } from "@/components/admin/MaterialsTab";
-import { NetworkPanel } from "@/components/admin/NetworkPanel";
+
+const WhatsAppTab = lazy(() => import("@/components/whatsapp/WhatsAppTab").then(m => ({ default: m.WhatsAppTab })));
+const KanbanBoard = lazy(() => import("@/components/whatsapp/KanbanBoard").then(m => ({ default: m.KanbanBoard })));
+const CustomerManager = lazy(() => import("@/components/whatsapp/CustomerManager").then(m => ({ default: m.CustomerManager })));
+const AutoMessageLog = lazy(() => import("@/components/whatsapp/AutoMessageLog").then(m => ({ default: m.AutoMessageLog })));
+const MaterialsTab = lazy(() => import("@/components/admin/MaterialsTab").then(m => ({ default: m.MaterialsTab })));
+const NetworkPanel = lazy(() => import("@/components/admin/NetworkPanel").then(m => ({ default: m.NetworkPanel })));
 
 function buildPendingConsultantDefaults(uid: string, email?: string | null) {
   const rawBase = (email?.split("@")[0] || `consultor-${uid.slice(0, 8)}`)
@@ -379,10 +380,6 @@ const Admin = () => {
           <DashboardTab userId={userId} form={form} onFormUpdate={handleFormChange} periodDays={periodDays} onPeriodChange={setPeriodDays} />
         )}
 
-        {activeTab === "materiais" && (
-          <MaterialsTab />
-        )}
-
         {activeTab === "dados" && (
           <DadosTab form={form} photoPreview={photoPreview} saving={saving} onFormChange={handleFormChange} onPhotoChange={handlePhotoChange} onSave={handleSave} userId={userId || ""} />
         )}
@@ -391,40 +388,46 @@ const Admin = () => {
           <LinksTab slug={slug} baseUrl={baseUrl} onCopy={copyLink} onQrOpen={(url, label) => setQrModal({ url, label })} />
         )}
 
-        {userId && activeTab === "crm" && (
-          <KanbanBoard consultantId={userId} instanceName={instanceName} />
-        )}
+        <Suspense fallback={<div className="flex justify-center py-12"><div className="animate-spin h-8 w-8 border-4 border-green-500 border-t-transparent rounded-full" /></div>}>
+          {activeTab === "materiais" && (
+            <MaterialsTab />
+          )}
 
-        {userId && activeTab === "clientes" && (
-          <CustomerManager
-            customers={customers}
-            consultantId={userId}
-            onCustomersChange={fetchCustomers}
-            instanceName={instanceName}
-            onOpenChat={handleOpenChatFromCustomer}
-          />
-        )}
+          {userId && activeTab === "crm" && (
+            <KanbanBoard consultantId={userId} instanceName={instanceName} />
+          )}
 
-        {userId && activeTab === "rede" && (
-          <NetworkPanel consultantId={userId} />
-        )}
-
-        {userId && activeTab === "whatsapp" && (
-          <WhatsAppErrorBoundary>
-            <WhatsAppTab
-              key="whatsapp-tab"
-              userId={userId}
+          {userId && activeTab === "clientes" && (
+            <CustomerManager
               customers={customers}
-              pendingChatPhone={pendingChatPhone}
-              pendingChatMessage={pendingChatMessage}
-              onPendingChatConsumed={() => { setPendingChatPhone(null); setPendingChatMessage(undefined); }}
+              consultantId={userId}
+              onCustomersChange={fetchCustomers}
+              instanceName={instanceName}
+              onOpenChat={handleOpenChatFromCustomer}
             />
-          </WhatsAppErrorBoundary>
-        )}
+          )}
 
-        {userId && activeTab === "historico" && (
-          <AutoMessageLog consultantId={userId} />
-        )}
+          {userId && activeTab === "rede" && (
+            <NetworkPanel consultantId={userId} />
+          )}
+
+          {userId && activeTab === "whatsapp" && (
+            <WhatsAppErrorBoundary>
+              <WhatsAppTab
+                key="whatsapp-tab"
+                userId={userId}
+                customers={customers}
+                pendingChatPhone={pendingChatPhone}
+                pendingChatMessage={pendingChatMessage}
+                onPendingChatConsumed={() => { setPendingChatPhone(null); setPendingChatMessage(undefined); }}
+              />
+            </WhatsAppErrorBoundary>
+          )}
+
+          {userId && activeTab === "historico" && (
+            <AutoMessageLog consultantId={userId} />
+          )}
+        </Suspense>
 
         {/* Preview Tab */}
         <div className="space-y-4" style={{ display: activeTab === "preview" ? "block" : "none" }}>
