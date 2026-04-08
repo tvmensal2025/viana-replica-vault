@@ -63,8 +63,10 @@ export function useAdminAuth() {
       if (isStale()) return;
       const id = (consultant.igreen_id as string) || "";
       setApproved(consultant.approved === true);
+      const consultantName = (consultant.name as string) || "";
+      const regeneratedLicense = consultantName.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "") || (consultant.license as string) || "";
       setForm({
-        ...DEFAULT_CONSULTANT_FORM, name: (consultant.name as string) || "", license: (consultant.license as string) || "",
+        ...DEFAULT_CONSULTANT_FORM, name: consultantName, license: regeneratedLicense,
         phone: (consultant.phone as string) || "", igreen_id: id,
         cadastro_url: id ? `https://digital.igreenenergy.com.br/?id=${id}&sendcontract=true` : (consultant.cadastro_url as string) || "",
         licenciada_cadastro_url: id ? `https://expansao.igreenenergy.com.br/?id=${id}&checkout=true` : (consultant.licenciada_cadastro_url as string) || "",
