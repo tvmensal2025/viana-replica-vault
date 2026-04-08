@@ -1,9 +1,7 @@
-import React, { useState, useEffect, useRef, lazy, Suspense } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useState, lazy, Suspense } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import type { Database } from "@/integrations/supabase/types";
 import { LogOut, BarChart3, LinkIcon, Settings, Monitor, MessageSquare, LayoutGrid, Users, Copy, Download, X, History, Sparkles, FolderDown, Network } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { WhatsAppErrorBoundary } from "@/components/whatsapp/WhatsAppErrorBoundary";
@@ -16,6 +14,8 @@ import { PreviewTab } from "@/components/admin/PreviewTab";
 import { NotificationCenter } from "@/components/admin/NotificationCenter";
 import { useNotifications } from "@/hooks/useNotifications";
 import { AIChatPanel } from "@/components/admin/AIChatPanel";
+import { useAdminAuth } from "@/hooks/useAdminAuth";
+import { useConsultantForm } from "@/hooks/useConsultantForm";
 
 const WhatsAppTab = lazy(() => import("@/components/whatsapp/WhatsAppTab").then(m => ({ default: m.WhatsAppTab })));
 const KanbanBoard = lazy(() => import("@/components/whatsapp/KanbanBoard").then(m => ({ default: m.KanbanBoard })));
@@ -24,70 +24,28 @@ const AutoMessageLog = lazy(() => import("@/components/whatsapp/AutoMessageLog")
 const MaterialsTab = lazy(() => import("@/components/admin/MaterialsTab").then(m => ({ default: m.MaterialsTab })));
 const NetworkPanel = lazy(() => import("@/components/admin/NetworkPanel").then(m => ({ default: m.NetworkPanel })));
 
-function buildPendingConsultantDefaults(uid: string, email?: string | null) {
-  const rawBase = (email?.split("@")[0] || `consultor-${uid.slice(0, 8)}`)
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-  const slugBase = rawBase.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 18) || `consultor-${uid.slice(0, 6)}`;
-  return {
-    id: uid, name: email?.split("@")[0] || "Novo consultor",
-    license: `${slugBase}-${uid.slice(0, 4)}`, phone: "", cadastro_url: "", approved: false,
-  } satisfies Database["public"]["Tables"]["consultants"]["Insert"];
-}
-
-function normalizeLicenseValue(value: string, uid: string) {
-  const normalized = value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-  return normalized || `consultor-${uid.slice(0, 8).toLowerCase()}`;
-}
-
-function buildFallbackLicense(value: string, uid: string) {
-  return `${value.replace(/-+$/g, "")}-${uid.slice(0, 8).toLowerCase()}`;
-}
-
-const DEFAULT_CONSULTANT_FORM = {
-  name: "", license: "", phone: "", cadastro_url: "", igreen_id: "",
-  licenciada_cadastro_url: "", facebook_pixel_id: "", google_analytics_id: "",
-  igreen_portal_email: "", igreen_portal_password: "",
-};
-
 const Admin = () => {
-  const [loading, setLoading] = useState(true);
-  const [approved, setApproved] = useState<boolean | null>(null);
-  const [saving, setSaving] = useState(false);
+  const { loading, approved, userId, form, photoPreview, setPhotoPreview, handleFormChange, handleLogout, setForm } = useAdminAuth();
+  const { saving, photoPreview: localPhotoPreview, handlePhotoChange, handleSave } = useConsultantForm(userId, form, setForm, setPhotoPreview);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
   const [activeTab, setActiveTab] = useState<"materiais" | "dashboard" | "dados" | "links" | "preview" | "whatsapp" | "crm" | "clientes" | "historico" | "rede">("dashboard");
   const [pendingChatPhone, setPendingChatPhone] = useState<string | null>(null);
   const [pendingChatMessage, setPendingChatMessage] = useState<string | undefined>(undefined);
   const [qrModal, setQrModal] = useState<{ url: string; label: string } | null>(null);
   const [aiChatOpen, setAiChatOpen] = useState(false);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [form, setForm] = useState({ ...DEFAULT_CONSULTANT_FORM });
-  const [photoFile, setPhotoFile] = useState<File | null>(null);
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [periodDays, setPeriodDays] = useState(30);
-  const navigate = useNavigate();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const loadingUidRef = useRef<string | null>(null);
-  const activeUidRef = useRef<string | null>(null);
-  const loadRequestIdRef = useRef(0);
 
-  // WhatsApp connection for CRM/Clientes tabs
-  const {
-    instanceName,
-    connectionStatus,
-  } = useWhatsApp(userId || "");
-
-  // Customers state (shared between Clientes tab and WhatsAppTab)
-  const [customers, setCustomers] = useState<any[]>([]);
-
-  // Notifications
+  const { instanceName } = useWhatsApp(userId || "");
+  const [customers, setCustomers] = useState<Record<string, unknown>[]>([]);
   const { notifications, unreadCount, markAllRead, markRead, clearAll } = useNotifications(userId);
 
   const fetchCustomers = React.useCallback(async () => {
     if (!userId) return;
     try {
       const selectFields = "id, name, phone_whatsapp, electricity_bill_value, email, cpf, address_city, address_state, address_street, address_neighborhood, address_complement, address_number, cep, numero_instalacao, data_nascimento, status, created_at, distribuidora, registered_by_name, registered_by_igreen_id, media_consumo, desconto_cliente, andamento_igreen, devolutiva, observacao, igreen_code, data_cadastro, data_ativo, data_validado, status_financeiro, cashback, nivel_licenciado, assinatura_cliente, assinatura_igreen, link_assinatura";
-      const allRows: any[] = [];
+      const allRows: Record<string, unknown>[] = [];
       const pageSize = 1000;
       let page = 0;
       while (true) {
@@ -102,7 +60,7 @@ const Admin = () => {
         page++;
       }
       setCustomers(allRows.map((c) => ({
-        id: c.id, name: c.name || "Sem nome", phone_whatsapp: c.phone_whatsapp,
+        id: c.id, name: (c.name as string) || "Sem nome", phone_whatsapp: c.phone_whatsapp,
         electricity_bill_value: c.electricity_bill_value ?? undefined,
         email: c.email, cpf: c.cpf, address_city: c.address_city, address_state: c.address_state,
         address_street: c.address_street, address_neighborhood: c.address_neighborhood,
@@ -121,7 +79,7 @@ const Admin = () => {
     } catch { /* silently handle */ }
   }, [userId]);
 
-  useEffect(() => { fetchCustomers(); }, [fetchCustomers]);
+  React.useEffect(() => { fetchCustomers(); }, [fetchCustomers]);
 
   const handleOpenChatFromCustomer = React.useCallback((phone: string, suggestedMessage?: string) => {
     setPendingChatPhone(phone);
@@ -129,140 +87,6 @@ const Admin = () => {
     setActiveTab("whatsapp");
   }, []);
 
-  const resetConsultantState = () => {
-    setApproved(false);
-    setForm({ ...DEFAULT_CONSULTANT_FORM });
-    setPhotoFile(null);
-    setPhotoPreview(null);
-  };
-
-  useEffect(() => {
-    const handleSession = (session: { user: { id: string } } | null) => {
-      if (!session) {
-        activeUidRef.current = null; loadingUidRef.current = null; loadRequestIdRef.current += 1;
-        setUserId(null); resetConsultantState(); setLoading(false); navigate("/auth"); return;
-      }
-      const uid = session.user.id;
-      if (loadingUidRef.current === uid || activeUidRef.current === uid) return;
-      loadingUidRef.current = uid; activeUidRef.current = uid;
-      const requestId = ++loadRequestIdRef.current;
-      setLoading(true); resetConsultantState(); setUserId(uid);
-      void loadConsultant(uid, requestId);
-    };
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => { handleSession(session); });
-    supabase.auth.getSession().then(({ data: { session } }) => { handleSession(session); });
-    return () => { subscription.unsubscribe(); activeUidRef.current = null; loadingUidRef.current = null; loadRequestIdRef.current += 1; };
-  }, [navigate]);
-
-  const loadConsultant = async (uid: string, requestId: number) => {
-    const isStale = () => activeUidRef.current !== uid || loadRequestIdRef.current !== requestId;
-    const applyConsultantData = (consultant: any) => {
-      if (isStale()) return;
-      const id = consultant.igreen_id || "";
-      setApproved(consultant.approved === true);
-      setForm({
-        ...DEFAULT_CONSULTANT_FORM, name: consultant.name || "", license: consultant.license || "",
-        phone: consultant.phone || "", igreen_id: id,
-        cadastro_url: id ? `https://digital.igreenenergy.com.br/?id=${id}&sendcontract=true` : consultant.cadastro_url || "",
-        licenciada_cadastro_url: id ? `https://expansao.igreenenergy.com.br/?id=${id}&checkout=true` : consultant.licenciada_cadastro_url || "",
-        facebook_pixel_id: consultant.facebook_pixel_id || "", google_analytics_id: consultant.google_analytics_id || "",
-        igreen_portal_email: consultant.igreen_portal_email || "", igreen_portal_password: consultant.igreen_portal_password || "",
-      });
-      if (consultant.photo_url) setPhotoPreview(consultant.photo_url);
-    };
-    try {
-      const { data, error } = await supabase.from("consultants").select("*").eq("id", uid).maybeSingle();
-      if (isStale()) return; if (error) throw error;
-      if (data) { applyConsultantData(data); return; }
-      const { data: userData, error: userError } = await supabase.auth.getUser();
-      if (isStale()) return; if (userError) throw userError;
-      const pendingConsultant = buildPendingConsultantDefaults(uid, userData.user?.email);
-      const { data: createdData, error: createError } = await supabase.from("consultants").upsert(pendingConsultant, { onConflict: "id" }).select("*").single();
-      if (isStale()) return; if (createError) throw createError;
-      applyConsultantData(createdData);
-    } catch { if (isStale()) return; resetConsultantState(); }
-    finally { if (isStale()) return; setLoading(false); loadingUidRef.current = null; }
-  };
-
-  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) { setPhotoFile(file); setPhotoPreview(URL.createObjectURL(file)); }
-  };
-
-  const handleFormChange = (updates: Record<string, string>) => {
-    setForm((prev) => ({ ...prev, ...updates }));
-  };
-
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!userId) return;
-    setSaving(true);
-    try {
-      let photo_url: string | undefined;
-      if (photoFile) {
-        const ext = photoFile.name.split(".").pop();
-        const path = `${userId}/photo.${ext}`;
-        const { error: uploadError } = await supabase.storage.from("consultant-photos").upload(path, photoFile, { upsert: true });
-        if (uploadError) throw uploadError;
-        const { data: urlData } = supabase.storage.from("consultant-photos").getPublicUrl(path);
-        photo_url = `${urlData.publicUrl}?t=${Date.now()}`;
-      }
-      const normalizedLicense = normalizeLicenseValue(form.license, userId);
-      const [existingResult, conflictingResult] = await Promise.all([
-        supabase.from("consultants").select("id, license").eq("id", userId).maybeSingle(),
-        supabase.from("consultants").select("id, license").eq("license", normalizedLicense).neq("id", userId).maybeSingle(),
-      ]);
-      if (existingResult.error) throw existingResult.error;
-      if (conflictingResult.error) throw conflictingResult.error;
-      const existingConsultant = existingResult.data;
-      const conflictingConsultant = conflictingResult.data;
-      let finalLicense = normalizedLicense;
-      let licenseAdjusted = false;
-      if (conflictingConsultant) {
-        finalLicense = existingConsultant?.license && existingConsultant.license !== normalizedLicense
-          ? existingConsultant.license : buildFallbackLicense(normalizedLicense, userId);
-        licenseAdjusted = finalLicense !== normalizedLicense;
-      }
-      const consultantFields: Database["public"]["Tables"]["consultants"]["Update"] = {
-        name: form.name, license: finalLicense, phone: form.phone.replace(/\D/g, ""),
-        cadastro_url: form.cadastro_url, igreen_id: form.igreen_id || null,
-        licenciada_cadastro_url: form.licenciada_cadastro_url || null,
-        facebook_pixel_id: form.facebook_pixel_id || null, google_analytics_id: form.google_analytics_id || null,
-        igreen_portal_email: form.igreen_portal_email || null, igreen_portal_password: form.igreen_portal_password || null,
-      };
-      if (photo_url) consultantFields.photo_url = photo_url;
-      const saveConsultant = async (licenseToSave: string) => {
-        const fieldsToSave = { ...consultantFields, license: licenseToSave };
-        if (existingConsultant) {
-          return supabase.from("consultants").update(fieldsToSave).eq("id", userId).select("*").single();
-        }
-        const insertPayload: Database["public"]["Tables"]["consultants"]["Insert"] = {
-          id: userId, name: form.name, license: licenseToSave, phone: form.phone.replace(/\D/g, ""),
-          cadastro_url: form.cadastro_url, igreen_id: form.igreen_id || null,
-          licenciada_cadastro_url: form.licenciada_cadastro_url || null,
-          facebook_pixel_id: form.facebook_pixel_id || null, google_analytics_id: form.google_analytics_id || null,
-          igreen_portal_email: form.igreen_portal_email || null, igreen_portal_password: form.igreen_portal_password || null,
-          ...(photo_url ? { photo_url } : {}),
-        };
-        return supabase.from("consultants").insert(insertPayload).select("*").single();
-      };
-      let { data: savedConsultant, error } = await saveConsultant(finalLicense);
-      if (error?.code === "23505" && `${error.message || ""}`.includes("consultants_license_key")) {
-        finalLicense = buildFallbackLicense(normalizedLicense, userId);
-        licenseAdjusted = true;
-        ({ data: savedConsultant, error } = await saveConsultant(finalLicense));
-      }
-      if (error) throw error;
-      setForm((prev) => ({ ...prev, license: savedConsultant?.license || finalLicense }));
-      if (savedConsultant?.photo_url) { setPhotoPreview(savedConsultant.photo_url); setPhotoFile(null); }
-      toast({ title: "✅ Dados salvos com sucesso!", ...(licenseAdjusted ? { description: `A licença foi ajustada automaticamente para ${savedConsultant?.license || finalLicense}.` } : {}) });
-    } catch (error: any) {
-      const msg = error?.message || error?.error_description || (typeof error === "string" ? error : JSON.stringify(error));
-      toast({ title: "Erro ao salvar", description: msg || "Erro desconhecido", variant: "destructive" });
-    } finally { setSaving(false); }
-  };
-
-  const handleLogout = async () => { await supabase.auth.signOut(); navigate("/auth"); };
   const copyLink = (url: string) => { navigator.clipboard.writeText(url); toast({ title: "✅ Link copiado!" }); };
 
   const baseUrl = "igreen.institutodossonhos.com.br";
@@ -305,6 +129,8 @@ const Admin = () => {
     );
   }
 
+  const effectivePhotoPreview = localPhotoPreview || photoPreview;
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -318,7 +144,6 @@ const Admin = () => {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {/* AI Chat button */}
             <button
               onClick={() => setAiChatOpen(true)}
               className="relative p-2 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
@@ -381,14 +206,14 @@ const Admin = () => {
         )}
 
         {activeTab === "dados" && (
-          <DadosTab form={form} photoPreview={photoPreview} saving={saving} onFormChange={handleFormChange} onPhotoChange={handlePhotoChange} onSave={handleSave} userId={userId || ""} />
+          <DadosTab form={form} photoPreview={effectivePhotoPreview} saving={saving} onFormChange={handleFormChange} onPhotoChange={handlePhotoChange} onSave={handleSave} userId={userId || ""} />
         )}
 
         {activeTab === "links" && (
           <LinksTab slug={slug} baseUrl={baseUrl} onCopy={copyLink} onQrOpen={(url, label) => setQrModal({ url, label })} />
         )}
 
-        <Suspense fallback={<div className="flex justify-center py-12"><div className="animate-spin h-8 w-8 border-4 border-green-500 border-t-transparent rounded-full" /></div>}>
+        <Suspense fallback={<div className="flex justify-center py-12"><div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" /></div>}>
           {activeTab === "materiais" && (
             <MaterialsTab />
           )}
@@ -399,7 +224,7 @@ const Admin = () => {
 
           {userId && activeTab === "clientes" && (
             <CustomerManager
-              customers={customers}
+              customers={customers as never[]}
               consultantId={userId}
               onCustomersChange={fetchCustomers}
               instanceName={instanceName}
@@ -416,7 +241,7 @@ const Admin = () => {
               <WhatsAppTab
                 key="whatsapp-tab"
                 userId={userId}
-                customers={customers}
+                customers={customers as never[]}
                 pendingChatPhone={pendingChatPhone}
                 pendingChatMessage={pendingChatMessage}
                 onPendingChatConsumed={() => { setPendingChatPhone(null); setPendingChatMessage(undefined); }}
