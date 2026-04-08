@@ -41,10 +41,13 @@ export function WhatsAppTab({ userId, pendingChatPhone, pendingChatMessage, onPe
     isLoading,
     error,
     connectionLog,
+    operationalHealth,
+    consecutiveTimeouts,
     createAndConnect,
     disconnect,
     reconnect,
     refreshQr,
+    safeReset,
   } = useWhatsApp(userId);
 
   const {
@@ -283,10 +286,13 @@ export function WhatsAppTab({ userId, pendingChatPhone, pendingChatMessage, onPe
                 isLoading={isLoading}
                 error={error}
                 connectionLog={connectionLog}
+                operationalHealth={operationalHealth}
+                consecutiveTimeouts={consecutiveTimeouts}
                 onConnect={createAndConnect}
                 onDisconnect={disconnect}
                 onReconnect={reconnect}
                 onRefreshQr={refreshQr}
+                onSafeReset={safeReset}
               />
             </div>
           )
