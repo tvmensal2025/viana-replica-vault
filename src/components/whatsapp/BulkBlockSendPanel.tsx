@@ -1,5 +1,5 @@
 import { useState, useRef, useMemo, useCallback } from "react";
-import { Megaphone, Send, Loader2, Pause, Play, X, Shield, Timer, CheckCircle2, XCircle, Layers } from "lucide-react";
+import { Megaphone, Send, Loader2, Pause, Play, X, Shield, Timer, CheckCircle2, XCircle, Layers, ShieldAlert, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/components/ui/use-toast";
@@ -7,6 +7,7 @@ import { ContactImporter } from "./ContactImporter";
 import { BlockConfigurator } from "./BlockConfigurator";
 import { QuickTemplateForm } from "./QuickTemplateForm";
 import { sendWhatsAppMessage } from "@/services/messageSender";
+import { getConnectionState } from "@/services/evolutionApi";
 import type { MessageTemplate, BulkContact, BlockConfig, BlockProgress } from "@/types/whatsapp";
 
 interface Customer {
@@ -26,6 +27,10 @@ interface BulkBlockSendPanelProps {
 const SEND_INTERVAL_MIN_S = 18;
 const SEND_INTERVAL_MAX_S = 35;
 const PROGRESSIVE_EXTRA_S = 5;
+const MEDIA_JITTER_MIN_MS = 2000;
+const MEDIA_JITTER_MAX_MS = 4000;
+const CIRCUIT_BREAKER_THRESHOLD = 5;
+const DAILY_SAFE_LIMIT = 200;
 
 function getRandomInterval(messageIndex: number): number {
   const base = SEND_INTERVAL_MIN_S + Math.random() * (SEND_INTERVAL_MAX_S - SEND_INTERVAL_MIN_S);
@@ -45,6 +50,28 @@ function formatCountdown(seconds: number): string {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
+/** Normalize phone to digits only for deduplication */
+function normalizePhone(phone: string): string {
+  return phone.replace(/\D/g, "");
+}
+
+/** Deduplicate contacts by normalized phone */
+function deduplicateContacts(contacts: BulkContact[]): { unique: BulkContact[]; removedCount: number } {
+  const seen = new Set<string>();
+  const unique: BulkContact[] = [];
+  let removedCount = 0;
+  for (const c of contacts) {
+    const norm = normalizePhone(c.phone);
+    if (seen.has(norm)) {
+      removedCount++;
+    } else {
+      seen.add(norm);
+      unique.push(c);
+    }
+  }
+  return { unique, removedCount };
+}
+
 type BlockResult = { blockIndex: number; sent: number; failed: number };
 
 export function BulkBlockSendPanel({ instanceName, customers, templates, applyTemplate, consultantId, onCreateTemplate }: BulkBlockSendPanelProps) {
@@ -55,6 +82,10 @@ export function BulkBlockSendPanel({ instanceName, customers, templates, applyTe
   const [progress, setProgress] = useState<BlockProgress | null>(null);
   const [blockResults, setBlockResults] = useState<BlockResult[]>([]);
   const [finalResult, setFinalResult] = useState<{ total: number; sent: number; failed: number } | null>(null);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [circuitBroken, setCircuitBroken] = useState(false);
+  const [dailySentCount, setDailySentCount] = useState(0);
+  const [duplicatesRemoved, setDuplicatesRemoved] = useState(0);
   const cancelledRef = useRef(false);
   const pausedRef = useRef(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -79,7 +110,7 @@ export function BulkBlockSendPanel({ instanceName, customers, templates, applyTe
       let elapsed = 0;
       const interval = setInterval(() => {
         if (cancelledRef.current) { clearInterval(interval); resolve(false); return; }
-        if (pausedRef.current) return; // just skip ticks while paused
+        if (pausedRef.current) return;
         elapsed += 1000;
         const remaining = Math.max(0, Math.ceil((ms - elapsed) / 1000));
         onTick?.(remaining);
@@ -88,10 +119,52 @@ export function BulkBlockSendPanel({ instanceName, customers, templates, applyTe
     });
   }, []);
 
-  const handleSend = useCallback(async () => {
+  /** Media jitter: random 2-4s between media sends to same contact */
+  const mediaJitter = useCallback(async (): Promise<boolean> => {
+    const jitterMs = MEDIA_JITTER_MIN_MS + Math.random() * (MEDIA_JITTER_MAX_MS - MEDIA_JITTER_MIN_MS);
+    return sleep(jitterMs);
+  }, [sleep]);
+
+  /** Check if WhatsApp is still connected before a block */
+  const checkConnection = useCallback(async (): Promise<boolean> => {
+    try {
+      const result = await getConnectionState(instanceName);
+      const state = result?.state || "close";
+      return state === "open";
+    } catch {
+      return false;
+    }
+  }, [instanceName]);
+
+  /** Show confirmation step before sending */
+  const handlePreSend = useCallback(() => {
     if (validContacts.length === 0) return;
     const hasMedia = !!(selectedTemplate?.media_url);
     if (!message.trim() && !hasMedia) return;
+
+    // Deduplicate
+    const { unique, removedCount } = deduplicateContacts(validContacts);
+    setDuplicatesRemoved(removedCount);
+
+    // Warn daily limit
+    if (dailySentCount + unique.length > DAILY_SAFE_LIMIT) {
+      toast({
+        title: "⚠️ Limite diário próximo",
+        description: `Você já enviou ${dailySentCount} hoje. Enviar mais ${unique.length} pode causar bloqueio.`,
+        variant: "destructive",
+      });
+    }
+
+    setShowConfirmation(true);
+  }, [validContacts, message, selectedTemplate, dailySentCount, toast]);
+
+  const handleSend = useCallback(async () => {
+    setShowConfirmation(false);
+    setCircuitBroken(false);
+
+    // Deduplicate contacts before sending
+    const { unique: dedupedContacts } = deduplicateContacts(validContacts);
+    if (dedupedContacts.length === 0) return;
 
     cancelledRef.current = false;
     pausedRef.current = false;
@@ -100,16 +173,18 @@ export function BulkBlockSendPanel({ instanceName, customers, templates, applyTe
     setFinalResult(null);
 
     const blocks: BulkContact[][] = [];
-    for (let i = 0; i < validContacts.length; i += blockConfig.blockSize) {
-      blocks.push(validContacts.slice(i, i + blockConfig.blockSize));
+    for (let i = 0; i < dedupedContacts.length; i += blockConfig.blockSize) {
+      blocks.push(dedupedContacts.slice(i, i + blockConfig.blockSize));
     }
 
     let totalSent = 0, totalFailed = 0;
+    let globalIndex = 0; // Global index for progressive delay
+    let consecutiveFailures = 0;
 
     const initProgress: BlockProgress = {
       currentBlock: 0, totalBlocks: blocks.length,
       sentInBlock: 0, failedInBlock: 0,
-      totalSent: 0, totalFailed: 0, totalContacts: validContacts.length,
+      totalSent: 0, totalFailed: 0, totalContacts: dedupedContacts.length,
       isPaused: false, isWaitingBetweenBlocks: false,
       blockCountdown: 0, messageCountdown: 0,
     };
@@ -117,6 +192,30 @@ export function BulkBlockSendPanel({ instanceName, customers, templates, applyTe
 
     for (let b = 0; b < blocks.length; b++) {
       if (cancelledRef.current) break;
+
+      // ── Connection check before each block ──
+      const isConnected = await checkConnection();
+      if (!isConnected) {
+        toast({
+          title: "⚠️ WhatsApp desconectado",
+          description: "A conexão foi perdida. Envio pausado automaticamente. Verifique a conexão e retome.",
+          variant: "destructive",
+        });
+        pausedRef.current = true;
+        setIsPaused(true);
+        // Wait for user to unpause or cancel
+        while (pausedRef.current && !cancelledRef.current) {
+          await new Promise(r => setTimeout(r, 1000));
+        }
+        if (cancelledRef.current) break;
+        // Re-check after unpause
+        const reconnected = await checkConnection();
+        if (!reconnected) {
+          toast({ title: "Conexão não restaurada", description: "Envio cancelado.", variant: "destructive" });
+          break;
+        }
+      }
+
       const block = blocks[b];
       let sentInBlock = 0, failedInBlock = 0;
 
@@ -150,10 +249,12 @@ export function BulkBlockSendPanel({ instanceName, customers, templates, applyTe
             const r = await sendWhatsAppMessage({ instanceName, phone: contact.phone, mediaCategory: "audio", mediaUrl: tplMediaUrl });
             if (r.status === "failed") allOk = false;
             if (tplImageUrl) {
+              await mediaJitter(); // ← Jitter between media types
               const r2 = await sendWhatsAppMessage({ instanceName, phone: contact.phone, mediaCategory: "image", mediaUrl: tplImageUrl });
               if (r2.status === "failed") allOk = false;
             }
             if (msg.trim()) {
+              await mediaJitter(); // ← Jitter before text
               const r3 = await sendWhatsAppMessage({ instanceName, phone: contact.phone, mediaCategory: "text", text: msg });
               if (r3.status === "failed") allOk = false;
             }
@@ -163,31 +264,63 @@ export function BulkBlockSendPanel({ instanceName, customers, templates, applyTe
               if (r.status === "failed") allOk = false;
             }
             if (tplMediaUrl && (tplMediaType === "image" || tplMediaType === "document")) {
+              if (tplImageUrl) await mediaJitter(); // ← Jitter if image was sent before
               const r = await sendWhatsAppMessage({ instanceName, phone: contact.phone, mediaCategory: tplMediaType as "image" | "document", mediaUrl: tplMediaUrl, text: msg });
               if (r.status === "failed") allOk = false;
             } else if (msg.trim()) {
+              if (tplImageUrl) await mediaJitter(); // ← Jitter if image was sent before
               const r = await sendWhatsAppMessage({ instanceName, phone: contact.phone, mediaCategory: "text", text: msg });
               if (r.status === "failed") allOk = false;
             }
           }
 
-          if (allOk) { sentInBlock++; totalSent++; } else { failedInBlock++; totalFailed++; }
-        } catch { failedInBlock++; totalFailed++; }
+          if (allOk) {
+            sentInBlock++; totalSent++;
+            consecutiveFailures = 0; // Reset circuit breaker on success
+          } else {
+            failedInBlock++; totalFailed++;
+            consecutiveFailures++;
+          }
+        } catch {
+          failedInBlock++; totalFailed++;
+          consecutiveFailures++;
+        }
+
+        // ── Circuit breaker ──
+        if (consecutiveFailures >= CIRCUIT_BREAKER_THRESHOLD) {
+          setCircuitBroken(true);
+          toast({
+            title: "⚠️ Muitas falhas consecutivas",
+            description: `${CIRCUIT_BREAKER_THRESHOLD} falhas seguidas detectadas. Envio pausado. Verifique a conexão.`,
+            variant: "destructive",
+          });
+          pausedRef.current = true;
+          setIsPaused(true);
+          // Wait for user to manually resume or cancel
+          while (pausedRef.current && !cancelledRef.current) {
+            await new Promise(r => setTimeout(r, 500));
+          }
+          if (cancelledRef.current) break;
+          consecutiveFailures = 0;
+          setCircuitBroken(false);
+        }
 
         setProgress(p => p ? {
           ...p, sentInBlock, failedInBlock, totalSent, totalFailed,
           isPaused: pausedRef.current,
         } : p);
 
-        // Anti-spam interval between messages in same block
+        // Anti-spam interval using GLOBAL index
         if (i < block.length - 1 && !cancelledRef.current) {
-          const intervalS = getRandomInterval(i);
+          const intervalS = getRandomInterval(globalIndex);
           const ok = await sleep(intervalS * 1000, (rem) => {
             setProgress(p => p ? { ...p, messageCountdown: rem } : p);
           });
           setProgress(p => p ? { ...p, messageCountdown: 0 } : p);
           if (!ok) break;
         }
+
+        globalIndex++; // Increment global counter
       }
 
       setBlockResults(prev => [...prev, { blockIndex: b, sent: sentInBlock, failed: failedInBlock }]);
@@ -204,22 +337,31 @@ export function BulkBlockSendPanel({ instanceName, customers, templates, applyTe
       }
     }
 
-    const result = { total: validContacts.length, sent: totalSent, failed: totalFailed };
+    // Track daily sent count
+    setDailySentCount(prev => prev + totalSent);
+
+    const result = { total: dedupedContacts.length, sent: totalSent, failed: totalFailed };
     setFinalResult(result);
     toast({
       title: cancelledRef.current ? "Envio cancelado" : "Envio concluído",
       description: `${totalSent} enviadas, ${totalFailed} falhas`,
       variant: totalFailed > 0 ? "destructive" : "default",
     });
-  }, [validContacts, message, selectedTemplate, blockConfig, instanceName, applyTemplate, sleep, toast]);
+  }, [validContacts, message, selectedTemplate, blockConfig, instanceName, applyTemplate, sleep, toast, checkConnection, mediaJitter]);
 
   const resetAll = useCallback(() => {
     setProgress(null);
     setBlockResults([]);
     setFinalResult(null);
+    setShowConfirmation(false);
+    setCircuitBroken(false);
+    setDuplicatesRemoved(0);
   }, []);
 
   const overallPct = progress ? ((progress.totalSent + progress.totalFailed) / progress.totalContacts) * 100 : 0;
+
+  // Dedup stats for confirmation
+  const { unique: previewDeduped } = useMemo(() => deduplicateContacts(validContacts), [validContacts]);
 
   return (
     <div className="relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-card via-card to-orange-950/10">
@@ -236,7 +378,7 @@ export function BulkBlockSendPanel({ instanceName, customers, templates, applyTe
           </div>
         </div>
 
-        {!isSending && !finalResult && (
+        {!isSending && !finalResult && !showConfirmation && (
           <>
             {/* Step 1: Contacts */}
             <div>
@@ -277,26 +419,97 @@ export function BulkBlockSendPanel({ instanceName, customers, templates, applyTe
               <BlockConfigurator
                 config={blockConfig}
                 onConfigChange={setBlockConfig}
-                totalContacts={validContacts.length}
+                totalContacts={previewDeduped.length}
+                dailySentCount={dailySentCount}
               />
             </div>
 
             {/* Send button */}
             <Button
-              onClick={handleSend}
+              onClick={handlePreSend}
               disabled={validContacts.length === 0 || (!message.trim() && !selectedTemplate?.media_url)}
               className="w-full gap-2 rounded-xl h-12 font-bold text-base shadow-lg shadow-green-500/10 hover:shadow-green-500/20 transition-all"
               style={{ background: "var(--gradient-green)" }}
             >
               <Send className="w-5 h-5" />
-              Enviar para {validContacts.length} contatos em {Math.ceil(validContacts.length / blockConfig.blockSize)} blocos
+              Revisar e enviar para {previewDeduped.length} contatos
             </Button>
           </>
+        )}
+
+        {/* ── Confirmation step ── */}
+        {showConfirmation && !isSending && !finalResult && (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-primary/30 bg-primary/5 p-5 space-y-3">
+              <p className="text-sm font-bold text-foreground text-center">📋 Confirmar Envio</p>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">📱 Contatos</span>
+                  <span className="font-bold text-foreground">
+                    {previewDeduped.length}
+                    {duplicatesRemoved > 0 && (
+                      <span className="text-yellow-400 text-xs ml-1">({duplicatesRemoved} duplicados removidos)</span>
+                    )}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">📝 Template</span>
+                  <span className="font-medium text-foreground truncate max-w-[180px]">{selectedTemplate?.name || "Mensagem livre"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">📦 Blocos</span>
+                  <span className="font-medium text-foreground">
+                    {Math.ceil(previewDeduped.length / blockConfig.blockSize)} blocos de {blockConfig.blockSize} • {blockConfig.intervalMinutes}min intervalo
+                  </span>
+                </div>
+                {dailySentCount > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">📊 Hoje</span>
+                    <span className="font-medium text-foreground">{dailySentCount} já enviadas</span>
+                  </div>
+                )}
+              </div>
+
+              {dailySentCount + previewDeduped.length > DAILY_SAFE_LIMIT && (
+                <div className="rounded-lg bg-red-500/10 border border-red-500/30 p-2.5 flex items-start gap-2">
+                  <ShieldAlert className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                  <p className="text-[11px] text-red-300">
+                    ⚠️ Este envio ultrapassará o limite seguro de {DAILY_SAFE_LIMIT} mensagens/dia.
+                    O risco de bloqueio é alto. Considere reduzir o volume.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setShowConfirmation(false)} className="flex-1 rounded-xl h-10">
+                Voltar
+              </Button>
+              <Button
+                onClick={handleSend}
+                className="flex-1 gap-2 rounded-xl h-10 font-bold"
+                style={{ background: "var(--gradient-green)" }}
+              >
+                <Send className="w-4 h-4" /> Confirmar Envio
+              </Button>
+            </div>
+          </div>
         )}
 
         {/* Sending progress */}
         {isSending && progress && (
           <div className="space-y-4">
+            {/* Circuit breaker alert */}
+            {circuitBroken && (
+              <div className="rounded-xl bg-red-500/10 border border-red-500/30 p-3 flex items-start gap-2">
+                <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-bold text-red-400">Circuit Breaker Ativado</p>
+                  <p className="text-xs text-red-300/80">{CIRCUIT_BREAKER_THRESHOLD} falhas consecutivas. Verifique a conexão do WhatsApp e clique em Retomar.</p>
+                </div>
+              </div>
+            )}
+
             {/* Overall progress */}
             <div className="rounded-xl bg-secondary/20 border border-border/30 p-4 space-y-3">
               <div className="flex items-center justify-between">
