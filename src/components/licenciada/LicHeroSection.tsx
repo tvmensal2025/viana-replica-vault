@@ -13,26 +13,51 @@ const DEFAULT_WHATSAPP = "https://api.whatsapp.com/send?phone=5500000000000&text
 const AnimatedCounter = ({ target, suffix = "" }: { target: number; suffix?: string }) => {
   const [count, setCount] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
+  const hasAnimatedRef = useRef(false);
 
   useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+
+    const isMobileViewport = window.matchMedia("(max-width: 767px)").matches;
+
+    const startAnimation = () => {
+      if (hasAnimatedRef.current) return;
+      hasAnimatedRef.current = true;
+
+      if (isMobileViewport) {
+        setCount(target);
+        return;
+      }
+
+      let start = 0;
+      const duration = 2000;
+      const step = (timestamp: number) => {
+        if (!start) start = timestamp;
+        const progress = Math.min((timestamp - start) / duration, 1);
+        setCount(Math.floor(progress * target));
+        if (progress < 1) requestAnimationFrame(step);
+      };
+
+      requestAnimationFrame(step);
+    };
+
+    if (typeof IntersectionObserver === "undefined" || isMobileViewport) {
+      startAnimation();
+      return;
+    }
+
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          let start = 0;
-          const duration = 2000;
-          const step = (timestamp: number) => {
-            if (!start) start = timestamp;
-            const progress = Math.min((timestamp - start) / duration, 1);
-            setCount(Math.floor(progress * target));
-            if (progress < 1) requestAnimationFrame(step);
-          };
-          requestAnimationFrame(step);
+          startAnimation();
           observer.disconnect();
         }
       },
-      { threshold: 0.1 }
+      { threshold: 0.1, rootMargin: "0px 0px -10% 0px" }
     );
-    if (ref.current) observer.observe(ref.current);
+
+    observer.observe(element);
     return () => observer.disconnect();
   }, [target]);
 
