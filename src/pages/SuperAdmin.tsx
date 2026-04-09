@@ -91,9 +91,38 @@ const SuperAdmin = () => {
 
     if (error) {
       toast({ title: "Erro ao carregar consultores", description: error.message, variant: "destructive" });
-    } else {
-      setConsultants((data as any[])?.map(c => ({ ...c, approved: c.approved ?? false })) || []);
+      setLoadingData(false);
+      return;
     }
+
+    const rows: ConsultantRow[] = (data as any[])?.map(c => ({ ...c, approved: c.approved ?? false })) || [];
+
+    // Load activity metrics in parallel
+    const enriched = await Promise.all(rows.map(async (c) => {
+      const [custRes, cust7dRes, dealsRes, viewsRes, lastCustRes, lastViewRes] = await Promise.all([
+        supabase.from("customers").select("id", { count: "exact", head: true }).eq("consultant_id", c.id),
+        supabase.from("customers").select("id", { count: "exact", head: true }).eq("consultant_id", c.id).gte("created_at", new Date(Date.now() - 7 * 86400000).toISOString()),
+        supabase.from("crm_deals").select("id", { count: "exact", head: true }).eq("consultant_id", c.id),
+        supabase.from("page_views").select("id", { count: "exact", head: true }).eq("consultant_id", c.id).gte("created_at", new Date(Date.now() - 7 * 86400000).toISOString()),
+        supabase.from("customers").select("created_at").eq("consultant_id", c.id).order("created_at", { ascending: false }).limit(1),
+        supabase.from("page_views").select("created_at").eq("consultant_id", c.id).order("created_at", { ascending: false }).limit(1),
+      ]);
+
+      const lastCust = (lastCustRes.data as any)?.[0]?.created_at;
+      const lastView = (lastViewRes.data as any)?.[0]?.created_at;
+      const dates = [lastCust, lastView].filter(Boolean).sort().reverse();
+
+      return {
+        ...c,
+        total_customers: custRes.count || 0,
+        customers_7d: cust7dRes.count || 0,
+        total_deals: dealsRes.count || 0,
+        views_7d: viewsRes.count || 0,
+        last_activity: dates[0] || null,
+      };
+    }));
+
+    setConsultants(enriched);
     setLoadingData(false);
   };
 
