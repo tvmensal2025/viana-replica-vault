@@ -24,7 +24,7 @@ export function KanbanDealCard({ deal, onDragStart, onEdit, onDelete }: KanbanDe
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1">
             <User className="h-3 w-3 text-muted-foreground" />
-            <span className="text-xs font-medium text-foreground truncate">
+            <span className="text-xs font-medium text-foreground truncate sensitive-phone">
               {deal.remote_jid?.split("@")[0] || "Sem contato"}
             </span>
           </div>
