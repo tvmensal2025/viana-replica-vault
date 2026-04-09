@@ -25,7 +25,8 @@ const AutoMessageLog = lazy(() => import("@/components/whatsapp/AutoMessageLog")
 const MaterialsTab = lazy(() => import("@/components/admin/MaterialsTab").then(m => ({ default: m.MaterialsTab })));
 const NetworkPanel = lazy(() => import("@/components/admin/NetworkPanel").then(m => ({ default: m.NetworkPanel })));
 
-const Admin = () => {
+const AdminContent = () => {
+  const { privacyMode, togglePrivacy } = usePrivacyMode();
   const { loading, approved, userId, form, photoPreview, setPhotoPreview, handleFormChange, handleLogout, setForm } = useAdminAuth();
   const { saving, photoPreview: localPhotoPreview, handlePhotoChange, handleSave } = useConsultantForm(userId, form, setForm, setPhotoPreview);
   const { toast } = useToast();
@@ -145,6 +146,14 @@ const Admin = () => {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={togglePrivacy}
+              className={`relative p-2 rounded-lg transition-colors ${privacyMode ? 'text-primary bg-primary/20' : 'text-muted-foreground hover:text-primary hover:bg-primary/10'}`}
+              aria-label={privacyMode ? "Mostrar dados sensíveis" : "Ocultar dados sensíveis"}
+              title={privacyMode ? "Modo privacidade ATIVO — clique para desativar" : "Ocultar dados sensíveis para gravação"}
+            >
+              {privacyMode ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+            </button>
             <button
               onClick={() => setAiChatOpen(true)}
               className="relative p-2 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
@@ -309,5 +318,11 @@ const Admin = () => {
     </div>
   );
 };
+
+const Admin = () => (
+  <PrivacyModeProvider>
+    <AdminContent />
+  </PrivacyModeProvider>
+);
 
 export default Admin;
