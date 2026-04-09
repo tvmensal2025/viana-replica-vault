@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { PaginatedList } from "@/components/ui/PaginatedList";
 import {
-  UserPlus, Users, Search, Loader2, RefreshCw, Filter,
+  UserPlus, Users, Search, Loader2, RefreshCw, Filter, Smartphone, Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

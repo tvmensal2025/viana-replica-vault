@@ -38,6 +38,7 @@ export interface Customer {
   link_assinatura?: string | null;
   customer_referred_by_name?: string | null;
   customer_referred_by_phone?: string | null;
+  tipo_produto?: string | null;
 }
 
 export interface ParsedCustomer {
