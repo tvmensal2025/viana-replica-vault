@@ -26,13 +26,13 @@ function SectionLabel({ icon: Icon, title }: { icon: React.ElementType; title: s
   );
 }
 
-function DetailItem({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string }) {
+function DetailItem({ icon: Icon, label, value, sensitiveClass }: { icon: React.ElementType; label: string; value: string; sensitiveClass?: string }) {
   return (
     <div className="flex items-start gap-2">
       <Icon className="h-3 w-3 text-muted-foreground mt-0.5 shrink-0" />
       <div>
         <p className="text-[9px] text-muted-foreground uppercase tracking-wider">{label}</p>
-        <p className="text-xs text-foreground">{value}</p>
+        <p className={`text-xs text-foreground ${sensitiveClass || ""}`}>{value}</p>
       </div>
     </div>
   );
@@ -156,13 +156,13 @@ export function CustomerListItem({
         <div className="px-4 pb-4 pt-1 border-t border-border/30">
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-2 mt-2">
             {c.igreen_code && <DetailItem icon={FileText} label="Código iGreen" value={c.igreen_code} />}
-            {c.cpf && <DetailItem icon={CreditCard} label="CPF" value={formatCpfDisplay(c.cpf)} />}
-            {c.email && <DetailItem icon={Mail} label="Email" value={c.email} />}
-            <DetailItem icon={Phone} label="WhatsApp" value={formatPhoneDisplay(c.phone_whatsapp)} />
-            {c.data_nascimento && <DetailItem icon={User} label="Nascimento" value={c.data_nascimento} />}
+            {c.cpf && <DetailItem icon={CreditCard} label="CPF" value={formatCpfDisplay(c.cpf)} sensitiveClass="sensitive-cpf" />}
+            {c.email && <DetailItem icon={Mail} label="Email" value={c.email} sensitiveClass="sensitive-email" />}
+            <DetailItem icon={Phone} label="WhatsApp" value={formatPhoneDisplay(c.phone_whatsapp)} sensitiveClass="sensitive-phone" />
+            {c.data_nascimento && <DetailItem icon={User} label="Nascimento" value={c.data_nascimento} sensitiveClass="sensitive-data" />}
             {c.distribuidora && <DetailItem icon={Building2} label="Distribuidora" value={c.distribuidora} />}
             {c.registered_by_name && <DetailItem icon={User} label="Licenciado" value={`${c.registered_by_name}${c.registered_by_igreen_id ? ` (${c.registered_by_igreen_id})` : ""}`} />}
-            {c.customer_referred_by_name && <DetailItem icon={User} label="Indicado por" value={`${c.customer_referred_by_name}${c.customer_referred_by_phone ? ` (${c.customer_referred_by_phone})` : ""}`} />}
+            {c.customer_referred_by_name && <DetailItem icon={User} label="Indicado por" value={`${c.customer_referred_by_name}${c.customer_referred_by_phone ? ` (${c.customer_referred_by_phone})` : ""}`} sensitiveClass="sensitive-name" />}
             {c.nivel_licenciado && <DetailItem icon={User} label="Nível" value={c.nivel_licenciado} />}
             {c.andamento_igreen && <DetailItem icon={FileText} label="Andamento iGreen" value={c.andamento_igreen} />}
             {c.status_financeiro && <DetailItem icon={CreditCard} label="Status Financeiro" value={c.status_financeiro} />}
