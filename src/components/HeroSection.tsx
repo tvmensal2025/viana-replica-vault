@@ -59,24 +59,24 @@ const HeroSection = ({ cadastroUrl, whatsappUrl, consultantId }: HeroSectionProp
         <div className="absolute -bottom-60 -left-40 w-[600px] h-[600px] rounded-full opacity-[0.05]" style={{ background: 'radial-gradient(circle, hsl(130, 100%, 36%), transparent 70%)' }} />
       </div>
 
-      <div className="section-container text-center py-4 sm:py-6 md:py-20 relative z-10">
-        {/* Badge + Logo compact on mobile */}
-        <div className="flex items-center justify-center gap-3 mb-3 md:mb-8 md:flex-col md:gap-0">
-          <div className="badge-green animate-fade-in md:mb-8 !py-1 !px-3 md:!py-2 md:!px-4">
+      <div className="section-container text-center py-8 sm:py-10 md:py-20 relative z-10">
+        {/* Badge + Logo */}
+        <div className="flex flex-col items-center gap-3 mb-5 md:mb-8">
+          <div className="badge-green animate-fade-in !py-1.5 !px-4 md:!py-2 md:!px-4">
             <span className="glow-dot" />
-            <span className="text-[10px] md:text-xs">Economia garantida</span>
+            <span className="text-xs md:text-xs">Economia garantida</span>
           </div>
           <img
             src="/images/logo-colorida-igreen.png"
             alt="iGreen Energy Logo"
             width={300}
             height={92}
-            className="w-24 md:w-64 animate-fade-in md:mb-0"
+            className="w-32 md:w-64 animate-fade-in"
           />
         </div>
 
         {/* Title */}
-        <h1 className="font-heading font-black mb-3 md:mb-6 text-2xl sm:text-3xl md:text-4xl lg:text-[3.2rem] leading-[1.15] max-w-5xl mx-auto text-foreground px-2">
+        <h1 className="font-heading font-black mb-4 md:mb-6 text-[1.6rem] sm:text-3xl md:text-4xl lg:text-[3.2rem] leading-[1.2] max-w-5xl mx-auto text-foreground px-4">
           Descubra como receber até{" "}
           <span className="relative inline-block" style={{ color: 'hsl(var(--primary))' }}>
             20% de desconto
@@ -91,7 +91,7 @@ const HeroSection = ({ cadastroUrl, whatsappUrl, consultantId }: HeroSectionProp
         </p>
 
         {/* Video - priority on mobile, full width */}
-        <div className="max-w-4xl mx-auto mb-4 md:mb-12 rounded-xl md:rounded-2xl overflow-hidden relative" style={{ boxShadow: 'var(--shadow-green-lg)' }}>
+        <div className="max-w-4xl mx-auto mb-6 md:mb-12 rounded-xl md:rounded-2xl overflow-hidden relative" style={{ boxShadow: 'var(--shadow-green-lg)' }}>
           <div className="absolute inset-0 rounded-xl md:rounded-2xl border border-primary/20 z-10 pointer-events-none" />
           <video controls playsInline className="w-full aspect-video relative z-0" poster="">
             <source src="https://igreen-minio.b099mi.easypanel.host/igreen/Green_Energy.mp4" type="video/mp4" />
@@ -100,11 +100,11 @@ const HeroSection = ({ cadastroUrl, whatsappUrl, consultantId }: HeroSectionProp
         </div>
 
         {/* CTA buttons */}
-        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 justify-center px-4 sm:px-0">
-          <a href={CADASTRO} target="_blank" rel="noopener noreferrer" className="btn-cta-lg animate-pulse-green !py-2.5 sm:!py-3 !px-5 sm:!px-6 !text-sm sm:!text-base" onClick={() => handleClick("cadastro")}>
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-3 justify-center px-4 sm:px-0">
+          <a href={CADASTRO} target="_blank" rel="noopener noreferrer" className="btn-cta-lg animate-pulse-green !py-3 sm:!py-3 !px-6 sm:!px-6 !text-base sm:!text-base" onClick={() => handleClick("cadastro")}>
             ⚡ Faça seu cadastro
           </a>
-          <a href={WHATSAPP} target="_blank" rel="noopener noreferrer" className="btn-whatsapp !px-5 sm:!px-6 !py-2.5 sm:!py-3 !text-sm sm:!text-base !rounded-xl" onClick={() => handleClick("whatsapp")}>
+          <a href={WHATSAPP} target="_blank" rel="noopener noreferrer" className="btn-whatsapp !px-6 sm:!px-6 !py-3 sm:!py-3 !text-base sm:!text-base !rounded-xl" onClick={() => handleClick("whatsapp")}>
             💬 Atendimento no WhatsApp
           </a>
         </div>
