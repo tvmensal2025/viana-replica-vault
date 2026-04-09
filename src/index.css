@@ -247,3 +247,23 @@ html {
     box-shadow: var(--shadow-green);
   }
 }
+
+/* Privacy Mode - blur sensitive data */
+.privacy-mode .sensitive-name,
+.privacy-mode .sensitive-phone,
+.privacy-mode .sensitive-cpf,
+.privacy-mode .sensitive-email,
+.privacy-mode .sensitive-data {
+  filter: blur(6px);
+  user-select: none;
+  pointer-events: none;
+  transition: filter 0.2s ease;
+}
+
+.privacy-mode .sensitive-name:hover,
+.privacy-mode .sensitive-phone:hover,
+.privacy-mode .sensitive-cpf:hover,
+.privacy-mode .sensitive-email:hover,
+.privacy-mode .sensitive-data:hover {
+  filter: blur(6px);
+}

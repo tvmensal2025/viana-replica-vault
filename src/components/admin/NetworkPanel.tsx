@@ -101,7 +101,7 @@ function MiniCard({ member, hasChildren, childCount, isExpanded, onToggle, onOpe
           </div>
         </div>
         {/* Name */}
-        <p className="text-[10px] font-semibold text-foreground text-center leading-tight truncate">{member.name.split(" ")[0]}</p>
+        <p className="text-[10px] font-semibold text-foreground text-center leading-tight truncate sensitive-name">{member.name.split(" ")[0]}</p>
         <p className="text-[8px] text-muted-foreground text-center">{member.clientes_ativos} cli</p>
 
         {/* WhatsApp on hover */}
@@ -151,7 +151,7 @@ function DetailPanel({ member, onClose }: { member: NetworkMember; onClose: () =
             </span>
           </div>
           <div className="min-w-0">
-            <p className="font-bold text-foreground text-sm leading-tight">{member.name}</p>
+            <p className="font-bold text-foreground text-sm leading-tight sensitive-name">{member.name}</p>
             <p className="text-xs text-muted-foreground">ID: {member.igreen_id} • Nível {member.nivel}</p>
           </div>
         </div>

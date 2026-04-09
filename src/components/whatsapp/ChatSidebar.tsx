@@ -163,8 +163,8 @@ export function ChatSidebar({ chats, isLoading, selectedJid, onSelectChat, consu
                 </AvatarFallback>
               </Avatar>
               <div className="min-w-0">
-                <span className="text-xs font-medium text-foreground truncate block">{cr.name || cr.phone_whatsapp}</span>
-                <span className="text-[10px] text-muted-foreground">{cr.phone_whatsapp}</span>
+                <span className="text-xs font-medium text-foreground truncate block sensitive-name">{cr.name || cr.phone_whatsapp}</span>
+                <span className="text-[10px] text-muted-foreground sensitive-phone">{cr.phone_whatsapp}</span>
               </div>
             </button>
           ))}
@@ -199,7 +199,7 @@ export function ChatSidebar({ chats, isLoading, selectedJid, onSelectChat, consu
             </Avatar>
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-foreground truncate">
+                <span className="text-sm font-medium text-foreground truncate sensitive-name">
                   {chat.name}
                 </span>
                 <span className="text-[10px] text-muted-foreground shrink-0 ml-1">
