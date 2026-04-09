@@ -75,8 +75,8 @@ const HeroSection = ({ cadastroUrl, whatsappUrl, consultantId }: HeroSectionProp
           />
         </div>
 
-        {/* Title - smaller on mobile */}
-        <h1 className="font-heading font-black mb-2 md:mb-6 text-xl sm:text-2xl md:text-4xl lg:text-[3.2rem] leading-[1.15] max-w-5xl mx-auto text-foreground px-2">
+        {/* Title */}
+        <h1 className="font-heading font-black mb-3 md:mb-6 text-2xl sm:text-3xl md:text-4xl lg:text-[3.2rem] leading-[1.15] max-w-5xl mx-auto text-foreground px-2">
           Descubra como receber até{" "}
           <span className="relative inline-block" style={{ color: 'hsl(var(--primary))' }}>
             20% de desconto
@@ -113,15 +113,15 @@ const HeroSection = ({ cadastroUrl, whatsappUrl, consultantId }: HeroSectionProp
         <div className="grid grid-cols-3 gap-4 md:gap-12 max-w-3xl mx-auto mt-8 md:mt-16 pt-6 md:pt-12 border-t border-border">
           <div>
             <AnimatedCounter target={600} suffix="mil+" />
-            <p className="text-[10px] md:text-sm mt-1 md:mt-2 text-muted-foreground uppercase tracking-wider font-heading">Clientes ativos</p>
+            <p className="text-xs md:text-sm mt-1 md:mt-2 text-muted-foreground uppercase tracking-wider font-heading">Clientes ativos</p>
           </div>
           <div>
             <AnimatedCounter target={500} suffix="+" />
-            <p className="text-[10px] md:text-sm mt-1 md:mt-2 text-muted-foreground uppercase tracking-wider font-heading">Usinas solares</p>
+            <p className="text-xs md:text-sm mt-1 md:mt-2 text-muted-foreground uppercase tracking-wider font-heading">Usinas solares</p>
           </div>
           <div>
             <AnimatedCounter target={27} />
-            <p className="text-[10px] md:text-sm mt-1 md:mt-2 text-muted-foreground uppercase tracking-wider font-heading">Estados</p>
+            <p className="text-xs md:text-sm mt-1 md:mt-2 text-muted-foreground uppercase tracking-wider font-heading">Estados</p>
           </div>
         </div>
       </div>

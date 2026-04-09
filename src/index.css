@@ -213,7 +213,7 @@ html {
   }
 
   .stat-block .stat-number {
-    @apply text-4xl md:text-5xl font-black;
+    @apply text-3xl sm:text-4xl md:text-5xl font-black;
     color: hsl(var(--primary));
     font-family: var(--font-heading);
   }
