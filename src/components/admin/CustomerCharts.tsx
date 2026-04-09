@@ -48,7 +48,14 @@ export function CustomerCharts({ filteredMetrics, topLicenciados }: CustomerChar
               <BarChart data={topLicenciados} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(120, 8%, 18%)" horizontal={false} />
                 <XAxis type="number" tick={{ fill: "hsl(120, 5%, 65%)", fontSize: 11 }} tickLine={false} axisLine={false} allowDecimals={false} />
-                <YAxis type="category" dataKey="name" tick={{ fill: "hsl(120, 5%, 65%)", fontSize: 11 }} tickLine={false} axisLine={false} width={100} />
+                <YAxis type="category" dataKey="name" tick={(props: any) => {
+                    const { x, y, payload } = props;
+                    return (
+                      <text x={x} y={y} textAnchor="end" fill="hsl(120, 5%, 65%)" fontSize={11} dominantBaseline="middle" className="sensitive-name">
+                        {payload.value}
+                      </text>
+                    );
+                  }} tickLine={false} axisLine={false} width={100} />
                 <Tooltip contentStyle={{ background: "hsl(120, 8%, 8%)", border: "1px solid hsl(120, 8%, 18%)", borderRadius: "12px", fontSize: "13px", color: "hsl(0, 0%, 95%)" }} formatter={(value: number) => [`${value} cadastros`, "Contas"]} />
                 <defs><linearGradient id="barGradientLic" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="hsl(130, 100%, 30%)" /><stop offset="100%" stopColor="hsl(130, 100%, 45%)" /></linearGradient></defs>
                 <Bar dataKey="deals" name="Cadastros" fill="url(#barGradientLic)" radius={[0, 6, 6, 0]} barSize={20} />
