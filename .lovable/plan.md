@@ -1,22 +1,30 @@
 
 
 ## Problema
-O contador atual conta até 23:59:59 (fim do dia). Quando o visitante acessa à noite, mostra algo como "00:02:15" — passa a impressão de que já acabou, perdendo o efeito de urgência.
+Atualmente, a política de SELECT na tabela `message_templates` permite que todos os usuários autenticados vejam **todos** os templates (incluindo áudios e imagens). O usuário quer que templates criados por admins sejam globais (visíveis para todos), mas templates criados por usuários individuais sejam privados.
 
-## Solução proposta: Contador fixo de 24h por sessão
+## Solução
 
-Em vez de contar até meia-noite, o contador sempre mostra **24 horas** a partir do momento que o visitante abre a página. Isso garante que:
-- Sempre aparece um tempo significativo (nunca perto de zero)
-- Cada visitante vê urgência real independente do horário
-- O valor é salvo no `localStorage` para que, se o visitante voltar no mesmo dia, continue de onde parou
+### Migração SQL
+Alterar a política de SELECT `Authenticated read all templates` para:
 
-## Alterações
+```sql
+DROP POLICY "Authenticated read all templates" ON public.message_templates;
 
-**Arquivo**: `src/components/licenciada/LicUrgencyBanner.tsx`
+CREATE POLICY "Users see own and admin templates"
+ON public.message_templates
+FOR SELECT
+TO authenticated
+USING (
+  consultant_id = auth.uid()
+  OR has_role(consultant_id, 'admin')
+);
+```
 
-1. Ao montar, verificar `localStorage` por um timestamp salvo (`urgency_timer_start`)
-2. Se não existir ou tiver mais de 24h, salvar `Date.now()` como novo início
-3. Calcular `timeLeft = startTime + 24h - now`
-4. Se o tempo acabar, reiniciar automaticamente (novo ciclo de 24h)
-5. Manter o visual atual do banner, apenas mudar a lógica do timer
+Isso faz com que:
+- Templates criados por um **admin** → visíveis para **todos** os usuários autenticados (padrão/global)
+- Templates criados por um **usuário comum** → visíveis **apenas** para o próprio criador
+
+### Nenhuma alteração de código necessária
+A lógica do `useTemplates` já faz `SELECT *` sem filtro — o RLS cuidará automaticamente da visibilidade correta.
 
