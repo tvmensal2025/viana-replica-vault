@@ -20,6 +20,11 @@ interface ConsultantRow {
   phone: string;
   created_at: string | null;
   approved: boolean;
+  total_customers?: number;
+  customers_7d?: number;
+  total_deals?: number;
+  views_7d?: number;
+  last_activity?: string | null;
 }
 
 const SuperAdmin = () => {
@@ -86,9 +91,38 @@ const SuperAdmin = () => {
 
     if (error) {
       toast({ title: "Erro ao carregar consultores", description: error.message, variant: "destructive" });
-    } else {
-      setConsultants((data as any[])?.map(c => ({ ...c, approved: c.approved ?? false })) || []);
+      setLoadingData(false);
+      return;
     }
+
+    const rows: ConsultantRow[] = (data as any[])?.map(c => ({ ...c, approved: c.approved ?? false })) || [];
+
+    // Load activity metrics in parallel
+    const enriched = await Promise.all(rows.map(async (c) => {
+      const [custRes, cust7dRes, dealsRes, viewsRes, lastCustRes, lastViewRes] = await Promise.all([
+        supabase.from("customers").select("id", { count: "exact", head: true }).eq("consultant_id", c.id),
+        supabase.from("customers").select("id", { count: "exact", head: true }).eq("consultant_id", c.id).gte("created_at", new Date(Date.now() - 7 * 86400000).toISOString()),
+        supabase.from("crm_deals").select("id", { count: "exact", head: true }).eq("consultant_id", c.id),
+        supabase.from("page_views").select("id", { count: "exact", head: true }).eq("consultant_id", c.id).gte("created_at", new Date(Date.now() - 7 * 86400000).toISOString()),
+        supabase.from("customers").select("created_at").eq("consultant_id", c.id).order("created_at", { ascending: false }).limit(1),
+        supabase.from("page_views").select("created_at").eq("consultant_id", c.id).order("created_at", { ascending: false }).limit(1),
+      ]);
+
+      const lastCust = (lastCustRes.data as any)?.[0]?.created_at;
+      const lastView = (lastViewRes.data as any)?.[0]?.created_at;
+      const dates = [lastCust, lastView].filter(Boolean).sort().reverse();
+
+      return {
+        ...c,
+        total_customers: custRes.count || 0,
+        customers_7d: cust7dRes.count || 0,
+        total_deals: dealsRes.count || 0,
+        views_7d: viewsRes.count || 0,
+        last_activity: dates[0] || null,
+      };
+    }));
+
+    setConsultants(enriched);
     setLoadingData(false);
   };
 
@@ -246,66 +280,95 @@ const SuperAdmin = () => {
                     <TableRow>
                       <TableHead>Nome</TableHead>
                       <TableHead>Licença</TableHead>
-                      <TableHead>Telefone</TableHead>
-                      <TableHead>Cadastro</TableHead>
+                      <TableHead className="text-center">Clientes</TableHead>
+                      <TableHead className="text-center">Deals</TableHead>
+                      <TableHead className="text-center">Views 7d</TableHead>
+                      <TableHead>Última Atividade</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {consultants.map((c) => (
-                      <TableRow key={c.id}>
-                        <TableCell className="font-medium">{c.name}</TableCell>
-                        <TableCell className="text-muted-foreground">{c.license}</TableCell>
-                        <TableCell className="text-muted-foreground">{c.phone}</TableCell>
-                        <TableCell className="text-muted-foreground text-xs">
-                          {c.created_at ? new Date(c.created_at).toLocaleDateString("pt-BR") : "—"}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={c.approved ? "default" : "secondary"} className={c.approved ? "bg-green-500/20 text-green-700 border-green-500/30" : "bg-orange-500/20 text-orange-700 border-orange-500/30"}>
-                            {c.approved ? "Aprovado" : "Pendente"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleResetPassword(c.id, c.name)}
-                              disabled={resettingId === c.id}
-                              className="gap-1.5"
-                              title="Enviar email de redefinição de senha"
-                            >
-                              {resettingId === c.id ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              ) : (
-                                <KeyRound className="w-3.5 h-3.5" />
+                    {consultants.map((c) => {
+                      const lastAct = c.last_activity ? new Date(c.last_activity) : null;
+                      const daysSince = lastAct ? Math.floor((Date.now() - lastAct.getTime()) / 86400000) : null;
+                      const activityColor = daysSince === null ? "text-muted-foreground" : daysSince <= 1 ? "text-green-500" : daysSince <= 7 ? "text-yellow-500" : "text-red-400";
+
+                      return (
+                        <TableRow key={c.id}>
+                          <TableCell className="font-medium">{c.name}</TableCell>
+                          <TableCell className="text-muted-foreground text-xs">{c.license}</TableCell>
+                          <TableCell className="text-center">
+                            <div className="flex flex-col items-center">
+                              <span className="text-sm font-semibold text-foreground">{c.total_customers || 0}</span>
+                              {(c.customers_7d || 0) > 0 && (
+                                <span className="text-[10px] text-green-500">+{c.customers_7d} 7d</span>
                               )}
-                              Resetar Senha
-                            </Button>
-                            <Button
-                              variant={c.approved ? "outline" : "default"}
-                              size="sm"
-                              onClick={() => toggleApproval(c.id, c.approved)}
-                              disabled={togglingId === c.id}
-                              className="gap-1.5"
-                            >
-                              {togglingId === c.id ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              ) : c.approved ? (
-                                <UserX className="w-3.5 h-3.5" />
-                              ) : (
-                                <UserCheck className="w-3.5 h-3.5" />
-                              )}
-                              {c.approved ? "Revogar" : "Aprovar"}
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <span className="text-sm text-foreground">{c.total_deals || 0}</span>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <span className="text-sm text-foreground">{c.views_7d || 0}</span>
+                          </TableCell>
+                          <TableCell>
+                            <span className={`text-xs font-medium ${activityColor}`}>
+                              {lastAct
+                                ? daysSince === 0
+                                  ? "Hoje"
+                                  : daysSince === 1
+                                  ? "Ontem"
+                                  : `${daysSince}d atrás`
+                                : "Sem atividade"}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={c.approved ? "default" : "secondary"} className={c.approved ? "bg-green-500/20 text-green-700 border-green-500/30" : "bg-orange-500/20 text-orange-700 border-orange-500/30"}>
+                              {c.approved ? "Aprovado" : "Pendente"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleResetPassword(c.id, c.name)}
+                                disabled={resettingId === c.id}
+                                className="gap-1.5"
+                                title="Enviar email de redefinição de senha"
+                              >
+                                {resettingId === c.id ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <KeyRound className="w-3.5 h-3.5" />
+                                )}
+                                Resetar Senha
+                              </Button>
+                              <Button
+                                variant={c.approved ? "outline" : "default"}
+                                size="sm"
+                                onClick={() => toggleApproval(c.id, c.approved)}
+                                disabled={togglingId === c.id}
+                                className="gap-1.5"
+                              >
+                                {togglingId === c.id ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : c.approved ? (
+                                  <UserX className="w-3.5 h-3.5" />
+                                ) : (
+                                  <UserCheck className="w-3.5 h-3.5" />
+                                )}
+                                {c.approved ? "Revogar" : "Aprovar"}
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                     {consultants.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                           Nenhum consultor cadastrado
                         </TableCell>
                       </TableRow>
