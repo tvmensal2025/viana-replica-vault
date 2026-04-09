@@ -20,6 +20,11 @@ interface ConsultantRow {
   phone: string;
   created_at: string | null;
   approved: boolean;
+  total_customers?: number;
+  customers_7d?: number;
+  total_deals?: number;
+  views_7d?: number;
+  last_activity?: string | null;
 }
 
 const SuperAdmin = () => {
