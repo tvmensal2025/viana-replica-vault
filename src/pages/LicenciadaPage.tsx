@@ -49,7 +49,7 @@ const LicenciadaPage = () => {
     <>
       <PixelInjector facebookPixelId={consultant.facebook_pixel_id} googleAnalyticsId={consultant.google_analytics_id} />
       <SEOHead
-        title={`Licenciada ${consultant.name} – iGreen Energy`}
+        title={`Licenciado ${consultant.name} – iGreen Energy`}
         description={`Descubra como se tornar um Licenciado iGreen Energy com ${consultant.name} e receba comissões recorrentes`}
       />
       <div className="min-h-screen">
