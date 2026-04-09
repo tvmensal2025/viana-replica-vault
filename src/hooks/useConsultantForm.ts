@@ -55,9 +55,8 @@ export function useConsultantForm(
       let finalLicense = normalizedLicense;
       let licenseAdjusted = false;
       if (conflictingConsultant) {
-        finalLicense = existingConsultant?.license && existingConsultant.license !== normalizedLicense
-          ? existingConsultant.license : buildFallbackLicense(normalizedLicense, userId);
-        licenseAdjusted = finalLicense !== normalizedLicense;
+        finalLicense = buildFallbackLicense(normalizedLicense, userId);
+        licenseAdjusted = true;
       }
       const consultantFields: Database["public"]["Tables"]["consultants"]["Update"] = {
         name: form.name, license: finalLicense, phone: form.phone.replace(/\D/g, ""),
