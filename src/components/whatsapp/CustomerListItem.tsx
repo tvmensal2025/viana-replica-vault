@@ -84,6 +84,11 @@ export function CustomerListItem({
           <div className="flex items-center gap-2">
             <p className="text-sm font-semibold text-foreground truncate">{c.name || "Sem nome"}</p>
             <Badge variant="outline" className={`text-[9px] px-1.5 py-0 h-4 ${status.className}`}>{status.label}</Badge>
+            {(c.tipo_produto === "telefonia") && (
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-purple-500/15 text-purple-400 border-purple-500/20">
+                📱 Telecom
+              </Badge>
+            )}
             {hasDevolutiva && (
               <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-red-500/15 text-red-400 border-red-500/20">
                 ⚠️ Devolutiva
