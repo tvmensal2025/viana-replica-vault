@@ -129,7 +129,7 @@ export function CustomerListItem({
             {c.customer_referred_by_name && (
               <span className="text-[11px] text-blue-400 flex items-center gap-1">
                 <Users className="h-2.5 w-2.5" />
-                Ind: {c.customer_referred_by_name}
+                Ind: <span className="sensitive-name">{c.customer_referred_by_name}</span>
               </span>
             )}
             {c.cashback && (
