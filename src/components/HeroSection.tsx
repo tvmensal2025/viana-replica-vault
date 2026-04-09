@@ -110,18 +110,24 @@ const HeroSection = ({ cadastroUrl, whatsappUrl, consultantId }: HeroSectionProp
         </div>
 
         {/* Social proof */}
-        <div className="grid grid-cols-3 gap-4 md:gap-12 max-w-3xl mx-auto mt-8 md:mt-16 pt-6 md:pt-12 border-t border-border">
-          <div>
-            <AnimatedCounter target={600} suffix="mil+" />
-            <p className="text-xs md:text-sm mt-1 md:mt-2 text-muted-foreground uppercase tracking-wider font-heading">Clientes ativos</p>
+        <div className="grid grid-cols-3 gap-2 sm:gap-6 md:gap-12 max-w-3xl mx-auto mt-10 md:mt-16 pt-8 md:pt-12 border-t border-border px-2">
+          <div className="text-center">
+            <div className="text-2xl sm:text-4xl md:text-5xl font-black" style={{ color: 'hsl(var(--primary))' }}>
+              <AnimatedCounter target={600} suffix="mil+" />
+            </div>
+            <p className="text-[11px] sm:text-xs md:text-sm mt-2 text-muted-foreground uppercase tracking-wider font-heading leading-tight">Clientes<br className="sm:hidden" /> ativos</p>
           </div>
-          <div>
-            <AnimatedCounter target={500} suffix="+" />
-            <p className="text-xs md:text-sm mt-1 md:mt-2 text-muted-foreground uppercase tracking-wider font-heading">Usinas solares</p>
+          <div className="text-center">
+            <div className="text-2xl sm:text-4xl md:text-5xl font-black" style={{ color: 'hsl(var(--primary))' }}>
+              <AnimatedCounter target={500} suffix="+" />
+            </div>
+            <p className="text-[11px] sm:text-xs md:text-sm mt-2 text-muted-foreground uppercase tracking-wider font-heading leading-tight">Usinas<br className="sm:hidden" /> solares</p>
           </div>
-          <div>
-            <AnimatedCounter target={27} />
-            <p className="text-xs md:text-sm mt-1 md:mt-2 text-muted-foreground uppercase tracking-wider font-heading">Estados</p>
+          <div className="text-center">
+            <div className="text-2xl sm:text-4xl md:text-5xl font-black" style={{ color: 'hsl(var(--primary))' }}>
+              <AnimatedCounter target={27} />
+            </div>
+            <p className="text-[11px] sm:text-xs md:text-sm mt-2 text-muted-foreground uppercase tracking-wider font-heading leading-tight">Estados</p>
           </div>
         </div>
       </div>
