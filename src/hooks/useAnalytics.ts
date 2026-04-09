@@ -182,7 +182,11 @@ export function useAnalytics(consultantId: string | null, periodDays: number = 3
         if (lic) licMap.set(lic, (licMap.get(lic) || 0) + 1);
       }
       const topLicenciados: TopLicenciado[] = Array.from(licMap.entries())
-        .map(([name, deals]) => ({ name, deals }))
+        .map(([name, deals]) => {
+          const parts = name.trim().split(/\s+/);
+          const shortName = parts.length > 2 ? `${parts[0]} ${parts[parts.length - 1]}` : name;
+          return { name: shortName, deals };
+        })
         .sort((a, b) => b.deals - a.deals)
         .slice(0, 10);
 
