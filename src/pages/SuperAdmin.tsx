@@ -10,8 +10,19 @@ import {
 } from "@/components/ui/table";
 import {
   Shield, Users, CheckCircle, XCircle, LogOut, Loader2, UserCheck, UserX, BarChart3, KeyRound, Brain,
+  MessageSquare, Wifi, WifiOff, AlertTriangle, Send,
 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AIKnowledgePanel } from "@/components/superadmin/AIKnowledgePanel";
+
+interface WhatsAppMetrics {
+  hasInstance: boolean;
+  instanceName: string | null;
+  totalMsgsSent: number;
+  totalMsgsReceived: number;
+  scheduledSent: number;
+  scheduledFailed: number;
+}
 
 interface ConsultantRow {
   id: string;
@@ -25,6 +36,7 @@ interface ConsultantRow {
   total_deals?: number;
   views_7d?: number;
   last_activity?: string | null;
+  wa?: WhatsAppMetrics;
 }
 
 const SuperAdmin = () => {
@@ -97,20 +109,44 @@ const SuperAdmin = () => {
 
     const rows: ConsultantRow[] = (data as any[])?.map(c => ({ ...c, approved: c.approved ?? false })) || [];
 
+    // Pre-fetch WhatsApp instances and scheduled messages for all consultants
+    const [waInstancesRes, scheduledRes] = await Promise.all([
+      supabase.from("whatsapp_instances").select("consultant_id, instance_name"),
+      supabase.from("scheduled_messages").select("consultant_id, status"),
+    ]);
+
+    const waMap = new Map<string, string>();
+    (waInstancesRes.data || []).forEach((w: any) => waMap.set(w.consultant_id, w.instance_name));
+
+    const schedMap = new Map<string, { sent: number; failed: number }>();
+    (scheduledRes.data || []).forEach((s: any) => {
+      const entry = schedMap.get(s.consultant_id) || { sent: 0, failed: 0 };
+      if (s.status === "sent") entry.sent++;
+      else if (s.status === "failed") entry.failed++;
+      schedMap.set(s.consultant_id, entry);
+    });
+
     // Load activity metrics in parallel
     const enriched = await Promise.all(rows.map(async (c) => {
-      const [custRes, cust7dRes, dealsRes, viewsRes, lastCustRes, lastViewRes] = await Promise.all([
+      const [custRes, cust7dRes, dealsRes, viewsRes, lastCustRes, lastViewRes, convRes] = await Promise.all([
         supabase.from("customers").select("id", { count: "exact", head: true }).eq("consultant_id", c.id),
         supabase.from("customers").select("id", { count: "exact", head: true }).eq("consultant_id", c.id).gte("created_at", new Date(Date.now() - 7 * 86400000).toISOString()),
         supabase.from("crm_deals").select("id", { count: "exact", head: true }).eq("consultant_id", c.id),
         supabase.from("page_views").select("id", { count: "exact", head: true }).eq("consultant_id", c.id).gte("created_at", new Date(Date.now() - 7 * 86400000).toISOString()),
         supabase.from("customers").select("created_at").eq("consultant_id", c.id).order("created_at", { ascending: false }).limit(1),
         supabase.from("page_views").select("created_at").eq("consultant_id", c.id).order("created_at", { ascending: false }).limit(1),
+        supabase.from("conversations").select("message_direction", { count: "exact" })
+          .in("customer_id", (await supabase.from("customers").select("id").eq("consultant_id", c.id)).data?.map((cu: any) => cu.id) || []),
       ]);
 
       const lastCust = (lastCustRes.data as any)?.[0]?.created_at;
       const lastView = (lastViewRes.data as any)?.[0]?.created_at;
       const dates = [lastCust, lastView].filter(Boolean).sort().reverse();
+
+      const convData = (convRes.data || []) as any[];
+      const outbound = convData.filter((m: any) => m.message_direction === "outbound").length;
+      const inbound = convData.filter((m: any) => m.message_direction === "inbound").length;
+      const sched = schedMap.get(c.id) || { sent: 0, failed: 0 };
 
       return {
         ...c,
@@ -119,6 +155,14 @@ const SuperAdmin = () => {
         total_deals: dealsRes.count || 0,
         views_7d: viewsRes.count || 0,
         last_activity: dates[0] || null,
+        wa: {
+          hasInstance: waMap.has(c.id),
+          instanceName: waMap.get(c.id) || null,
+          totalMsgsSent: outbound + sched.sent,
+          totalMsgsReceived: inbound,
+          scheduledSent: sched.sent,
+          scheduledFailed: sched.failed,
+        },
       };
     }));
 
@@ -275,6 +319,7 @@ const SuperAdmin = () => {
                   <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
                 </div>
               ) : (
+                <TooltipProvider>
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -283,6 +328,7 @@ const SuperAdmin = () => {
                       <TableHead className="text-center">Clientes</TableHead>
                       <TableHead className="text-center">Deals</TableHead>
                       <TableHead className="text-center">Views 7d</TableHead>
+                      <TableHead className="text-center">WhatsApp</TableHead>
                       <TableHead>Última Atividade</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="text-right">Ações</TableHead>
@@ -293,6 +339,7 @@ const SuperAdmin = () => {
                       const lastAct = c.last_activity ? new Date(c.last_activity) : null;
                       const daysSince = lastAct ? Math.floor((Date.now() - lastAct.getTime()) / 86400000) : null;
                       const activityColor = daysSince === null ? "text-muted-foreground" : daysSince <= 1 ? "text-green-500" : daysSince <= 7 ? "text-yellow-500" : "text-red-400";
+                      const wa = c.wa;
 
                       return (
                         <TableRow key={c.id}>
@@ -311,6 +358,41 @@ const SuperAdmin = () => {
                           </TableCell>
                           <TableCell className="text-center">
                             <span className="text-sm text-foreground">{c.views_7d || 0}</span>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="flex flex-col items-center gap-1 cursor-default">
+                                  {wa?.hasInstance ? (
+                                    <Wifi className="w-4 h-4 text-green-500" />
+                                  ) : (
+                                    <WifiOff className="w-4 h-4 text-muted-foreground" />
+                                  )}
+                                  <div className="flex items-center gap-1.5 text-[11px]">
+                                    <span className="flex items-center gap-0.5 text-green-500">
+                                      <Send className="w-3 h-3" />{wa?.totalMsgsSent || 0}
+                                    </span>
+                                    <span className="flex items-center gap-0.5 text-blue-400">
+                                      <MessageSquare className="w-3 h-3" />{wa?.totalMsgsReceived || 0}
+                                    </span>
+                                  </div>
+                                  {(wa?.scheduledFailed || 0) > 0 && (
+                                    <span className="flex items-center gap-0.5 text-[10px] text-red-400">
+                                      <AlertTriangle className="w-3 h-3" />{wa.scheduledFailed} erro{wa.scheduledFailed > 1 ? "s" : ""}
+                                    </span>
+                                  )}
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="text-xs max-w-[200px]">
+                                <p className="font-semibold mb-1">{wa?.hasInstance ? "✅ Instância criada" : "❌ Sem instância"}</p>
+                                {wa?.instanceName && <p className="text-muted-foreground mb-1">{wa.instanceName}</p>}
+                                <p>📤 Enviadas: {wa?.totalMsgsSent || 0}</p>
+                                <p>📥 Recebidas: {wa?.totalMsgsReceived || 0}</p>
+                                {(wa?.scheduledFailed || 0) > 0 && (
+                                  <p className="text-red-400">⚠️ Falhas agendamento: {wa?.scheduledFailed}</p>
+                                )}
+                              </TooltipContent>
+                            </Tooltip>
                           </TableCell>
                           <TableCell>
                             <span className={`text-xs font-medium ${activityColor}`}>
@@ -368,13 +450,14 @@ const SuperAdmin = () => {
                     })}
                     {consultants.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                           Nenhum consultor cadastrado
                         </TableCell>
                       </TableRow>
                     )}
                   </TableBody>
                 </Table>
+                </TooltipProvider>
               )}
             </div>
           </>
