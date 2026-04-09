@@ -73,7 +73,20 @@ export function DadosTab({ form, photoPreview, saving, onFormChange, onPhotoChan
           </div>
           <div className="space-y-2">
             <Label htmlFor="phone" className="text-sm text-muted-foreground">WhatsApp (com DDD)</Label>
-            <Input id="phone" value={form.phone} onChange={(e) => onFormChange({ phone: e.target.value })} placeholder="5511999999999" className="bg-secondary border-border" required />
+            <div className="flex">
+              <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-border bg-muted text-muted-foreground text-sm">+55</span>
+              <Input
+                id="phone"
+                value={form.phone.replace(/^55/, "")}
+                onChange={(e) => {
+                  const raw = e.target.value.replace(/\D/g, "").slice(0, 11);
+                  onFormChange({ phone: raw ? `55${raw}` : "" });
+                }}
+                placeholder="11989000650"
+                className="bg-secondary border-border rounded-l-none"
+                required
+              />
+            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="igreen_id" className="text-sm text-muted-foreground">ID iGreen</Label>
