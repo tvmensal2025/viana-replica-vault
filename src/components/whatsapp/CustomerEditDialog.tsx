@@ -143,6 +143,13 @@ export function CustomerEditDialog({ customer, onClose, onSaved }: CustomerEditD
               <option value="lead">Lead</option>
             </select>
           </div>
+          <div>
+            <Label className="text-[11px] text-muted-foreground">Tipo Produto</Label>
+            <select value={editForm.tipo_produto || "energia"} onChange={(e) => updateEdit("tipo_produto", e.target.value)} className="h-9 text-xs mt-1 w-full bg-secondary/30 border border-border/50 rounded-md px-2">
+              <option value="energia">⚡ Energia</option>
+              <option value="telefonia">📱 Telefonia</option>
+            </select>
+          </div>
 
           <SectionLabel icon={MapPin} title="Endereço" />
           <div>
