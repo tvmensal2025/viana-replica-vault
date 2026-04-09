@@ -145,15 +145,30 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
       )
     : customers;
 
-  const licenciadoFiltered = selectedLicenciado === "all"
+  const tipoFiltered = selectedTipo === "all"
     ? searchFiltered
-    : searchFiltered.filter((c) => (c.registered_by_name || "Sem licenciado") === selectedLicenciado);
+    : searchFiltered.filter((c) => (c.tipo_produto || "energia") === selectedTipo);
+
+  const licenciadoFiltered = selectedLicenciado === "all"
+    ? tipoFiltered
+    : tipoFiltered.filter((c) => (c.registered_by_name || "Sem licenciado") === selectedLicenciado);
+
+  const distribuidoraFiltered = selectedDistribuidora === "all"
+    ? licenciadoFiltered
+    : licenciadoFiltered.filter((c) => (c.distribuidora || "") === selectedDistribuidora);
+
+  const cidadeFiltered = selectedCidade === "all"
+    ? distribuidoraFiltered
+    : distribuidoraFiltered.filter((c) => {
+        const label = [c.address_city, c.address_state].filter(Boolean).join(" - ");
+        return label === selectedCidade;
+      });
 
   const filtered = statusFilter === "all"
-    ? licenciadoFiltered
+    ? cidadeFiltered
     : statusFilter === "devolutiva"
-    ? licenciadoFiltered.filter((c) => c.status === "devolutiva" || isDevolutiva(c))
-    : licenciadoFiltered.filter((c) => c.status === statusFilter);
+    ? cidadeFiltered.filter((c) => c.status === "devolutiva" || isDevolutiva(c))
+    : cidadeFiltered.filter((c) => c.status === statusFilter);
 
   async function handleDelete(id: string) {
     try {
