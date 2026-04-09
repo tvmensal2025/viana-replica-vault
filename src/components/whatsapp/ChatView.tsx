@@ -134,8 +134,8 @@ export function ChatView({ instanceName, chat, templates, consultantId, initialM
           </AvatarFallback>
         </Avatar>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-foreground truncate">{chat.name}</p>
-          <p className="text-[10px] text-muted-foreground">{phoneNumber}</p>
+          <p className="text-sm font-semibold text-foreground truncate sensitive-name">{chat.name}</p>
+          <p className="text-[10px] text-muted-foreground sensitive-phone">{phoneNumber}</p>
         </div>
         {isCustomer ? (
           <div className="flex items-center gap-1.5 text-primary">
