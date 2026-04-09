@@ -3,12 +3,20 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Brain, Save, Loader2, Info, Lightbulb, Upload, FileText, X, CheckCircle } from "lucide-react";
+import { Brain, Save, Loader2, Info, Lightbulb, Upload, FileText, X, CheckCircle, ChevronDown, ChevronRight, Eye } from "lucide-react";
 
 interface UploadedDoc {
   name: string;
   text: string;
   date: string;
+}
+
+interface KnowledgeSection {
+  id: string;
+  title: string;
+  content: string;
+  position: number;
+  is_active: boolean;
 }
 
 async function extractTextFromPDF(file: File): Promise<string> {
@@ -31,6 +39,35 @@ async function extractTextFromPDF(file: File): Promise<string> {
   return textParts.join("\n\n");
 }
 
+function KnowledgeSectionCard({ section }: { section: KnowledgeSection }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="border border-border/50 rounded-lg overflow-hidden">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-secondary/30 transition-colors"
+      >
+        {expanded ? (
+          <ChevronDown className="w-4 h-4 text-primary shrink-0" />
+        ) : (
+          <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+        )}
+        <span className="text-xs font-medium text-primary/80">#{section.position}</span>
+        <span className="text-sm font-medium text-foreground flex-1">{section.title}</span>
+        <span className="text-[10px] text-muted-foreground">{section.content.length.toLocaleString("pt-BR")} chars</span>
+      </button>
+      {expanded && (
+        <div className="px-4 py-3 border-t border-border/30 bg-secondary/10">
+          <pre className="text-xs text-muted-foreground whitespace-pre-wrap font-mono leading-relaxed max-h-[400px] overflow-y-auto">
+            {section.content}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AIKnowledgePanel() {
   const [extraKnowledge, setExtraKnowledge] = useState("");
   const [loading, setLoading] = useState(true);
@@ -38,6 +75,8 @@ export function AIKnowledgePanel() {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState("");
   const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([]);
+  const [sections, setSections] = useState<KnowledgeSection[]>([]);
+  const [showSections, setShowSections] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
@@ -47,29 +86,39 @@ export function AIKnowledgePanel() {
 
   const loadKnowledge = async () => {
     setLoading(true);
-    const [extraRes, docsRes] = await Promise.all([
+    const [extraRes, docsRes, sectionsRes] = await Promise.all([
       supabase.from("settings").select("value").eq("key", "ai_knowledge_extra").maybeSingle(),
       supabase.from("settings").select("value").eq("key", "ai_knowledge_docs").maybeSingle(),
+      supabase.from("ai_knowledge_sections").select("*").eq("is_active", true).order("position", { ascending: true }),
     ]);
 
     if (extraRes.data?.value) setExtraKnowledge(extraRes.data.value);
     if (docsRes.data?.value) {
       try { setUploadedDocs(JSON.parse(docsRes.data.value)); } catch {}
     }
+    if (sectionsRes.data) setSections(sectionsRes.data);
     setLoading(false);
   };
 
   const handleSave = async () => {
     setSaving(true);
-    const { error } = await supabase
-      .from("settings")
-      .update({ value: extraKnowledge } as any)
-      .eq("key", "ai_knowledge_extra");
+    try {
+      const { error } = await supabase
+        .from("settings")
+        .upsert(
+          { key: "ai_knowledge_extra", value: extraKnowledge } as any,
+          { onConflict: "key" }
+        );
 
-    if (error) {
-      toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: "✅ Conhecimento da IA atualizado!", description: "As mudanças já estão ativas." });
+      if (error) {
+        console.error("Save error:", error);
+        toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
+      } else {
+        toast({ title: "✅ Conhecimento da IA atualizado!", description: "As mudanças já estão ativas." });
+      }
+    } catch (err: any) {
+      console.error("Save exception:", err);
+      toast({ title: "Erro ao salvar", description: err.message || "Falha inesperada", variant: "destructive" });
     }
     setSaving(false);
   };
@@ -89,8 +138,6 @@ export function AIKnowledgePanel() {
 
       try {
         setUploadProgress(`Lendo ${file.name}...`);
-
-        // Step 1: Extract text client-side with pdf.js
         const rawText = await extractTextFromPDF(file);
 
         if (rawText.length < 30) {
@@ -104,7 +151,6 @@ export function AIKnowledgePanel() {
 
         setUploadProgress(`Organizando ${file.name} com IA...`);
 
-        // Step 2: Send text to AI to organize
         const { data: aiData, error: aiError } = await supabase.functions.invoke("igreen-chat", {
           body: {
             message: `Organize o seguinte conteúdo extraído de um PDF chamado "${file.name}" em formato limpo e estruturado para servir como base de conhecimento. Mantenha TODAS as informações importantes (valores, datas, regras, comissões, produtos, percentuais, tabelas, etc). Remova apenas lixo de formatação (cabeçalhos repetidos, números de página). Responda APENAS com o conteúdo organizado, sem explicações:\n\n${rawText.substring(0, 20000)}`,
@@ -145,8 +191,10 @@ export function AIKnowledgePanel() {
 
       await supabase
         .from("settings")
-        .update({ value: updatedKnowledge } as any)
-        .eq("key", "ai_knowledge_extra");
+        .upsert(
+          { key: "ai_knowledge_extra", value: updatedKnowledge } as any,
+          { onConflict: "key" }
+        );
 
       toast({ title: "🧠 IA atualizada!", description: `${newDocs.length} documento(s) integrado(s) ao conhecimento.` });
     }
@@ -181,14 +229,14 @@ export function AIKnowledgePanel() {
     setExtraKnowledge(updatedKnowledge);
 
     await Promise.all([
-      supabase.from("settings").update({ value: JSON.stringify(newDocs) } as any).eq("key", "ai_knowledge_docs"),
-      supabase.from("settings").update({ value: updatedKnowledge } as any).eq("key", "ai_knowledge_extra"),
+      supabase.from("settings").upsert({ key: "ai_knowledge_docs", value: JSON.stringify(newDocs) } as any, { onConflict: "key" }),
+      supabase.from("settings").upsert({ key: "ai_knowledge_extra", value: updatedKnowledge } as any, { onConflict: "key" }),
     ]);
 
     toast({ title: "Documento removido", description: `${doc.name} foi removido do conhecimento da IA.` });
   };
 
-  const charCount = extraKnowledge.length;
+  const totalChars = sections.reduce((sum, s) => sum + s.content.length, 0) + extraKnowledge.length;
 
   return (
     <div className="space-y-6">
@@ -196,26 +244,52 @@ export function AIKnowledgePanel() {
         <Brain className="w-6 h-6 text-primary" />
         <div>
           <h2 className="font-heading font-bold text-foreground text-lg">Gestão do Conhecimento da IA</h2>
-          <p className="text-xs text-muted-foreground">Adicione informações extras que a IA deve saber</p>
+          <p className="text-xs text-muted-foreground">
+            {sections.length} seções ativas · {totalChars.toLocaleString("pt-BR")} caracteres totais
+          </p>
         </div>
       </div>
 
-      {/* Info panel */}
+      {/* Base Knowledge Sections - Collapsible */}
       <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+        <button
+          onClick={() => setShowSections(!showSections)}
+          className="flex items-center gap-2 w-full text-left"
+        >
+          <Eye className="w-5 h-5 text-primary shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-foreground">
+              Base de Conhecimento ({sections.length} seções)
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Clique para ver todo o conteúdo que a IA sabe
+            </p>
+          </div>
+          {showSections ? (
+            <ChevronDown className="w-5 h-5 text-muted-foreground" />
+          ) : (
+            <ChevronRight className="w-5 h-5 text-muted-foreground" />
+          )}
+        </button>
+
+        {showSections && (
+          <div className="space-y-1.5 pt-2">
+            {sections.map((section) => (
+              <KnowledgeSectionCard key={section.id} section={section} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Info panel */}
+      <div className="rounded-xl border border-border bg-card p-4 space-y-3">
         <div className="flex items-start gap-2">
           <Info className="w-5 h-5 text-primary shrink-0 mt-0.5" />
           <div className="text-sm text-foreground space-y-2">
-            <p className="font-semibold">Como funciona?</p>
-            <p>A IA já possui conhecimento base completo sobre:</p>
-            <ul className="list-disc pl-4 text-muted-foreground space-y-1">
-              <li>8 produtos iGreen (Green, Livre, Solar, Placas, Club, Club PJ, Expansão, Telecom)</li>
-              <li>Comissões CP e CI detalhadas por estado</li>
-              <li>Plano de carreira com 8 níveis (Sênior a Acionista)</li>
-              <li>27 estados e distribuidoras</li>
-              <li>FAQ e objeções comuns</li>
-              <li>Funcionalidades do painel do consultor</li>
-            </ul>
-            <p className="text-primary font-medium">Envie PDFs ou escreva no campo abaixo para adicionar informações EXTRAS.</p>
+            <p className="font-semibold">Como adicionar conhecimento extra?</p>
+            <p className="text-muted-foreground text-xs">
+              A base acima é fixa. Use o campo abaixo ou envie PDFs para adicionar informações extras (promoções, eventos, regras novas, etc).
+            </p>
           </div>
         </div>
       </div>
@@ -228,7 +302,7 @@ export function AIKnowledgePanel() {
         </div>
         <p className="text-xs text-muted-foreground">
           Envie PDFs com tabelas de comissão, scripts de venda, regulamentos, treinamentos, etc.
-          O sistema extrai o texto, a IA organiza e integra ao conhecimento. Documentos mais recentes têm prioridade.
+          O sistema extrai o texto, a IA organiza e integra ao conhecimento.
         </p>
 
         <div className="flex gap-3 items-center">
@@ -252,7 +326,6 @@ export function AIKnowledgePanel() {
           {!uploading && <span className="text-xs text-muted-foreground">Aceita múltiplos PDFs de uma vez</span>}
         </div>
 
-        {/* Uploaded docs list */}
         {uploadedDocs.length > 0 && (
           <div className="space-y-2 mt-3">
             <p className="text-xs font-medium text-muted-foreground">Documentos integrados ({uploadedDocs.length}):</p>
@@ -309,15 +382,15 @@ export function AIKnowledgePanel() {
 
 Exemplo:
 PROMOÇÕES ATIVAS:
-- Até 30/07/2025: Bônus de R$500 para quem cadastrar 10 clientes no mês
+— Até 30/07/2025: Bônus de R$500 para quem cadastrar 10 clientes no mês
 
 EVENTOS:
-- Grand Show dia 20/08 em Uberlândia, MG`}
+— Grand Show dia 20/08 em Uberlândia, MG`}
             className="min-h-[300px] font-mono text-sm"
           />
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted-foreground">
-              {charCount.toLocaleString("pt-BR")} caracteres
+              {extraKnowledge.length.toLocaleString("pt-BR")} caracteres extras
             </span>
             <Button onClick={handleSave} disabled={saving} className="gap-2">
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
