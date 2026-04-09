@@ -627,7 +627,7 @@ export function BulkSendPanel({ instanceName, customers, templates, applyTemplat
               )}
 
               {viewingCustomer.registered_by_name && (
-                <div className="text-muted-foreground"><span className="font-medium text-foreground">Licenciada:</span> {viewingCustomer.registered_by_name}</div>
+                <div className="text-muted-foreground"><span className="font-medium text-foreground">Licenciado:</span> {viewingCustomer.registered_by_name}</div>
               )}
 
               <div className="flex items-center gap-2">

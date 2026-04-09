@@ -12,7 +12,7 @@ export function PreviewTab({ slug, baseUrl }: PreviewTabProps) {
         <a href={`https://${baseUrl}/${slug}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 bg-primary text-primary-foreground font-bold py-3 rounded-xl hover:opacity-90 transition-opacity">
           <ExternalLink className="w-4 h-4" /> Página de Cliente
         </a>
-        <a href={`https://${baseUrl}/licenciada/${slug}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 border-2 border-primary text-primary font-bold py-3 rounded-xl hover:bg-primary/10 transition-colors">
+        <a href={`https://${baseUrl}/licenciado/${slug}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 border-2 border-primary text-primary font-bold py-3 rounded-xl hover:bg-primary/10 transition-colors">
           <ExternalLink className="w-4 h-4" /> Página de Licenciado
         </a>
       </div>

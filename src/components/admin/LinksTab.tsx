@@ -19,13 +19,13 @@ export function LinksTab({ slug, baseUrl, onCopy, onQrOpen }: LinksTabProps) {
           <LinkIcon className="w-5 h-5 text-primary" /> Links Principais
         </h2>
         <LinkCard emoji="🏠" title="Landing Page — Cliente" description="Para captar clientes que querem desconto na conta de luz" url={`https://${baseUrl}/${slug}`} onCopy={onCopy} previewUrl={`/${slug}`} />
-        <LinkCard emoji="💼" title="Landing Page — Licenciado" description="Para recrutar novos licenciados para sua equipe" url={`https://${baseUrl}/licenciada/${slug}`} onCopy={onCopy} previewUrl={`/licenciada/${slug}`} />
+        <LinkCard emoji="💼" title="Landing Page — Licenciado" description="Para recrutar novos licenciados para sua equipe" url={`https://${baseUrl}/licenciado/${slug}`} onCopy={onCopy} previewUrl={`/licenciado/${slug}`} />
       </div>
 
       {/* Tracking Links */}
       {[
         { pageLabel: "Cliente", pagePath: slug, emoji: "🏠" },
-        { pageLabel: "Licenciado", pagePath: `licenciada/${slug}`, emoji: "💼" },
+        { pageLabel: "Licenciado", pagePath: `licenciado/${slug}`, emoji: "💼" },
       ].map((page) => (
         <div key={page.pagePath} className="space-y-3">
           <h2 className="font-heading font-bold text-foreground text-lg flex items-center gap-2">

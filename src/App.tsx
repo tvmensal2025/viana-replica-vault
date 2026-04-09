@@ -28,8 +28,8 @@ const App = () => (
             <Route path="/admin" element={<Admin />} />
             <Route path="/super-admin" element={<SuperAdmin />} />
             <Route path="/assistente" element={<AssistentePage />} />
-            <Route path="/licenciada/preview" element={<LicenciadaPreview />} />
-            <Route path="/licenciada/:licenca" element={<LicenciadaPage />} />
+            <Route path="/licenciado/preview" element={<LicenciadaPreview />} />
+            <Route path="/licenciado/:licenca" element={<LicenciadaPage />} />
             <Route path="/:licenca" element={<ConsultantPage />} />
             <Route path="/" element={<Navigate to="/auth" replace />} />
             <Route path="*" element={<NotFound />} />
