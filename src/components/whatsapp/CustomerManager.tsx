@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { PaginatedList } from "@/components/ui/PaginatedList";
 import {
-  UserPlus, Users, Search, Loader2, RefreshCw, Filter,
+  UserPlus, Users, Search, Loader2, RefreshCw, Filter, Smartphone, Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +35,9 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
   const [profilePics, setProfilePics] = useState<Record<string, string>>({});
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [selectedLicenciado, setSelectedLicenciado] = useState("all");
+  const [selectedDistribuidora, setSelectedDistribuidora] = useState("all");
+  const [selectedCidade, setSelectedCidade] = useState("all");
+  const [selectedTipo, setSelectedTipo] = useState<"all" | "energia" | "telefonia">("all");
   const [syncing, setSyncing] = useState(false);
   const [syncCooldown, setSyncCooldown] = useState(0);
   const [lastSync, setLastSync] = useState<string | null>(null);
@@ -115,6 +118,23 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
     return Array.from(names).sort((a, b) => a.localeCompare(b, "pt-BR"));
   }, [customers]);
 
+  const distribuidoraOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const c of customers) {
+      if (c.distribuidora) names.add(c.distribuidora);
+    }
+    return Array.from(names).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [customers]);
+
+  const cidadeOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const c of customers) {
+      const label = [c.address_city, c.address_state].filter(Boolean).join(" - ");
+      if (label) names.add(label);
+    }
+    return Array.from(names).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [customers]);
+
   const searchFiltered = search.trim()
     ? customers.filter(
         (c) =>
@@ -125,15 +145,30 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
       )
     : customers;
 
-  const licenciadoFiltered = selectedLicenciado === "all"
+  const tipoFiltered = selectedTipo === "all"
     ? searchFiltered
-    : searchFiltered.filter((c) => (c.registered_by_name || "Sem licenciado") === selectedLicenciado);
+    : searchFiltered.filter((c) => (c.tipo_produto || "energia") === selectedTipo);
+
+  const licenciadoFiltered = selectedLicenciado === "all"
+    ? tipoFiltered
+    : tipoFiltered.filter((c) => (c.registered_by_name || "Sem licenciado") === selectedLicenciado);
+
+  const distribuidoraFiltered = selectedDistribuidora === "all"
+    ? licenciadoFiltered
+    : licenciadoFiltered.filter((c) => (c.distribuidora || "") === selectedDistribuidora);
+
+  const cidadeFiltered = selectedCidade === "all"
+    ? distribuidoraFiltered
+    : distribuidoraFiltered.filter((c) => {
+        const label = [c.address_city, c.address_state].filter(Boolean).join(" - ");
+        return label === selectedCidade;
+      });
 
   const filtered = statusFilter === "all"
-    ? licenciadoFiltered
+    ? cidadeFiltered
     : statusFilter === "devolutiva"
-    ? licenciadoFiltered.filter((c) => c.status === "devolutiva" || isDevolutiva(c))
-    : licenciadoFiltered.filter((c) => c.status === statusFilter);
+    ? cidadeFiltered.filter((c) => c.status === "devolutiva" || isDevolutiva(c))
+    : cidadeFiltered.filter((c) => c.status === statusFilter);
 
   async function handleDelete(id: string) {
     try {
@@ -229,26 +264,63 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
           </div>
         </div>
 
-        {/* Search */}
-        <div className="px-4 sm:px-5 pt-3 sm:pt-4 pb-2 sm:pb-3">
-          <div className="grid gap-2 sm:gap-3 sm:grid-cols-[minmax(0,1fr)_240px]">
+        {/* Search & Filters */}
+        <div className="px-4 sm:px-5 pt-3 sm:pt-4 pb-2 sm:pb-3 space-y-2">
+          <div className="grid gap-2 sm:gap-3 sm:grid-cols-[minmax(0,1fr)_200px]">
             <div className="relative">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
-              <Input placeholder="Buscar nome, telefone, CPF..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10 h-9 sm:h-10 rounded-xl bg-secondary/30 border-border/50 focus:border-primary/40 text-sm" />
+              <Input placeholder="Buscar nome, telefone, CPF, e-mail..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10 h-9 sm:h-10 rounded-xl bg-secondary/30 border-border/50 focus:border-primary/40 text-sm" />
             </div>
+            {/* Tipo produto toggle */}
+            <div className="flex gap-1 bg-secondary/30 rounded-xl p-1 border border-border/50">
+              {([["all", "Todos"], ["energia", "⚡ Energia"], ["telefonia", "📱 Telecom"]] as const).map(([val, label]) => (
+                <button key={val} onClick={() => setSelectedTipo(val as any)} className={`flex-1 text-xs font-medium rounded-lg py-1.5 transition-all ${selectedTipo === val ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="grid gap-2 grid-cols-2 sm:grid-cols-3">
             <Select value={selectedLicenciado} onValueChange={setSelectedLicenciado}>
-              <SelectTrigger className="h-9 sm:h-10 rounded-xl bg-secondary/30 border-border/50 text-sm">
-                <div className="flex items-center gap-2 truncate">
-                  <Filter className="w-4 h-4 text-muted-foreground" />
-                  <SelectValue placeholder="Filtrar licenciado" />
+              <SelectTrigger className="h-8 sm:h-9 rounded-xl bg-secondary/30 border-border/50 text-xs">
+                <div className="flex items-center gap-1.5 truncate">
+                  <Filter className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  <SelectValue placeholder="Licenciado" />
                 </div>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todos os licenciados</SelectItem>
+                <SelectItem value="all">Todos licenciados</SelectItem>
                 {licenciadoOptions.map((name) => (
                   <SelectItem key={name} value={name}>{name}</SelectItem>
                 ))}
-                {licenciadoOptions.length === 0 && <SelectItem value="empty" disabled>Sem licenciados</SelectItem>}
+              </SelectContent>
+            </Select>
+            <Select value={selectedDistribuidora} onValueChange={setSelectedDistribuidora}>
+              <SelectTrigger className="h-8 sm:h-9 rounded-xl bg-secondary/30 border-border/50 text-xs">
+                <div className="flex items-center gap-1.5 truncate">
+                  <Zap className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  <SelectValue placeholder="Distribuidora" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas distribuidoras</SelectItem>
+                {distribuidoraOptions.map((name) => (
+                  <SelectItem key={name} value={name}>{name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={selectedCidade} onValueChange={setSelectedCidade}>
+              <SelectTrigger className="h-8 sm:h-9 rounded-xl bg-secondary/30 border-border/50 text-xs col-span-2 sm:col-span-1">
+                <div className="flex items-center gap-1.5 truncate">
+                  <Smartphone className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  <SelectValue placeholder="Cidade/UF" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas cidades</SelectItem>
+                {cidadeOptions.map((name) => (
+                  <SelectItem key={name} value={name}>{name}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

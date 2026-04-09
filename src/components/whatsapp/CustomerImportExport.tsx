@@ -138,6 +138,7 @@ export function CustomerImportExport({ customers, filtered, consultantId, onCust
 
           const newDeals = upserted
             .filter((u) => !existingJids.has(`${u.phone_whatsapp}@s.whatsapp.net`))
+            .filter((u: any) => (u.tipo_produto || "energia") !== "telefonia")
             .map((u) => ({
               consultant_id: consultantId,
               customer_id: u.id,

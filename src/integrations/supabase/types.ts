@@ -327,6 +327,7 @@ export type Database = {
           senha_pdf: string | null
           status: string
           status_financeiro: string | null
+          tipo_produto: string
           updated_at: string
         }
         Insert: {
@@ -388,6 +389,7 @@ export type Database = {
           senha_pdf?: string | null
           status?: string
           status_financeiro?: string | null
+          tipo_produto?: string
           updated_at?: string
         }
         Update: {
@@ -449,6 +451,7 @@ export type Database = {
           senha_pdf?: string | null
           status?: string
           status_financeiro?: string | null
+          tipo_produto?: string
           updated_at?: string
         }
         Relationships: [

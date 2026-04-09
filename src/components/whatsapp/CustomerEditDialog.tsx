@@ -44,6 +44,7 @@ export function CustomerEditDialog({ customer, onClose, onSaved }: CustomerEditD
       address_city: customer.address_city || "", address_state: customer.address_state || "",
       numero_instalacao: customer.numero_instalacao || "", electricity_bill_value: customer.electricity_bill_value?.toString() || "",
       status: customer.status || "pending",
+      tipo_produto: customer.tipo_produto || "energia",
       customer_referred_by_name: customer.customer_referred_by_name || "",
       customer_referred_by_phone: customer.customer_referred_by_phone || "",
     };
@@ -89,6 +90,7 @@ export function CustomerEditDialog({ customer, onClose, onSaved }: CustomerEditD
       updateData.numero_instalacao = editForm.numero_instalacao || null;
       updateData.electricity_bill_value = editForm.electricity_bill_value ? parseFloat(editForm.electricity_bill_value) : null;
       updateData.status = editForm.status || "pending";
+      (updateData as any).tipo_produto = editForm.tipo_produto || "energia";
       (updateData as any).customer_referred_by_name = editForm.customer_referred_by_name || null;
       (updateData as any).customer_referred_by_phone = editForm.customer_referred_by_phone || null;
 
@@ -139,6 +141,13 @@ export function CustomerEditDialog({ customer, onClose, onSaved }: CustomerEditD
               <option value="approved">Aprovado</option>
               <option value="rejected">Reprovado</option>
               <option value="lead">Lead</option>
+            </select>
+          </div>
+          <div>
+            <Label className="text-[11px] text-muted-foreground">Tipo Produto</Label>
+            <select value={editForm.tipo_produto || "energia"} onChange={(e) => updateEdit("tipo_produto", e.target.value)} className="h-9 text-xs mt-1 w-full bg-secondary/30 border border-border/50 rounded-md px-2">
+              <option value="energia">⚡ Energia</option>
+              <option value="telefonia">📱 Telefonia</option>
             </select>
           </div>
 
