@@ -142,7 +142,7 @@ const AdminContent = () => {
             <img src="/images/logo-colorida-igreen.png" alt="iGreen" className="w-20 sm:w-24" />
             <div className="hidden sm:block">
               <h1 className="text-base font-bold font-heading text-foreground leading-tight">Painel do Consultor</h1>
-              <p className="text-xs text-muted-foreground">{form.name || "Bem-vindo"}</p>
+              <p className="text-xs text-muted-foreground sensitive-name">{form.name || "Bem-vindo"}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
