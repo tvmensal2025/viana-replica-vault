@@ -15,6 +15,15 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AIKnowledgePanel } from "@/components/superadmin/AIKnowledgePanel";
 
+interface WhatsAppMetrics {
+  hasInstance: boolean;
+  instanceName: string | null;
+  totalMsgsSent: number;
+  totalMsgsReceived: number;
+  scheduledSent: number;
+  scheduledFailed: number;
+}
+
 interface ConsultantRow {
   id: string;
   name: string;
@@ -27,6 +36,7 @@ interface ConsultantRow {
   total_deals?: number;
   views_7d?: number;
   last_activity?: string | null;
+  wa?: WhatsAppMetrics;
 }
 
 const SuperAdmin = () => {
