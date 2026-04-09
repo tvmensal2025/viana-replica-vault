@@ -109,20 +109,44 @@ const SuperAdmin = () => {
 
     const rows: ConsultantRow[] = (data as any[])?.map(c => ({ ...c, approved: c.approved ?? false })) || [];
 
+    // Pre-fetch WhatsApp instances and scheduled messages for all consultants
+    const [waInstancesRes, scheduledRes] = await Promise.all([
+      supabase.from("whatsapp_instances").select("consultant_id, instance_name"),
+      supabase.from("scheduled_messages").select("consultant_id, status"),
+    ]);
+
+    const waMap = new Map<string, string>();
+    (waInstancesRes.data || []).forEach((w: any) => waMap.set(w.consultant_id, w.instance_name));
+
+    const schedMap = new Map<string, { sent: number; failed: number }>();
+    (scheduledRes.data || []).forEach((s: any) => {
+      const entry = schedMap.get(s.consultant_id) || { sent: 0, failed: 0 };
+      if (s.status === "sent") entry.sent++;
+      else if (s.status === "failed") entry.failed++;
+      schedMap.set(s.consultant_id, entry);
+    });
+
     // Load activity metrics in parallel
     const enriched = await Promise.all(rows.map(async (c) => {
-      const [custRes, cust7dRes, dealsRes, viewsRes, lastCustRes, lastViewRes] = await Promise.all([
+      const [custRes, cust7dRes, dealsRes, viewsRes, lastCustRes, lastViewRes, convRes] = await Promise.all([
         supabase.from("customers").select("id", { count: "exact", head: true }).eq("consultant_id", c.id),
         supabase.from("customers").select("id", { count: "exact", head: true }).eq("consultant_id", c.id).gte("created_at", new Date(Date.now() - 7 * 86400000).toISOString()),
         supabase.from("crm_deals").select("id", { count: "exact", head: true }).eq("consultant_id", c.id),
         supabase.from("page_views").select("id", { count: "exact", head: true }).eq("consultant_id", c.id).gte("created_at", new Date(Date.now() - 7 * 86400000).toISOString()),
         supabase.from("customers").select("created_at").eq("consultant_id", c.id).order("created_at", { ascending: false }).limit(1),
         supabase.from("page_views").select("created_at").eq("consultant_id", c.id).order("created_at", { ascending: false }).limit(1),
+        supabase.from("conversations").select("message_direction", { count: "exact" })
+          .in("customer_id", (await supabase.from("customers").select("id").eq("consultant_id", c.id)).data?.map((cu: any) => cu.id) || []),
       ]);
 
       const lastCust = (lastCustRes.data as any)?.[0]?.created_at;
       const lastView = (lastViewRes.data as any)?.[0]?.created_at;
       const dates = [lastCust, lastView].filter(Boolean).sort().reverse();
+
+      const convData = (convRes.data || []) as any[];
+      const outbound = convData.filter((m: any) => m.message_direction === "outbound").length;
+      const inbound = convData.filter((m: any) => m.message_direction === "inbound").length;
+      const sched = schedMap.get(c.id) || { sent: 0, failed: 0 };
 
       return {
         ...c,
@@ -131,6 +155,14 @@ const SuperAdmin = () => {
         total_deals: dealsRes.count || 0,
         views_7d: viewsRes.count || 0,
         last_activity: dates[0] || null,
+        wa: {
+          hasInstance: waMap.has(c.id),
+          instanceName: waMap.get(c.id) || null,
+          totalMsgsSent: outbound + sched.sent,
+          totalMsgsReceived: inbound,
+          scheduledSent: sched.sent,
+          scheduledFailed: sched.failed,
+        },
       };
     }));
 
