@@ -13,11 +13,36 @@ export function useKanbanDeals(consultantId: string) {
   const fetchDeals = useCallback(async () => {
     const { data } = await supabase
       .from("crm_deals")
-      .select("*")
+      .select("*, customers(name, phone_whatsapp)")
       .eq("consultant_id", consultantId)
       .order("created_at", { ascending: false });
-    if (data) setDeals(data);
+    if (data) {
+      // Enrich deals with customer_name from joined data
+      const enriched = data.map((d: any) => ({
+        ...d,
+        customer_name: d.customers?.name || null,
+      }));
+      setDeals(enriched);
+    }
   }, [consultantId]);
+
+  // Also try to resolve names by phone for deals without customer_id
+  const resolveNames = useCallback(async (rawDeals: CrmDealRow[]) => {
+    const needsLookup = rawDeals.filter((d) => !(d as any).customer_name && d.remote_jid);
+    if (needsLookup.length === 0) return;
+    const phones = needsLookup.map((d) => d.remote_jid!.split("@")[0]);
+    const { data: customers } = await supabase.from("customers").select("name, phone_whatsapp").in("phone_whatsapp", phones);
+    if (!customers || customers.length === 0) return;
+    const phoneMap = new Map(customers.map((c) => [c.phone_whatsapp, c.name]));
+    setDeals((prev) =>
+      prev.map((d) => {
+        if ((d as any).customer_name) return d;
+        const phone = d.remote_jid?.split("@")[0];
+        const name = phone ? phoneMap.get(phone) : null;
+        return name ? { ...d, customer_name: name } as any : d;
+      })
+    );
+  }, []);
 
   const moveDeal = async (dealId: string, stageKey: string, rejectionReason?: string) => {
     const deal = deals.find((d) => d.id === dealId);
@@ -73,5 +98,5 @@ export function useKanbanDeals(consultantId: string) {
     }
   };
 
-  return { deals, setDeals, fetchDeals, moveDeal, editDeal, deleteDeal };
+  return { deals, setDeals, fetchDeals, resolveNames, moveDeal, editDeal, deleteDeal };
 }
