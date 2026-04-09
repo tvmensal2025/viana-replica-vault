@@ -30,7 +30,7 @@ const AnimatedCounter = ({ target, suffix = "" }: { target: number; suffix?: str
           observer.disconnect();
         }
       },
-      { threshold: 0.5 }
+      { threshold: 0.1 }
     );
     if (ref.current) observer.observe(ref.current);
     return () => observer.disconnect();
