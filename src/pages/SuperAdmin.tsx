@@ -450,13 +450,14 @@ const SuperAdmin = () => {
                     })}
                     {consultants.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                           Nenhum consultor cadastrado
                         </TableCell>
                       </TableRow>
                     )}
                   </TableBody>
                 </Table>
+                </TooltipProvider>
               )}
             </div>
           </>
