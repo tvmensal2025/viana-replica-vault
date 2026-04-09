@@ -319,6 +319,7 @@ const SuperAdmin = () => {
                   <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
                 </div>
               ) : (
+                <TooltipProvider>
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -327,6 +328,7 @@ const SuperAdmin = () => {
                       <TableHead className="text-center">Clientes</TableHead>
                       <TableHead className="text-center">Deals</TableHead>
                       <TableHead className="text-center">Views 7d</TableHead>
+                      <TableHead className="text-center">WhatsApp</TableHead>
                       <TableHead>Última Atividade</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="text-right">Ações</TableHead>
@@ -337,6 +339,7 @@ const SuperAdmin = () => {
                       const lastAct = c.last_activity ? new Date(c.last_activity) : null;
                       const daysSince = lastAct ? Math.floor((Date.now() - lastAct.getTime()) / 86400000) : null;
                       const activityColor = daysSince === null ? "text-muted-foreground" : daysSince <= 1 ? "text-green-500" : daysSince <= 7 ? "text-yellow-500" : "text-red-400";
+                      const wa = c.wa;
 
                       return (
                         <TableRow key={c.id}>
@@ -355,6 +358,41 @@ const SuperAdmin = () => {
                           </TableCell>
                           <TableCell className="text-center">
                             <span className="text-sm text-foreground">{c.views_7d || 0}</span>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="flex flex-col items-center gap-1 cursor-default">
+                                  {wa?.hasInstance ? (
+                                    <Wifi className="w-4 h-4 text-green-500" />
+                                  ) : (
+                                    <WifiOff className="w-4 h-4 text-muted-foreground" />
+                                  )}
+                                  <div className="flex items-center gap-1.5 text-[11px]">
+                                    <span className="flex items-center gap-0.5 text-green-500">
+                                      <Send className="w-3 h-3" />{wa?.totalMsgsSent || 0}
+                                    </span>
+                                    <span className="flex items-center gap-0.5 text-blue-400">
+                                      <MessageSquare className="w-3 h-3" />{wa?.totalMsgsReceived || 0}
+                                    </span>
+                                  </div>
+                                  {(wa?.scheduledFailed || 0) > 0 && (
+                                    <span className="flex items-center gap-0.5 text-[10px] text-red-400">
+                                      <AlertTriangle className="w-3 h-3" />{wa.scheduledFailed} erro{wa.scheduledFailed > 1 ? "s" : ""}
+                                    </span>
+                                  )}
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="text-xs max-w-[200px]">
+                                <p className="font-semibold mb-1">{wa?.hasInstance ? "✅ Instância criada" : "❌ Sem instância"}</p>
+                                {wa?.instanceName && <p className="text-muted-foreground mb-1">{wa.instanceName}</p>}
+                                <p>📤 Enviadas: {wa?.totalMsgsSent || 0}</p>
+                                <p>📥 Recebidas: {wa?.totalMsgsReceived || 0}</p>
+                                {(wa?.scheduledFailed || 0) > 0 && (
+                                  <p className="text-red-400">⚠️ Falhas agendamento: {wa?.scheduledFailed}</p>
+                                )}
+                              </TooltipContent>
+                            </Tooltip>
                           </TableCell>
                           <TableCell>
                             <span className={`text-xs font-medium ${activityColor}`}>
