@@ -44,6 +44,7 @@ export function CustomerEditDialog({ customer, onClose, onSaved }: CustomerEditD
       address_city: customer.address_city || "", address_state: customer.address_state || "",
       numero_instalacao: customer.numero_instalacao || "", electricity_bill_value: customer.electricity_bill_value?.toString() || "",
       status: customer.status || "pending",
+      tipo_produto: customer.tipo_produto || "energia",
       customer_referred_by_name: customer.customer_referred_by_name || "",
       customer_referred_by_phone: customer.customer_referred_by_phone || "",
     };
