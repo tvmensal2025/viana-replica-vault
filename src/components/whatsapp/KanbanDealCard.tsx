@@ -22,11 +22,21 @@ export function KanbanDealCard({ deal, onDragStart, onEdit, onDelete }: KanbanDe
       <div className="flex items-start gap-2">
         <GripVertical className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1">
-            <User className="h-3 w-3 text-muted-foreground" />
-            <span className="text-xs font-medium text-foreground truncate sensitive-phone">
-              {deal.remote_jid?.split("@")[0] || "Sem contato"}
-            </span>
+          <div className="flex flex-col gap-0.5">
+            {(deal as any).customer_name && (
+              <div className="flex items-center gap-1">
+                <User className="h-3 w-3 text-muted-foreground" />
+                <span className="text-xs font-medium text-foreground truncate sensitive-data">
+                  {(deal as any).customer_name}
+                </span>
+              </div>
+            )}
+            <div className="flex items-center gap-1">
+              <User className="h-3 w-3 text-muted-foreground" />
+              <span className="text-[10px] text-muted-foreground truncate sensitive-phone">
+                {deal.remote_jid?.split("@")[0] || "Sem contato"}
+              </span>
+            </div>
           </div>
           {deal.approved_at && (
             <p className="text-[9px] text-muted-foreground mt-0.5">
