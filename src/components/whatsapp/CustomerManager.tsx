@@ -35,6 +35,9 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
   const [profilePics, setProfilePics] = useState<Record<string, string>>({});
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [selectedLicenciado, setSelectedLicenciado] = useState("all");
+  const [selectedDistribuidora, setSelectedDistribuidora] = useState("all");
+  const [selectedCidade, setSelectedCidade] = useState("all");
+  const [selectedTipo, setSelectedTipo] = useState<"all" | "energia" | "telefonia">("all");
   const [syncing, setSyncing] = useState(false);
   const [syncCooldown, setSyncCooldown] = useState(0);
   const [lastSync, setLastSync] = useState<string | null>(null);
