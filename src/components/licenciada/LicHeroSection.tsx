@@ -97,10 +97,9 @@ const LicHeroSection = ({ cadastroUrl, whatsappUrl, consultantId }: LicHeroSecti
         {/* Title - compact on mobile */}
         <h1 className="font-heading font-black mb-2 md:mb-3 text-lg sm:text-2xl md:text-4xl lg:text-[3.2rem] leading-[1.15] max-w-5xl mx-auto text-foreground px-2">
           Seja um Licenciado iGreen Energy e receba{" "}
-          <span className="relative inline-block" style={{ color: 'hsl(var(--primary))' }}>
-            comissões recorrentes e vitalícias
-            <span className="absolute -bottom-1 left-0 w-full h-1 rounded-full" style={{ background: 'var(--gradient-green)' }} />
-          </span>{" "}
+           <span className="relative inline" style={{ color: 'hsl(var(--primary))' }}>
+             comissões recorrentes e vitalícias
+           </span>{" "}
           todos os meses
         </h1>
 
