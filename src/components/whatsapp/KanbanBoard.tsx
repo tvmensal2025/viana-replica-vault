@@ -28,7 +28,7 @@ interface KanbanBoardProps {
 
 export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
   const { stages, fetchStages, addStage, updateStage, deleteStage, saveAutoMessage, toggleAutoMessage, reorderStages } = useKanbanStages(consultantId);
-  const { deals, fetchDeals, moveDeal, editDeal, deleteDeal } = useKanbanDeals(consultantId);
+  const { deals, fetchDeals, resolveNames, moveDeal, editDeal, deleteDeal } = useKanbanDeals(consultantId);
 
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -45,7 +45,8 @@ export function KanbanBoard({ consultantId, instanceName }: KanbanBoardProps) {
   const [deletingDealId, setDeletingDealId] = useState<string | null>(null);
   const { toast } = useToast();
 
-  useEffect(() => { fetchStages(); fetchDeals(); }, [fetchStages, fetchDeals]);
+  useEffect(() => { fetchStages(); fetchDeals().then(() => resolveNames(deals)); }, [fetchStages, fetchDeals]);
+  useEffect(() => { resolveNames(deals); }, [deals.length]);
 
   // Send auto-messages when deal moves to a stage
   const sendAutoMessages = async (stage: KanbanStageRow, deal: CrmDealRow, rejectionReason?: string) => {

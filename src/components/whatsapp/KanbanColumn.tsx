@@ -24,7 +24,8 @@ export function KanbanColumn({ stage, deals, searchQuery, onDrop, onDragStart, o
         const q = searchQuery.toLowerCase();
         const phone = d.remote_jid?.split("@")[0] || "";
         const notes = d.notes || "";
-        return phone.includes(q) || notes.toLowerCase().includes(q);
+        const name = ((d as any).customer_name || "").toLowerCase();
+        return phone.includes(q) || notes.toLowerCase().includes(q) || name.includes(q);
       })
     : allStageDeals;
 
