@@ -10,7 +10,9 @@ import {
 } from "@/components/ui/table";
 import {
   Shield, Users, CheckCircle, XCircle, LogOut, Loader2, UserCheck, UserX, BarChart3, KeyRound, Brain,
+  MessageSquare, Wifi, WifiOff, AlertTriangle, Send,
 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AIKnowledgePanel } from "@/components/superadmin/AIKnowledgePanel";
 
 interface ConsultantRow {
