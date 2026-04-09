@@ -90,6 +90,7 @@ export function CustomerEditDialog({ customer, onClose, onSaved }: CustomerEditD
       updateData.numero_instalacao = editForm.numero_instalacao || null;
       updateData.electricity_bill_value = editForm.electricity_bill_value ? parseFloat(editForm.electricity_bill_value) : null;
       updateData.status = editForm.status || "pending";
+      (updateData as any).tipo_produto = editForm.tipo_produto || "energia";
       (updateData as any).customer_referred_by_name = editForm.customer_referred_by_name || null;
       (updateData as any).customer_referred_by_phone = editForm.customer_referred_by_phone || null;
 
