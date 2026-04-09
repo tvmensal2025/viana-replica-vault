@@ -157,7 +157,7 @@ export function AnalyticsCharts({ chartData, periodDays, analytics, weeklyNewCus
           )}
           {analytics.clicksByPage?.licenciada && Object.keys(analytics.clicksByPage.licenciada).length > 0 && (
             <div>
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">💼 Página Licenciada</p>
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">💼 Página Licenciado</p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {Object.entries(analytics.clicksByPage.licenciada).map(([target, count]) => (
                   <div key={target} className="bg-secondary rounded-xl p-4 text-center">
