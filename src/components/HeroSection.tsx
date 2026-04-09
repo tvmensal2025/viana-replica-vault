@@ -103,10 +103,9 @@ const HeroSection = ({ cadastroUrl, whatsappUrl, consultantId }: HeroSectionProp
         {/* Title */}
         <h1 className="font-heading font-black mb-4 md:mb-6 text-[1.6rem] sm:text-3xl md:text-4xl lg:text-[3.2rem] leading-[1.2] max-w-5xl mx-auto text-foreground px-4">
           Descubra como receber até{" "}
-          <span className="relative inline-block" style={{ color: 'hsl(var(--primary))' }}>
-            20% de desconto
-            <span className="absolute -bottom-1 left-0 w-full h-1 rounded-full" style={{ background: 'var(--gradient-green)' }} />
-          </span>{" "}
+           <span className="relative inline" style={{ color: 'hsl(var(--primary))' }}>
+             20% de desconto
+           </span>{" "}
           na sua conta de luz todos os meses gratuitamente
         </h1>
 
