@@ -26,6 +26,7 @@ interface CustomerRow {
   id: string;
   name: string | null;
   phone_whatsapp: string;
+  tipo_produto: string;
 }
 
 function formatRemoteJid(phone: string): string {
@@ -53,11 +54,12 @@ export function AddLeadDialog({ consultantId, stages, onLeadAdded }: AddLeadDial
   const fetchCustomers = useCallback(async () => {
     const { data } = await supabase
       .from("customers")
-      .select("id, name, phone_whatsapp")
+      .select("id, name, phone_whatsapp, tipo_produto")
       .eq("consultant_id", consultantId)
+      .neq("tipo_produto", "telefonia")
       .order("name", { ascending: true })
       .limit(500);
-    if (data) setCustomers(data);
+    if (data) setCustomers(data as CustomerRow[]);
   }, [consultantId]);
 
   useEffect(() => {
