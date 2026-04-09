@@ -175,6 +175,15 @@ export function getStageDotsForCustomer(status: string | null | undefined, deal?
 export function buildCustomerData(row: Record<string, unknown>): Record<string, unknown> {
   const data: Record<string, unknown> = {};
 
+  const tipoProduto = safeString(findColumnValue(row, "Tipo Produto", "tipo_produto", "Tipo", "tipo", "Segmento", "segmento"));
+  if (tipoProduto) {
+    const lower = tipoProduto.toLowerCase();
+    if (lower.includes("telecom") || lower.includes("telefon") || lower.includes("celular") || lower.includes("plano")) {
+      data.tipo_produto = "telefonia";
+    } else {
+      data.tipo_produto = "energia";
+    }
+  }
   const mediaConsumo = safeNumber(findColumnValue(row, "Consumo Médio", "Consumo Medio", "Consumo", "consumo"));
   if (mediaConsumo != null) data.media_consumo = mediaConsumo;
 
