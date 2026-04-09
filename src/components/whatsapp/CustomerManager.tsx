@@ -118,6 +118,23 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
     return Array.from(names).sort((a, b) => a.localeCompare(b, "pt-BR"));
   }, [customers]);
 
+  const distribuidoraOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const c of customers) {
+      if (c.distribuidora) names.add(c.distribuidora);
+    }
+    return Array.from(names).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [customers]);
+
+  const cidadeOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const c of customers) {
+      const label = [c.address_city, c.address_state].filter(Boolean).join(" - ");
+      if (label) names.add(label);
+    }
+    return Array.from(names).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [customers]);
+
   const searchFiltered = search.trim()
     ? customers.filter(
         (c) =>
