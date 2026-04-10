@@ -293,7 +293,7 @@ const CRMLandingPage = () => {
       </section>
 
       {/* ═══ FUNCIONALIDADES ═══ */}
-      <section className="section-gradient">
+      <section id="section-funcionalidades" className="section-gradient">
         <div className="section-container">
           <div className="text-center mb-12 md:mb-16">
             <div className="badge-green mx-auto mb-4">
