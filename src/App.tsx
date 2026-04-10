@@ -5,6 +5,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
+const CRMLandingPage = lazy(() => import("./pages/CRMLandingPage"));
 const ConsultantPage = lazy(() => import("./pages/ConsultantPage"));
 const LicenciadaPage = lazy(() => import("./pages/LicenciadaPage"));
 const LicenciadaPreview = lazy(() => import("./pages/LicenciadaPreview"));
