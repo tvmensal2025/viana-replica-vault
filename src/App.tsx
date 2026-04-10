@@ -5,6 +5,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
+const CRMLandingPage = lazy(() => import("./pages/CRMLandingPage"));
 const ConsultantPage = lazy(() => import("./pages/ConsultantPage"));
 const LicenciadaPage = lazy(() => import("./pages/LicenciadaPage"));
 const LicenciadaPreview = lazy(() => import("./pages/LicenciadaPreview"));
@@ -28,6 +29,7 @@ const App = () => (
             <Route path="/admin" element={<Admin />} />
             <Route path="/super-admin" element={<SuperAdmin />} />
             <Route path="/assistente" element={<AssistentePage />} />
+            <Route path="/crm" element={<CRMLandingPage />} />
             <Route path="/licenciado/preview" element={<LicenciadaPreview />} />
             <Route path="/licenciado/:licenca" element={<LicenciadaPage />} />
             <Route path="/:licenca" element={<ConsultantPage />} />
