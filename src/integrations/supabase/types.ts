@@ -240,6 +240,42 @@ export type Database = {
           },
         ]
       }
+      crm_page_events: {
+        Row: {
+          created_at: string
+          device_type: string | null
+          event_target: string | null
+          event_type: string
+          id: string
+          referrer: string | null
+          utm_campaign: string | null
+          utm_medium: string | null
+          utm_source: string | null
+        }
+        Insert: {
+          created_at?: string
+          device_type?: string | null
+          event_target?: string | null
+          event_type?: string
+          id?: string
+          referrer?: string | null
+          utm_campaign?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+        }
+        Update: {
+          created_at?: string
+          device_type?: string | null
+          event_target?: string | null
+          event_type?: string
+          id?: string
+          referrer?: string | null
+          utm_campaign?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+        }
+        Relationships: []
+      }
       customer_tags: {
         Row: {
           consultant_id: string
