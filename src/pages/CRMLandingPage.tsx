@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Volume2 } from "lucide-react";
+import WhatsAppFloat from "@/components/WhatsAppFloat";
 import {
   MessageSquare,
   LayoutDashboard,
@@ -16,7 +17,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 
-const WHATSAPP_CTA = "https://api.whatsapp.com/send?phone=5500000000000&text=Ol%C3%A1,%20quero%20conhecer%20o%20CRM%20iGreen";
+const WHATSAPP_CTA = "https://api.whatsapp.com/send?phone=5511989000650&text=Ol%C3%A1,%20quero%20conhecer%20o%20CRM%20iGreen";
 
 /* ── Animated Counter ── */
 const AnimatedCounter = ({ target, suffix = "" }: { target: number; suffix?: string }) => {
@@ -402,6 +403,8 @@ const CRMLandingPage = () => {
           © {new Date().getFullYear()} iGreen Energy — Todos os direitos reservados.
         </div>
       </footer>
+
+      <WhatsAppFloat url={WHATSAPP_CTA} />
     </div>
   );
 };
