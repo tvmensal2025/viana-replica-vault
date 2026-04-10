@@ -135,6 +135,7 @@ const SecureAudioPlayer = ({ url }: { url: string }) => {
     } else {
       audioRef.current.play();
       setPlaying(true);
+      trackCrmClick("audio_play");
     }
   };
 
@@ -181,9 +182,34 @@ const SecureAudioPlayer = ({ url }: { url: string }) => {
 };
 const CRMLandingPage = () => {
   const [audioTemplates, setAudioTemplates] = useState<AudioTemplate[]>([]);
+  const trackedSections = useRef(new Set<string>());
 
   // Track page view
   useCrmPageView();
+
+  // Track scroll depth & section visibility
+  useEffect(() => {
+    const sections = ["funcionalidades", "templates", "como-funciona", "diferenciais", "cta-final"];
+    const observers: IntersectionObserver[] = [];
+
+    sections.forEach((id) => {
+      const el = document.getElementById(`section-${id}`);
+      if (!el) return;
+      const obs = new IntersectionObserver(
+        ([entry]) => {
+          if (entry.isIntersecting && !trackedSections.current.has(id)) {
+            trackedSections.current.add(id);
+            trackCrmClick(`scroll_${id}`);
+          }
+        },
+        { threshold: 0.3 }
+      );
+      obs.observe(el);
+      observers.push(obs);
+    });
+
+    return () => observers.forEach((o) => o.disconnect());
+  }, []);
 
   useEffect(() => {
     supabase
@@ -227,7 +253,15 @@ const CRMLandingPage = () => {
           {/* Video */}
           <div className="max-w-4xl mx-auto mb-8 md:mb-12 rounded-xl md:rounded-2xl overflow-hidden relative" style={{ boxShadow: "var(--shadow-green-lg)" }}>
             <div className="absolute inset-0 rounded-xl md:rounded-2xl border border-primary/20 z-10 pointer-events-none" />
-            <video controls playsInline className="w-full aspect-video relative z-0" poster="">
+            <video
+              controls
+              playsInline
+              className="w-full aspect-video relative z-0"
+              poster=""
+              onPlay={() => trackCrmClick("video_play")}
+              onPause={() => trackCrmClick("video_pause")}
+              onEnded={() => trackCrmClick("video_completed")}
+            >
               <source src="https://igreen-minio.b099mi.easypanel.host/igreen/Video%20para%20venda%20do%20crm.mp4" type="video/mp4" />
               Seu navegador não suporta vídeos.
             </video>
