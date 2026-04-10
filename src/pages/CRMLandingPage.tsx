@@ -442,7 +442,7 @@ const CRMLandingPage = () => {
         </div>
       </footer>
 
-      <WhatsAppFloat url={WHATSAPP_CTA} />
+      <WhatsAppFloat url={WHATSAPP_CTA} onClickTrack={() => trackCrmClick("whatsapp_float")} />
     </div>
   );
 };
