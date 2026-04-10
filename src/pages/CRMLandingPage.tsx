@@ -302,17 +302,14 @@ const CRMLandingPage = () => {
 
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-5xl mx-auto">
               {audioTemplates.map((t) => (
-                <div key={t.id} className="glass-card flex flex-col gap-3">
+                <div key={t.id} className="glass-card flex flex-col gap-3" onContextMenu={(e) => e.preventDefault()}>
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-primary/15 text-primary shrink-0">
                       <Volume2 size={20} />
                     </div>
                     <h3 className="font-heading font-bold text-sm text-foreground truncate">{t.name}</h3>
                   </div>
-                  <audio controls preload="none" className="w-full h-10 rounded-lg [&::-webkit-media-controls-panel]:bg-secondary [&::-webkit-media-controls-current-time-display]:text-foreground [&::-webkit-media-controls-time-remaining-display]:text-foreground">
-                    <source src={t.media_url} type="audio/ogg" />
-                    Seu navegador não suporta áudio.
-                  </audio>
+                  <SecureAudioPlayer url={t.media_url} />
                 </div>
               ))}
             </div>
