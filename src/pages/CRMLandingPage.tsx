@@ -385,7 +385,7 @@ const CRMLandingPage = () => {
             Junte-se aos consultores que já estão fechando mais negócios com o CRM iGreen Energy.
           </p>
           <a href={WHATSAPP_CTA} target="_blank" rel="noopener noreferrer" className="btn-cta-lg animate-pulse-green !py-4 !px-10 !text-lg">
-            💬 Falar com um especialista
+            Quero contratar o CRM
           </a>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-8 mt-8 text-sm text-muted-foreground">
