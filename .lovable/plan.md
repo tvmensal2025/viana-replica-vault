@@ -1,30 +1,47 @@
 
 
-## Problema
-Atualmente, a política de SELECT na tabela `message_templates` permite que todos os usuários autenticados vejam **todos** os templates (incluindo áudios e imagens). O usuário quer que templates criados por admins sejam globais (visíveis para todos), mas templates criados por usuários individuais sejam privados.
+## Landing Page de Vendas do CRM iGreen
 
-## Solução
+### Objetivo
+Criar uma landing page profissional na rota `/crm` para vender o CRM iGreen, com vídeo no hero e seções explicando cada funcionalidade.
 
-### Migração SQL
-Alterar a política de SELECT `Authenticated read all templates` para:
+### Estrutura da Página
 
-```sql
-DROP POLICY "Authenticated read all templates" ON public.message_templates;
+**1. Hero Section** - Vídeo no topo + headline de vendas
+- Badge "CRM iGreen Energy"
+- Título: "Gerencie seus clientes, automatize vendas e feche mais negócios"
+- Vídeo de apresentação do CRM (placeholder MinIO ou URL a definir)
+- CTA "Quero conhecer o CRM" (link WhatsApp)
+- Contadores animados (reutilizando o padrão existente)
 
-CREATE POLICY "Users see own and admin templates"
-ON public.message_templates
-FOR SELECT
-TO authenticated
-USING (
-  consultant_id = auth.uid()
-  OR has_role(consultant_id, 'admin')
-);
-```
+**2. Seção "Funcionalidades"** - Cards com ícones explicando cada módulo:
+- **WhatsApp Integrado**: Envie e receba mensagens direto do CRM, com templates prontos e respostas rápidas
+- **Kanban de Vendas**: Pipeline visual com drag-and-drop para acompanhar cada negociação
+- **Gestão de Clientes**: Cadastro, importação, histórico completo e segmentação
+- **Mensagens Agendadas**: Automatize follow-ups e sequências de mensagens
+- **Mensagens em Massa**: Envio em lote com templates personalizados
+- **Dashboard de Métricas**: Gráficos de performance, taxa de resposta e conversão
 
-Isso faz com que:
-- Templates criados por um **admin** → visíveis para **todos** os usuários autenticados (padrão/global)
-- Templates criados por um **usuário comum** → visíveis **apenas** para o próprio criador
+**3. Seção "Como Funciona"** - 3 passos simples (cadastro, conexão WhatsApp, comece a vender)
 
-### Nenhuma alteração de código necessária
-A lógica do `useTemplates` já faz `SELECT *` sem filtro — o RLS cuidará automaticamente da visibilidade correta.
+**4. Seção "Diferenciais"** - Por que escolher o CRM iGreen (integração nativa, sem custo extra, suporte dedicado)
+
+**5. CTA Final** - Repetição do botão de conversão + WhatsApp
+
+### Arquivos a criar/modificar
+
+| Arquivo | Ação |
+|---------|------|
+| `src/pages/CRMLandingPage.tsx` | Criar - página completa com todas as seções |
+| `src/App.tsx` | Adicionar rota `/crm` com lazy loading |
+
+### Estilo
+- Reutiliza o design system existente (dark mode, glassmorphism, verde primário, Montserrat/Open Sans)
+- Mesmas classes CSS (`section-container`, `badge-green`, `btn-cta-lg`, `animate-pulse-green`)
+- Cards translúcidos com borda `border-border` e `bg-card`
+- Ícones do Lucide React
+
+### Vídeo
+- Usará o mesmo player responsivo do HeroSection existente
+- URL do vídeo pode ser atualizada depois (placeholder inicial)
 
