@@ -389,7 +389,7 @@ const CRMLandingPage = () => {
           <p className="text-muted-foreground max-w-xl mx-auto mb-8 text-lg">
             Junte-se aos consultores que já estão fechando mais negócios com o CRM iGreen Energy.
           </p>
-          <a href={WHATSAPP_CTA} target="_blank" rel="noopener noreferrer" className="btn-cta-lg animate-pulse-green !py-4 !px-10 !text-lg">
+          <a href={WHATSAPP_CTA} target="_blank" rel="noopener noreferrer" className="btn-cta-lg animate-pulse-green !py-4 !px-10 !text-lg" onClick={() => trackCrmClick("footer_cta")}>
             Quero contratar o CRM
           </a>
 

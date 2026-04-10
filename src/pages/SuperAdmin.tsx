@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AIKnowledgePanel } from "@/components/superadmin/AIKnowledgePanel";
+import { CrmAnalyticsTab } from "@/components/superadmin/CrmAnalyticsTab";
 
 interface WhatsAppMetrics {
   hasInstance: boolean;
@@ -45,7 +46,7 @@ const SuperAdmin = () => {
   const [loadingData, setLoadingData] = useState(true);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [resettingId, setResettingId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"consultores" | "ia">("consultores");
+  const [activeTab, setActiveTab] = useState<"consultores" | "ia" | "crm">("consultores");
   const [searchTerm, setSearchTerm] = useState("");
   const accessDeniedToastShownRef = useRef(false);
   const { isAdmin, loading: roleLoading } = useUserRole(userId);
@@ -208,6 +209,7 @@ const SuperAdmin = () => {
 
   const tabs = [
     { id: "consultores" as const, label: "Consultores", icon: Users },
+    { id: "crm" as const, label: "CRM Analytics", icon: TrendingUp },
     { id: "ia" as const, label: "IA / Conhecimento", icon: Brain },
   ];
 
@@ -475,6 +477,7 @@ const SuperAdmin = () => {
           </>
         )}
 
+        {activeTab === "crm" && <CrmAnalyticsTab />}
         {activeTab === "ia" && <AIKnowledgePanel />}
       </main>
     </div>
