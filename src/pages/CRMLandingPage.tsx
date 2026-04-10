@@ -99,8 +99,28 @@ const differentials = [
   { icon: Headphones, title: "Suporte Dedicado", desc: "Equipe pronta para te ajudar a tirar o máximo do CRM." },
 ];
 
+interface AudioTemplate {
+  id: string;
+  name: string;
+  media_url: string;
+}
+
 /* ── Page ── */
 const CRMLandingPage = () => {
+  const [audioTemplates, setAudioTemplates] = useState<AudioTemplate[]>([]);
+
+  useEffect(() => {
+    supabase
+      .from("message_templates")
+      .select("id, name, media_url")
+      .eq("media_type", "audio")
+      .not("media_url", "is", null)
+      .order("created_at", { ascending: false })
+      .then(({ data }) => {
+        if (data) setAudioTemplates(data as AudioTemplate[]);
+      });
+  }, []);
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* ═══ HERO ═══ */}
@@ -191,6 +211,43 @@ const CRMLandingPage = () => {
           </div>
         </div>
       </section>
+
+      {/* ═══ TEMPLATES DE ÁUDIO ═══ */}
+      {audioTemplates.length > 0 && (
+        <section>
+          <div className="section-container">
+            <div className="text-center mb-12 md:mb-16">
+              <div className="badge-green mx-auto mb-4">
+                <span className="glow-dot" />
+                <span className="text-xs">Templates prontos</span>
+              </div>
+              <h2 className="section-heading !text-2xl sm:!text-3xl md:!text-4xl">
+                Áudios profissionais inclusos
+              </h2>
+              <p className="text-muted-foreground mt-4 max-w-2xl mx-auto">
+                Utilize templates de áudio prontos para cada etapa do funil. Envie com um clique direto pelo CRM.
+              </p>
+            </div>
+
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-5xl mx-auto">
+              {audioTemplates.map((t) => (
+                <div key={t.id} className="glass-card flex flex-col gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-primary/15 text-primary shrink-0">
+                      <Volume2 size={20} />
+                    </div>
+                    <h3 className="font-heading font-bold text-sm text-foreground truncate">{t.name}</h3>
+                  </div>
+                  <audio controls preload="none" className="w-full h-10 rounded-lg [&::-webkit-media-controls-panel]:bg-secondary [&::-webkit-media-controls-current-time-display]:text-foreground [&::-webkit-media-controls-time-remaining-display]:text-foreground">
+                    <source src={t.media_url} type="audio/ogg" />
+                    Seu navegador não suporta áudio.
+                  </audio>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* ═══ COMO FUNCIONA ═══ */}
       <section>
