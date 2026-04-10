@@ -59,22 +59,22 @@ const features = [
   {
     icon: MessageSquare,
     title: "WhatsApp Integrado",
-    desc: "Envie e receba mensagens direto do CRM, com templates prontos, respostas rápidas e gravação de áudio. Tudo em uma única tela.",
+    desc: "Envie e receba mensagens direto do CRM, com templates prontos, respostas rápidas e gravação de áudio. Tudo em uma única tela. ",
   },
   {
     icon: LayoutDashboard,
     title: "Kanban de Vendas",
-    desc: "Pipeline visual com drag-and-drop para acompanhar cada negociação do primeiro contato até o fechamento.",
+    desc: "Pipeline visual com drag-and-drop para acompanhar cada etapa do primeiro contato até o o cliente pagar o boleto da igreen.",
   },
   {
     icon: Users,
     title: "Gestão de Clientes",
-    desc: "Cadastro completo, importação em massa via planilha, histórico de conversas e segmentação por tags.",
+    desc: "Sincronizado com seus clientes da igreen.\n\nCadastro completo, importação em massa via planilha, histórico de conversas e segmentação por tags.",
   },
   {
     icon: Clock,
     title: "Mensagens Agendadas",
-    desc: "Programe follow-ups automáticos e sequências de mensagens para nunca perder o timing da venda.",
+    desc: "Programe follow-ups automáticos e sequências de mensagens para nunca perder o timing , eu uso muito para o usuário que tem empréstimo, assim agendo uma msg automaticá.",
   },
   {
     icon: Send,
@@ -277,7 +277,7 @@ const CRMLandingPage = () => {
                   <f.icon size={24} />
                 </div>
                 <h3 className="font-heading font-bold text-lg text-foreground mb-2">{f.title}</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">{f.desc}</p>
+                <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">{f.desc}</p>
               </div>
             ))}
           </div>
