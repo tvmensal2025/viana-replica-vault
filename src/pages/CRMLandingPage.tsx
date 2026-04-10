@@ -277,7 +277,7 @@ const CRMLandingPage = () => {
                   <f.icon size={24} />
                 </div>
                 <h3 className="font-heading font-bold text-lg text-foreground mb-2">{f.title}</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">{f.desc}</p>
+                <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">{f.desc}</p>
               </div>
             ))}
           </div>
