@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { Volume2 } from "lucide-react";
 import {
   MessageSquare,
   LayoutDashboard,
@@ -57,37 +59,31 @@ const features = [
     icon: MessageSquare,
     title: "WhatsApp Integrado",
     desc: "Envie e receba mensagens direto do CRM, com templates prontos, respostas rápidas e gravação de áudio. Tudo em uma única tela.",
-    audio: "https://igreen-minio.b099mi.easypanel.host/igreen/crm-audio-whatsapp.mp3",
   },
   {
     icon: LayoutDashboard,
     title: "Kanban de Vendas",
     desc: "Pipeline visual com drag-and-drop para acompanhar cada negociação do primeiro contato até o fechamento.",
-    audio: "https://igreen-minio.b099mi.easypanel.host/igreen/crm-audio-kanban.mp3",
   },
   {
     icon: Users,
     title: "Gestão de Clientes",
     desc: "Cadastro completo, importação em massa via planilha, histórico de conversas e segmentação por tags.",
-    audio: "https://igreen-minio.b099mi.easypanel.host/igreen/crm-audio-clientes.mp3",
   },
   {
     icon: Clock,
     title: "Mensagens Agendadas",
     desc: "Programe follow-ups automáticos e sequências de mensagens para nunca perder o timing da venda.",
-    audio: "https://igreen-minio.b099mi.easypanel.host/igreen/crm-audio-agendadas.mp3",
   },
   {
     icon: Send,
     title: "Mensagens em Massa",
     desc: "Envio em lote com templates personalizados, incluindo imagens e áudios para toda a sua base de contatos.",
-    audio: "https://igreen-minio.b099mi.easypanel.host/igreen/crm-audio-massa.mp3",
   },
   {
     icon: BarChart3,
     title: "Dashboard de Métricas",
     desc: "Gráficos de performance, taxa de resposta, conversão por etapa e ranking de consultores em tempo real.",
-    audio: "https://igreen-minio.b099mi.easypanel.host/igreen/crm-audio-dashboard.mp3",
   },
 ];
 
@@ -103,8 +99,28 @@ const differentials = [
   { icon: Headphones, title: "Suporte Dedicado", desc: "Equipe pronta para te ajudar a tirar o máximo do CRM." },
 ];
 
+interface AudioTemplate {
+  id: string;
+  name: string;
+  media_url: string;
+}
+
 /* ── Page ── */
 const CRMLandingPage = () => {
+  const [audioTemplates, setAudioTemplates] = useState<AudioTemplate[]>([]);
+
+  useEffect(() => {
+    supabase
+      .from("message_templates")
+      .select("id, name, media_url")
+      .eq("media_type", "audio")
+      .not("media_url", "is", null)
+      .order("created_at", { ascending: false })
+      .then(({ data }) => {
+        if (data) setAudioTemplates(data as AudioTemplate[]);
+      });
+  }, []);
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* ═══ HERO ═══ */}
@@ -189,16 +205,49 @@ const CRMLandingPage = () => {
                   <f.icon size={24} />
                 </div>
                 <h3 className="font-heading font-bold text-lg text-foreground mb-2">{f.title}</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed mb-4">{f.desc}</p>
-                <audio controls preload="none" className="w-full h-10 rounded-lg [&::-webkit-media-controls-panel]:bg-secondary [&::-webkit-media-controls-current-time-display]:text-foreground [&::-webkit-media-controls-time-remaining-display]:text-foreground">
-                  <source src={f.audio} type="audio/mpeg" />
-                  Seu navegador não suporta áudio.
-                </audio>
+                <p className="text-sm text-muted-foreground leading-relaxed">{f.desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
+
+      {/* ═══ TEMPLATES DE ÁUDIO ═══ */}
+      {audioTemplates.length > 0 && (
+        <section>
+          <div className="section-container">
+            <div className="text-center mb-12 md:mb-16">
+              <div className="badge-green mx-auto mb-4">
+                <span className="glow-dot" />
+                <span className="text-xs">Templates prontos</span>
+              </div>
+              <h2 className="section-heading !text-2xl sm:!text-3xl md:!text-4xl">
+                Áudios profissionais inclusos
+              </h2>
+              <p className="text-muted-foreground mt-4 max-w-2xl mx-auto">
+                Utilize templates de áudio prontos para cada etapa do funil. Envie com um clique direto pelo CRM.
+              </p>
+            </div>
+
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-5xl mx-auto">
+              {audioTemplates.map((t) => (
+                <div key={t.id} className="glass-card flex flex-col gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-primary/15 text-primary shrink-0">
+                      <Volume2 size={20} />
+                    </div>
+                    <h3 className="font-heading font-bold text-sm text-foreground truncate">{t.name}</h3>
+                  </div>
+                  <audio controls preload="none" className="w-full h-10 rounded-lg [&::-webkit-media-controls-panel]:bg-secondary [&::-webkit-media-controls-current-time-display]:text-foreground [&::-webkit-media-controls-time-remaining-display]:text-foreground">
+                    <source src={t.media_url} type="audio/ogg" />
+                    Seu navegador não suporta áudio.
+                  </audio>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* ═══ COMO FUNCIONA ═══ */}
       <section>
