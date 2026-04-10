@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Volume2 } from "lucide-react";
 import WhatsAppFloat from "@/components/WhatsAppFloat";
+import { useCrmPageView, trackCrmClick } from "@/hooks/useCrmTracking";
 import {
   MessageSquare,
   LayoutDashboard,
@@ -181,6 +182,9 @@ const SecureAudioPlayer = ({ url }: { url: string }) => {
 const CRMLandingPage = () => {
   const [audioTemplates, setAudioTemplates] = useState<AudioTemplate[]>([]);
 
+  // Track page view
+  useCrmPageView();
+
   useEffect(() => {
     supabase
       .from("message_templates")
@@ -231,7 +235,7 @@ const CRMLandingPage = () => {
 
           {/* CTA */}
           <div className="flex flex-col sm:flex-row gap-3 justify-center px-4">
-            <a href={WHATSAPP_CTA} target="_blank" rel="noopener noreferrer" className="btn-cta-lg animate-pulse-green !py-3 sm:!py-4 !px-8 !text-base sm:!text-lg">
+            <a href={WHATSAPP_CTA} target="_blank" rel="noopener noreferrer" className="btn-cta-lg animate-pulse-green !py-3 sm:!py-4 !px-8 !text-base sm:!text-lg" onClick={() => trackCrmClick("hero_cta")}>
               ⚡ Quero conhecer o CRM
             </a>
           </div>
