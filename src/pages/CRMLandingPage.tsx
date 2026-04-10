@@ -105,7 +105,78 @@ interface AudioTemplate {
   media_url: string;
 }
 
-/* ── Page ── */
+/* ── Secure Audio Player ── */
+const SecureAudioPlayer = ({ url }: { url: string }) => {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [currentTime, setCurrent] = useState(0);
+  const [duration, setDuration] = useState(0);
+
+  const toggle = () => {
+    if (!audioRef.current) {
+      const a = new Audio();
+      a.crossOrigin = "anonymous";
+      a.preload = "metadata";
+      a.src = url;
+      a.addEventListener("timeupdate", () => {
+        setCurrent(a.currentTime);
+        setProgress(a.duration ? (a.currentTime / a.duration) * 100 : 0);
+      });
+      a.addEventListener("loadedmetadata", () => setDuration(a.duration));
+      a.addEventListener("ended", () => { setPlaying(false); setProgress(0); setCurrent(0); });
+      audioRef.current = a;
+    }
+    if (playing) {
+      audioRef.current.pause();
+      setPlaying(false);
+    } else {
+      audioRef.current.play();
+      setPlaying(true);
+    }
+  };
+
+  useEffect(() => {
+    return () => { audioRef.current?.pause(); };
+  }, []);
+
+  const fmt = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, "0")}`;
+  };
+
+  const seek = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!audioRef.current || !duration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    audioRef.current.currentTime = pct * duration;
+  };
+
+  return (
+    <div className="flex items-center gap-3 select-none" onContextMenu={(e) => e.preventDefault()}>
+      <button
+        onClick={toggle}
+        className="w-9 h-9 rounded-full flex items-center justify-center bg-primary/20 text-primary hover:bg-primary/30 transition-colors shrink-0"
+      >
+        {playing ? (
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><rect x="2" y="1" width="3.5" height="12" rx="1" /><rect x="8.5" y="1" width="3.5" height="12" rx="1" /></svg>
+        ) : (
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M3 1.5v11l9-5.5z" /></svg>
+        )}
+      </button>
+      <div className="flex-1 flex flex-col gap-1">
+        <div className="h-2 rounded-full bg-secondary cursor-pointer" onClick={seek}>
+          <div className="h-full rounded-full bg-primary transition-all duration-150" style={{ width: `${progress}%` }} />
+        </div>
+        <div className="flex justify-between text-[10px] text-muted-foreground font-mono">
+          <span>{fmt(currentTime)}</span>
+          <span>{duration ? fmt(duration) : "0:00"}</span>
+        </div>
+      </div>
+    </div>
+  );
+};
 const CRMLandingPage = () => {
   const [audioTemplates, setAudioTemplates] = useState<AudioTemplate[]>([]);
 
@@ -231,17 +302,14 @@ const CRMLandingPage = () => {
 
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-5xl mx-auto">
               {audioTemplates.map((t) => (
-                <div key={t.id} className="glass-card flex flex-col gap-3">
+                <div key={t.id} className="glass-card flex flex-col gap-3" onContextMenu={(e) => e.preventDefault()}>
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-primary/15 text-primary shrink-0">
                       <Volume2 size={20} />
                     </div>
                     <h3 className="font-heading font-bold text-sm text-foreground truncate">{t.name}</h3>
                   </div>
-                  <audio controls preload="none" className="w-full h-10 rounded-lg [&::-webkit-media-controls-panel]:bg-secondary [&::-webkit-media-controls-current-time-display]:text-foreground [&::-webkit-media-controls-time-remaining-display]:text-foreground">
-                    <source src={t.media_url} type="audio/ogg" />
-                    Seu navegador não suporta áudio.
-                  </audio>
+                  <SecureAudioPlayer url={t.media_url} />
                 </div>
               ))}
             </div>
