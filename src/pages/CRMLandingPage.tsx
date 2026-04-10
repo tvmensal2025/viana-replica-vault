@@ -57,31 +57,37 @@ const features = [
     icon: MessageSquare,
     title: "WhatsApp Integrado",
     desc: "Envie e receba mensagens direto do CRM, com templates prontos, respostas rápidas e gravação de áudio. Tudo em uma única tela.",
+    audio: "https://igreen-minio.b099mi.easypanel.host/igreen/crm-audio-whatsapp.mp3",
   },
   {
     icon: LayoutDashboard,
     title: "Kanban de Vendas",
     desc: "Pipeline visual com drag-and-drop para acompanhar cada negociação do primeiro contato até o fechamento.",
+    audio: "https://igreen-minio.b099mi.easypanel.host/igreen/crm-audio-kanban.mp3",
   },
   {
     icon: Users,
     title: "Gestão de Clientes",
     desc: "Cadastro completo, importação em massa via planilha, histórico de conversas e segmentação por tags.",
+    audio: "https://igreen-minio.b099mi.easypanel.host/igreen/crm-audio-clientes.mp3",
   },
   {
     icon: Clock,
     title: "Mensagens Agendadas",
     desc: "Programe follow-ups automáticos e sequências de mensagens para nunca perder o timing da venda.",
+    audio: "https://igreen-minio.b099mi.easypanel.host/igreen/crm-audio-agendadas.mp3",
   },
   {
     icon: Send,
     title: "Mensagens em Massa",
     desc: "Envio em lote com templates personalizados, incluindo imagens e áudios para toda a sua base de contatos.",
+    audio: "https://igreen-minio.b099mi.easypanel.host/igreen/crm-audio-massa.mp3",
   },
   {
     icon: BarChart3,
     title: "Dashboard de Métricas",
     desc: "Gráficos de performance, taxa de resposta, conversão por etapa e ranking de consultores em tempo real.",
+    audio: "https://igreen-minio.b099mi.easypanel.host/igreen/crm-audio-dashboard.mp3",
   },
 ];
 
@@ -183,7 +189,11 @@ const CRMLandingPage = () => {
                   <f.icon size={24} />
                 </div>
                 <h3 className="font-heading font-bold text-lg text-foreground mb-2">{f.title}</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">{f.desc}</p>
+                <p className="text-sm text-muted-foreground leading-relaxed mb-4">{f.desc}</p>
+                <audio controls preload="none" className="w-full h-10 rounded-lg [&::-webkit-media-controls-panel]:bg-secondary [&::-webkit-media-controls-current-time-display]:text-foreground [&::-webkit-media-controls-time-remaining-display]:text-foreground">
+                  <source src={f.audio} type="audio/mpeg" />
+                  Seu navegador não suporta áudio.
+                </audio>
               </div>
             ))}
           </div>
