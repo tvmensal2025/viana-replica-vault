@@ -324,7 +324,7 @@ const CRMLandingPage = () => {
 
       {/* ═══ TEMPLATES DE ÁUDIO ═══ */}
       {audioTemplates.length > 0 && (
-        <section>
+        <section id="section-templates">
           <div className="section-container">
             <div className="text-center mb-12 md:mb-16">
               <div className="badge-green mx-auto mb-4">
@@ -357,7 +357,7 @@ const CRMLandingPage = () => {
       )}
 
       {/* ═══ COMO FUNCIONA ═══ */}
-      <section>
+      <section id="section-como-funciona">
         <div className="section-container">
           <div className="text-center mb-12 md:mb-16">
             <div className="badge-green mx-auto mb-4">
@@ -387,7 +387,7 @@ const CRMLandingPage = () => {
       </section>
 
       {/* ═══ DIFERENCIAIS ═══ */}
-      <section className="section-gradient">
+      <section id="section-diferenciais" className="section-gradient">
         <div className="section-container">
           <div className="text-center mb-12 md:mb-16">
             <div className="badge-green mx-auto mb-4">
@@ -414,7 +414,7 @@ const CRMLandingPage = () => {
       </section>
 
       {/* ═══ CTA FINAL ═══ */}
-      <section className="relative overflow-hidden">
+      <section id="section-cta-final" className="relative overflow-hidden">
         <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at center, hsl(130 100% 36% / 0.08), transparent 70%)" }} />
         <div className="section-container text-center relative z-10">
           <h2 className="font-heading font-black text-2xl sm:text-3xl md:text-4xl mb-4">
