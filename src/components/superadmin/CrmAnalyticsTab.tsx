@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Eye, MousePointerClick, Smartphone, Monitor, Tablet, Loader2, RefreshCw, TrendingUp } from "lucide-react";
+import { Eye, MousePointerClick, Loader2, RefreshCw, TrendingUp, Play, Volume2, ArrowDown, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 
 interface CrmEvent {
   id: string;
@@ -18,6 +18,21 @@ interface CrmEvent {
 }
 
 const COLORS = ["hsl(130,70%,45%)", "hsl(200,70%,50%)", "hsl(40,80%,50%)", "hsl(280,60%,55%)", "hsl(0,70%,55%)"];
+
+const EVENT_LABELS: Record<string, string> = {
+  video_play: "▶ Play no Vídeo",
+  video_pause: "⏸ Pausou Vídeo",
+  video_completed: "✅ Vídeo Completo",
+  audio_play: "🔊 Play Áudio",
+  hero_cta: "⚡ CTA Hero",
+  footer_cta: "📩 CTA Footer",
+  whatsapp_float: "💬 WhatsApp Float",
+  scroll_funcionalidades: "📜 Scroll: Funcionalidades",
+  scroll_templates: "📜 Scroll: Templates",
+  "scroll_como-funciona": "📜 Scroll: Como Funciona",
+  scroll_diferenciais: "📜 Scroll: Diferenciais",
+  "scroll_cta-final": "📜 Scroll: CTA Final",
+};
 
 export function CrmAnalyticsTab() {
   const [events, setEvents] = useState<CrmEvent[]>([]);
@@ -42,6 +57,17 @@ export function CrmAnalyticsTab() {
     const views = events.filter(e => e.event_type === "view");
     const clicks = events.filter(e => e.event_type === "click");
 
+    // Specific event counts
+    const countTarget = (target: string) => clicks.filter(c => c.event_target === target).length;
+
+    const videoPlays = countTarget("video_play");
+    const videoCompleted = countTarget("video_completed");
+    const audioPlays = countTarget("audio_play");
+    const heroCta = countTarget("hero_cta");
+    const footerCta = countTarget("footer_cta");
+    const whatsappFloat = countTarget("whatsapp_float");
+    const totalConversions = heroCta + footerCta + whatsappFloat;
+
     // Device breakdown
     const deviceMap = new Map<string, number>();
     views.forEach(v => {
@@ -60,7 +86,7 @@ export function CrmAnalyticsTab() {
       targetMap.set(t, (targetMap.get(t) || 0) + 1);
     });
     const clickTargets = Array.from(targetMap.entries())
-      .map(([name, value]) => ({ name, value }))
+      .map(([name, value]) => ({ name, label: EVENT_LABELS[name] || name, value }))
       .sort((a, b) => b.value - a.value);
 
     // Daily views
@@ -83,6 +109,13 @@ export function CrmAnalyticsTab() {
     const dailyData = Array.from(dayMap.entries()).map(([date, data]) => ({
       label: new Date(date + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
       ...data,
+    }));
+
+    // Scroll funnel
+    const scrollSections = ["funcionalidades", "templates", "como-funciona", "diferenciais", "cta-final"];
+    const scrollFunnel = scrollSections.map(s => ({
+      name: s.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
+      value: countTarget(`scroll_${s}`),
     }));
 
     // UTM sources
@@ -113,12 +146,10 @@ export function CrmAnalyticsTab() {
     return {
       totalViews: views.length,
       totalClicks: clicks.length,
-      conversionRate: views.length > 0 ? ((clicks.length / views.length) * 100).toFixed(1) : "0.0",
-      deviceData,
-      clickTargets,
-      dailyData,
-      utmData,
-      referrerData,
+      conversionRate: views.length > 0 ? ((totalConversions / views.length) * 100).toFixed(1) : "0.0",
+      videoPlays, videoCompleted, audioPlays,
+      heroCta, footerCta, whatsappFloat, totalConversions,
+      deviceData, clickTargets, dailyData, scrollFunnel, utmData, referrerData,
     };
   }, [events, periodDays]);
 
@@ -153,22 +184,51 @@ export function CrmAnalyticsTab() {
         </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-3 gap-3">
+      {/* Summary Cards - Row 1 */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="rounded-xl border border-border bg-card p-4">
           <Eye className="w-5 h-5 text-primary mb-2" />
           <p className="text-2xl font-bold text-foreground">{metrics.totalViews}</p>
           <p className="text-[11px] text-muted-foreground">Visualizações</p>
         </div>
         <div className="rounded-xl border border-border bg-card p-4">
-          <MousePointerClick className="w-5 h-5 text-accent mb-2" />
-          <p className="text-2xl font-bold text-foreground">{metrics.totalClicks}</p>
-          <p className="text-[11px] text-muted-foreground">Cliques</p>
+          <Play className="w-5 h-5 text-accent mb-2" />
+          <p className="text-2xl font-bold text-foreground">{metrics.videoPlays}</p>
+          <p className="text-[11px] text-muted-foreground">Reproduções Vídeo</p>
+          {metrics.videoPlays > 0 && (
+            <p className="text-[10px] text-muted-foreground mt-1">
+              {metrics.videoCompleted} completos ({metrics.videoPlays > 0 ? ((metrics.videoCompleted / metrics.videoPlays) * 100).toFixed(0) : 0}%)
+            </p>
+          )}
         </div>
         <div className="rounded-xl border border-border bg-card p-4">
-          <TrendingUp className="w-5 h-5 text-primary mb-2" />
-          <p className="text-2xl font-bold text-foreground">{metrics.conversionRate}%</p>
-          <p className="text-[11px] text-muted-foreground">Taxa de Clique</p>
+          <Volume2 className="w-5 h-5 text-primary mb-2" />
+          <p className="text-2xl font-bold text-foreground">{metrics.audioPlays}</p>
+          <p className="text-[11px] text-muted-foreground">Plays Áudio</p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4">
+          <MessageCircle className="w-5 h-5 text-primary mb-2" />
+          <p className="text-2xl font-bold text-foreground">{metrics.totalConversions}</p>
+          <p className="text-[11px] text-muted-foreground">Conversões (CTAs)</p>
+          <p className="text-[10px] text-muted-foreground mt-1">
+            Taxa: {metrics.conversionRate}%
+          </p>
+        </div>
+      </div>
+
+      {/* CTA Breakdown */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="rounded-xl border border-border bg-card p-3 text-center">
+          <p className="text-lg font-bold text-foreground">{metrics.heroCta}</p>
+          <p className="text-[10px] text-muted-foreground">CTA Hero</p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-3 text-center">
+          <p className="text-lg font-bold text-foreground">{metrics.footerCta}</p>
+          <p className="text-[10px] text-muted-foreground">CTA Footer</p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-3 text-center">
+          <p className="text-lg font-bold text-foreground">{metrics.whatsappFloat}</p>
+          <p className="text-[10px] text-muted-foreground">WhatsApp Float</p>
         </div>
       </div>
 
@@ -182,9 +242,34 @@ export function CrmAnalyticsTab() {
             <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
             <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
             <Bar dataKey="views" name="Visualizações" fill="hsl(130,70%,45%)" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="clicks" name="Cliques" fill="hsl(40,80%,50%)" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="clicks" name="Interações" fill="hsl(40,80%,50%)" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
+      </div>
+
+      {/* Scroll Funnel */}
+      <div className="rounded-xl border border-border bg-card p-4">
+        <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
+          <ArrowDown className="w-4 h-4 text-primary" /> Funil de Scroll (seções visualizadas)
+        </h3>
+        <div className="space-y-2">
+          {metrics.scrollFunnel.map((s, i) => {
+            const maxVal = Math.max(...metrics.scrollFunnel.map(x => x.value), 1);
+            const pct = (s.value / maxVal) * 100;
+            return (
+              <div key={s.name} className="flex items-center gap-3">
+                <span className="text-xs text-muted-foreground w-28 shrink-0 truncate">{s.name}</span>
+                <div className="flex-1 h-6 rounded bg-muted/40 overflow-hidden">
+                  <div
+                    className="h-full rounded transition-all"
+                    style={{ width: `${pct}%`, background: COLORS[i % COLORS.length] }}
+                  />
+                </div>
+                <span className="text-xs font-bold text-foreground w-8 text-right">{s.value}</span>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       <div className="grid md:grid-cols-2 gap-4">
@@ -203,19 +288,19 @@ export function CrmAnalyticsTab() {
           ) : <p className="text-sm text-muted-foreground text-center py-8">Sem dados</p>}
         </div>
 
-        {/* Click Targets */}
+        {/* All Events Breakdown */}
         <div className="rounded-xl border border-border bg-card p-4">
-          <h3 className="text-sm font-semibold text-foreground mb-4">Cliques por Botão</h3>
+          <h3 className="text-sm font-semibold text-foreground mb-4">Todas as Interações</h3>
           {metrics.clickTargets.length > 0 ? (
-            <div className="space-y-2">
+            <div className="space-y-2 max-h-[280px] overflow-y-auto">
               {metrics.clickTargets.map((t) => (
                 <div key={t.name} className="flex items-center justify-between rounded-lg bg-muted/40 px-3 py-2">
-                  <span className="text-xs text-foreground truncate max-w-[70%]">{t.name}</span>
+                  <span className="text-xs text-foreground truncate max-w-[70%]">{t.label}</span>
                   <span className="text-xs font-bold text-primary">{t.value}</span>
                 </div>
               ))}
             </div>
-          ) : <p className="text-sm text-muted-foreground text-center py-8">Sem cliques registrados</p>}
+          ) : <p className="text-sm text-muted-foreground text-center py-8">Sem interações registradas</p>}
         </div>
       </div>
 
