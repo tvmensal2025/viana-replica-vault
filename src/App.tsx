@@ -29,6 +29,7 @@ const App = () => (
             <Route path="/admin" element={<Admin />} />
             <Route path="/super-admin" element={<SuperAdmin />} />
             <Route path="/assistente" element={<AssistentePage />} />
+            <Route path="/crm" element={<CRMLandingPage />} />
             <Route path="/licenciado/preview" element={<LicenciadaPreview />} />
             <Route path="/licenciado/:licenca" element={<LicenciadaPage />} />
             <Route path="/:licenca" element={<ConsultantPage />} />
