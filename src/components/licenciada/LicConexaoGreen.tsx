@@ -61,7 +61,7 @@ const LicConexaoGreen = () => (
         <p className="text-muted-foreground text-lg mb-8">Nossa usina solar em Várzea da Palma MG</p>
         <div className="max-w-3xl mx-auto rounded-2xl overflow-hidden relative" style={{ boxShadow: 'var(--shadow-green-lg)' }}>
           <div className="absolute inset-0 rounded-2xl border border-primary/20 z-10 pointer-events-none" />
-          <video controls className="w-full aspect-video relative z-0">
+          <video controls preload="none" playsInline className="w-full aspect-video relative z-0">
             <source src="/videos/usina-helio-valgas.mp4" type="video/mp4" />
           </video>
         </div>
