@@ -118,7 +118,7 @@ const HeroSection = ({ cadastroUrl, whatsappUrl, consultantId }: HeroSectionProp
         <div className="max-w-4xl mx-auto mb-6 md:mb-12 rounded-xl md:rounded-2xl overflow-hidden relative" style={{ boxShadow: 'var(--shadow-green-lg)' }}>
           <div className="absolute inset-0 rounded-xl md:rounded-2xl border border-primary/20 z-10 pointer-events-none" />
           <video controls playsInline className="w-full aspect-video relative z-0" poster="">
-            <source src="https://igreen-minio.d9v63q.easypanel.host/igreen/Green_Energy.mp4" type="video/mp4" />
+            <source src="/videos/Green_Energy.mp4" type="video/mp4" />
             Seu navegador não suporta vídeos.
           </video>
         </div>
