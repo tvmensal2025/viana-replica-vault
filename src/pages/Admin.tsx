@@ -83,6 +83,13 @@ const AdminContent = () => {
 
   React.useEffect(() => { fetchCustomers(); }, [fetchCustomers]);
 
+  // Re-fetch customers when switching to clientes tab to ensure fresh data
+  React.useEffect(() => {
+    if (activeTab === "clientes" || activeTab === "dashboard") {
+      fetchCustomers();
+    }
+  }, [activeTab, fetchCustomers]);
+
   const handleOpenChatFromCustomer = React.useCallback((phone: string, suggestedMessage?: string) => {
     setPendingChatPhone(phone);
     setPendingChatMessage(suggestedMessage);
