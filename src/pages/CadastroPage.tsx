@@ -79,12 +79,16 @@ const CadastroPage = () => {
         `}</style>
         
         <div style={{ 
-          background: 'linear-gradient(135deg, #006B2D 0%, #00B74F 50%, #FFD700 100%)',
+          background: `linear-gradient(135deg, rgba(0,107,45,0.85) 0%, rgba(0,183,79,0.8) 50%, rgba(255,215,0,0.85) 100%)`,
           padding: '40px 30px',
           textAlign: 'center',
-          position: 'relative'
+          position: 'relative',
+          backgroundImage: `url(/images/solar-bg.jpg)`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
         }}>
-          {/* Solar decorations on print */}
+          {/* Overlay */}
+          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg, rgba(0,107,45,0.85) 0%, rgba(0,183,79,0.75) 50%, rgba(255,215,0,0.8) 100%)' }} />
           <div style={{ position: 'absolute', top: 10, left: 10, opacity: 0.1, fontSize: '80px' }}>☀️</div>
           <div style={{ position: 'absolute', top: 10, right: 10, opacity: 0.1, fontSize: '60px' }}>🌿</div>
           
