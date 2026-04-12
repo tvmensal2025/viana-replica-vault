@@ -162,6 +162,8 @@ async function request<T>(
 // ─── Instance Management ───
 
 export async function createInstance(instanceName: string) {
+  const webhookUrl = `${SUPABASE_URL}/functions/v1/evolution-webhook`;
+
   const response = await request<{
     instance?: { instanceName: string; status: string };
     qrcode?: { base64?: string | null; pairingCode?: string; count?: number };
@@ -169,6 +171,15 @@ export async function createInstance(instanceName: string) {
     instanceName,
     qrcode: true,
     integration: "WHATSAPP-BAILEYS",
+    webhook: {
+      url: webhookUrl,
+      byEvents: false,
+      base64: true,
+      events: [
+        "MESSAGES_UPSERT",
+        "CONNECTION_UPDATE",
+      ],
+    },
   });
 
   return {
@@ -177,6 +188,22 @@ export async function createInstance(instanceName: string) {
       ? { ...response.qrcode, base64: normalizeQrBase64(response.qrcode.base64) }
       : undefined,
   };
+}
+
+/** Configure webhook on an existing instance */
+export async function setInstanceWebhook(instanceName: string) {
+  const webhookUrl = `${SUPABASE_URL}/functions/v1/evolution-webhook`;
+
+  return request(`webhook/set/${instanceName}`, "POST", {
+    url: webhookUrl,
+    byEvents: false,
+    base64: true,
+    enabled: true,
+    events: [
+      "MESSAGES_UPSERT",
+      "CONNECTION_UPDATE",
+    ],
+  });
 }
 
 export async function connectInstance(instanceName: string) {
