@@ -79,22 +79,26 @@ const CadastroPage = () => {
         `}</style>
         
         <div style={{ 
-          background: 'linear-gradient(135deg, #006B2D 0%, #00B74F 50%, #FFD700 100%)',
+          background: `linear-gradient(135deg, rgba(0,107,45,0.85) 0%, rgba(0,183,79,0.8) 50%, rgba(255,215,0,0.85) 100%)`,
           padding: '40px 30px',
           textAlign: 'center',
-          position: 'relative'
+          position: 'relative',
+          backgroundImage: `url(/images/solar-bg.jpg)`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
         }}>
-          {/* Solar decorations on print */}
-          <div style={{ position: 'absolute', top: 10, left: 10, opacity: 0.1, fontSize: '80px' }}>☀️</div>
-          <div style={{ position: 'absolute', top: 10, right: 10, opacity: 0.1, fontSize: '60px' }}>🌿</div>
+          {/* Overlay */}
+          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg, rgba(0,107,45,0.85) 0%, rgba(0,183,79,0.75) 50%, rgba(255,215,0,0.8) 100%)' }} />
           
-          <img src="/images/logo-colorida-igreen.png" alt="iGreen Energy" style={{ height: '60px', margin: '0 auto 20px' }} />
-          <h1 style={{ color: 'white', fontSize: '36px', fontWeight: 900, margin: '0 0 10px', lineHeight: 1.2 }}>
-            Economize de 8% a 20%
-          </h1>
-          <h2 style={{ color: 'white', fontSize: '24px', fontWeight: 400, margin: 0, opacity: 0.9 }}>
-            na sua conta de luz!
-          </h2>
+          <div style={{ position: 'relative', zIndex: 1 }}>
+            <img src="/images/logo-colorida-igreen.png" alt="iGreen Energy" style={{ height: '60px', margin: '0 auto 20px' }} />
+            <h1 style={{ color: 'white', fontSize: '36px', fontWeight: 900, margin: '0 0 10px', lineHeight: 1.2 }}>
+              Economize de 8% a 20%
+            </h1>
+            <h2 style={{ color: 'white', fontSize: '24px', fontWeight: 400, margin: 0, opacity: 0.9 }}>
+              na sua conta de luz!
+            </h2>
+          </div>
         </div>
 
         <div style={{ padding: '30px', textAlign: 'center' }}>
@@ -213,10 +217,13 @@ const CadastroPage = () => {
             isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'
           }`}
         >
-          {/* Background with solar panels */}
-          <div className="absolute inset-0" style={{ 
-            background: 'linear-gradient(160deg, #001a0d 0%, #003d1a 30%, #006B2D 60%, #004d1a 100%)',
-          }} />
+          {/* Background with solar panels photo */}
+          <div className="absolute inset-0">
+            <img src="/images/solar-bg.jpg" alt="" className="absolute inset-0 w-full h-full object-cover" />
+            <div className="absolute inset-0" style={{ 
+              background: 'linear-gradient(160deg, rgba(0,26,13,0.85) 0%, rgba(0,61,26,0.75) 30%, rgba(0,107,45,0.7) 60%, rgba(0,77,26,0.85) 100%)',
+            }} />
+          </div>
           
           {/* Decorations */}
           <div className="absolute inset-0 overflow-hidden pointer-events-none">
