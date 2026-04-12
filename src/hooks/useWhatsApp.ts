@@ -6,6 +6,7 @@ import {
   getConnectionState,
   logoutInstance,
   deleteInstance,
+  setInstanceWebhook,
   EvolutionAuthError,
 } from "@/services/evolutionApi";
 import type { ConnectionStatus } from "@/types/whatsapp";
@@ -247,6 +248,8 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       try {
         await saveInstance(name);
         instanceSavedRef.current = true;
+        // Ensure webhook is configured for this instance
+        setInstanceWebhook(name).catch(() => {/* non-critical */});
       } catch {
         // Non-critical persistence failure
       }
