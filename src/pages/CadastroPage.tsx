@@ -64,121 +64,143 @@ const CadastroPage = () => {
         <style>{`
           @media print {
             @page { size: A4; margin: 0; }
-            body { margin: 0; padding: 0; }
-            .print-page { width: 210mm; min-height: 297mm; }
+            body { margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .print-page { width: 210mm; height: 297mm; }
           }
           .print-page {
             width: 210mm;
-            min-height: 297mm;
+            height: 297mm;
             margin: 0 auto;
-            background: white;
             font-family: 'Arial', sans-serif;
             position: relative;
             overflow: hidden;
           }
         `}</style>
+
+        {/* Full-page background image */}
+        <img src="/images/solar-bg.jpg" alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
         
-        <div style={{ 
-          background: `linear-gradient(135deg, rgba(0,107,45,0.85) 0%, rgba(0,183,79,0.8) 50%, rgba(255,215,0,0.85) 100%)`,
-          padding: '40px 30px',
-          textAlign: 'center',
-          position: 'relative',
-          backgroundImage: `url(/images/solar-bg.jpg)`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-        }}>
-          {/* Overlay */}
-          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg, rgba(0,107,45,0.85) 0%, rgba(0,183,79,0.75) 50%, rgba(255,215,0,0.8) 100%)' }} />
+        {/* Dark green overlay for readability */}
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(0,40,18,0.88) 0%, rgba(0,80,35,0.82) 35%, rgba(0,60,26,0.85) 65%, rgba(0,40,18,0.92) 100%)' }} />
+        
+        {/* Content */}
+        <div style={{ position: 'relative', zIndex: 1, height: '100%', display: 'flex', flexDirection: 'column', padding: '35px 40px 25px' }}>
           
-          <div style={{ position: 'relative', zIndex: 1 }}>
-            <img src="/images/logo-colorida-igreen.png" alt="iGreen Energy" style={{ height: '60px', margin: '0 auto 20px' }} />
-            <h1 style={{ color: 'white', fontSize: '36px', fontWeight: 900, margin: '0 0 10px', lineHeight: 1.2 }}>
+          {/* Logo */}
+          <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+            <img src="/images/logo-colorida-igreen.png" alt="iGreen Energy" style={{ height: '55px', margin: '0 auto' }} />
+          </div>
+
+          {/* Title */}
+          <div style={{ textAlign: 'center', marginBottom: '25px' }}>
+            <h1 style={{ color: '#FFD700', fontSize: '38px', fontWeight: 900, margin: '0 0 6px', lineHeight: 1.1, textShadow: '0 2px 10px rgba(0,0,0,0.3)' }}>
               Economize de 8% a 20%
             </h1>
-            <h2 style={{ color: 'white', fontSize: '24px', fontWeight: 400, margin: 0, opacity: 0.9 }}>
-              na sua conta de luz!
+            <h2 style={{ color: 'white', fontSize: '22px', fontWeight: 400, margin: 0, opacity: 0.9 }}>
+              na sua conta de luz todos os meses!
             </h2>
           </div>
-        </div>
 
-        <div style={{ padding: '30px', textAlign: 'center' }}>
-          <p style={{ fontSize: '18px', color: '#333', marginBottom: '20px', fontWeight: 600 }}>
-            📱 Escaneie o QR Code e cadastre-se em 3 minutos
-          </p>
-          
-          <div style={{ display: 'inline-block', padding: '15px', border: '4px solid #00B74F', borderRadius: '20px', marginBottom: '20px' }}>
-            <QRCodeSVG
-              value={whatsappBotUrl}
-              size={280}
-              level="H"
-              includeMargin={true}
-              fgColor="#1a1a1a"
-              imageSettings={{
-                src: G_LOGO_DATA_URI,
-                height: 50,
-                width: 50,
-                excavate: true,
-              }}
-            />
+          {/* QR Code Card */}
+          <div style={{ 
+            background: 'white', 
+            borderRadius: '24px', 
+            padding: '25px', 
+            maxWidth: '340px', 
+            margin: '0 auto 20px',
+            boxShadow: '0 8px 40px rgba(0,0,0,0.3), 0 0 0 3px rgba(0,183,79,0.3)',
+            textAlign: 'center'
+          }}>
+            <p style={{ fontSize: '15px', color: '#333', marginBottom: '12px', fontWeight: 600 }}>
+              📱 Escaneie e cadastre-se em 3 minutos
+            </p>
+            
+            <div style={{ display: 'inline-block', padding: '10px', border: '3px solid #00B74F', borderRadius: '16px', marginBottom: '10px' }}>
+              <QRCodeSVG
+                value={whatsappBotUrl}
+                size={220}
+                level="H"
+                includeMargin={true}
+                fgColor="#1a1a1a"
+                imageSettings={{
+                  src: G_LOGO_DATA_URI,
+                  height: 45,
+                  width: 45,
+                  excavate: true,
+                }}
+              />
+            </div>
+
+            <p style={{ fontSize: '12px', color: '#888', margin: '0' }}>
+              Aponte a câmera do celular para o QR Code
+            </p>
           </div>
 
-          <p style={{ fontSize: '14px', color: '#666', marginBottom: '30px' }}>
-            Aponte a câmera do celular para o QR Code acima
-          </p>
-
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '30px', marginBottom: '30px' }}>
+          {/* Steps */}
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '35px', marginBottom: '20px' }}>
             {[
-              { icon: '📷', title: '1. Escaneie', desc: 'QR Code' },
-              { icon: '📄', title: '2. Envie', desc: 'Documentos' },
-              { icon: '✅', title: '3. Pronto!', desc: 'Cadastro feito' },
+              { num: '1', title: 'Escaneie', desc: 'o QR Code', color: '#4ADE80' },
+              { num: '2', title: 'Envie', desc: 'seus documentos', color: '#FFD700' },
+              { num: '3', title: 'Pronto!', desc: 'Cadastro feito', color: '#34D399' },
             ].map((s) => (
-              <div key={s.title} style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '32px', marginBottom: '5px' }}>{s.icon}</div>
-                <div style={{ fontWeight: 700, fontSize: '14px', color: '#00B74F' }}>{s.title}</div>
-                <div style={{ fontSize: '12px', color: '#666' }}>{s.desc}</div>
+              <div key={s.num} style={{ textAlign: 'center' }}>
+                <div style={{ 
+                  width: '44px', height: '44px', borderRadius: '50%', 
+                  background: s.color, color: '#003d1a', 
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontWeight: 900, fontSize: '20px', margin: '0 auto 6px',
+                  boxShadow: `0 0 15px ${s.color}40`
+                }}>{s.num}</div>
+                <div style={{ fontWeight: 700, fontSize: '14px', color: 'white' }}>{s.title}</div>
+                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)' }}>{s.desc}</div>
               </div>
             ))}
           </div>
 
+          {/* Benefits banner */}
           <div style={{ 
-            background: '#f0fdf4', 
-            border: '2px solid #00B74F', 
-            borderRadius: '12px', 
-            padding: '15px', 
-            marginBottom: '20px' 
+            background: 'rgba(255,255,255,0.1)', 
+            border: '1px solid rgba(255,255,255,0.2)', 
+            borderRadius: '14px', 
+            padding: '14px 20px', 
+            marginBottom: '20px',
+            textAlign: 'center',
+            backdropFilter: 'blur(10px)'
           }}>
-            <p style={{ fontSize: '16px', fontWeight: 700, color: '#00B74F', margin: '0 0 5px' }}>
+            <p style={{ fontSize: '16px', fontWeight: 700, color: '#FFD700', margin: '0 0 4px' }}>
               ✨ Sem instalar placas • Sem obras • Sem custos
             </p>
-            <p style={{ fontSize: '14px', color: '#333', margin: 0 }}>
-              Energia solar por assinatura - economia garantida todos os meses!
+            <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.8)', margin: 0 }}>
+              Energia solar por assinatura — economia garantida todos os meses!
             </p>
           </div>
 
-          <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '15px', marginTop: '15px' }}>
-            <p style={{ fontSize: '12px', color: '#999', margin: '0 0 5px' }}>Atendimento com</p>
-            <p style={{ fontSize: '18px', fontWeight: 700, color: '#333', margin: '0 0 3px' }}>
+          {/* Spacer */}
+          <div style={{ flex: 1 }} />
+
+          {/* Consultant info */}
+          <div style={{ 
+            borderTop: '1px solid rgba(255,255,255,0.15)', 
+            paddingTop: '15px', 
+            textAlign: 'center',
+            marginBottom: '10px'
+          }}>
+            <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: '1px' }}>Atendimento personalizado com</p>
+            <p style={{ fontSize: '20px', fontWeight: 700, color: 'white', margin: '0 0 4px' }}>
               {consultant.name}
             </p>
             {consultant.igreen_id && (
-              <p style={{ fontSize: '12px', color: '#999', margin: 0 }}>ID iGreen: {consultant.igreen_id}</p>
+              <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', margin: '0 0 2px' }}>ID iGreen: {consultant.igreen_id}</p>
             )}
-            <p style={{ fontSize: '12px', color: '#999', marginTop: '5px' }}>📞 {consultant.phone}</p>
+            <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', margin: 0 }}>📞 {consultant.phone}</p>
           </div>
-        </div>
 
-        <div style={{ 
-          position: 'absolute', 
-          bottom: 0, 
-          left: 0, 
-          right: 0, 
-          background: '#006B2D', 
-          padding: '15px', 
-          textAlign: 'center' 
-        }}>
-          <p style={{ color: 'white', fontSize: '12px', margin: 0, opacity: 0.8 }}>
-            🔒 Cadastro seguro e automatizado • iGreen Energy © 2026
-          </p>
+          {/* Footer */}
+          <div style={{ textAlign: 'center', paddingTop: '8px' }}>
+            <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '10px', margin: 0 }}>
+              🔒 Cadastro seguro e automatizado • iGreen Energy © 2026
+            </p>
+          </div>
         </div>
       </div>
     );
