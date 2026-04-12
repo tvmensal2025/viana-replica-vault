@@ -340,8 +340,53 @@ Deno.serve(async (req) => {
         }
 
         updates.document_front_url = fileUrl || "evolution-media:pending";
+
+        // CNH só tem frente — pular verso
+        if (customer.document_type === "CNH") {
+          updates.document_back_url = "nao_aplicavel";
+
+          await sendText(remoteJid, "✅ CNH recebida! ⏳ Analisando...\n\nAguarde...");
+
+          try {
+            const docFrenteUrl = fileUrl || "evolution-media:pending";
+            console.log("📡 Chamando OCR documento CNH (apenas frente)");
+
+            const ocrData = await ocrDocumentoFrenteVerso(
+              docFrenteUrl,
+              "nao_aplicavel",
+              "CNH",
+              GEMINI_API_KEY,
+              undefined,
+              undefined,
+              undefined
+            );
+            console.log("📊 OCR CNH resultado:", JSON.stringify(ocrData).substring(0, 400));
+
+            if (ocrData.sucesso && ocrData.dados) {
+              const d = ocrData.dados;
+              if (d.nome) updates.name = d.nome;
+              if (d.cpf) updates.cpf = d.cpf.replace(/\D/g, "");
+              if (d.rg) updates.rg = d.rg;
+              if (d.data_nascimento) updates.data_nascimento = d.data_nascimento;
+              if (d.nome_pai) updates.nome_pai = d.nome_pai;
+              if (d.nome_mae) updates.nome_mae = d.nome_mae;
+            }
+          } catch (e) {
+            console.error("❌ OCR CNH falhou:", e);
+          }
+
+          updates.conversation_step = "confirmando_dados_doc";
+          const nome = updates.name || customer.name || "—";
+          const cpf = updates.cpf || customer.cpf || "—";
+          const rg = updates.rg || customer.rg || "—";
+          const nasc = updates.data_nascimento || customer.data_nascimento || "—";
+          reply = `📋 *Dados extraídos da CNH:*\n\n👤 Nome: *${nome}*\n🆔 CPF: *${cpf}*\n🪪 RG: *${rg}*\n🎂 Nascimento: *${nasc}*\n\n✅ Dados corretos?\n\n1️⃣ *SIM* - Continuar\n2️⃣ *NÃO* - Reenviar CNH\n3️⃣ *EDITAR* - Corrigir dados`;
+          break;
+        }
+
+        // RG — pedir verso
         updates.conversation_step = "aguardando_doc_verso";
-        reply = "✅ Frente recebida!\n\n📸 Agora envie o *VERSO do documento*.\n\nFormatos: JPG, PNG ou PDF";
+        reply = "✅ Frente recebida!\n\n📸 Agora envie o *VERSO do RG*.\n\nFormatos: JPG, PNG ou PDF";
         break;
       }
 
