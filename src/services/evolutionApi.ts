@@ -175,6 +175,7 @@ export async function createInstance(instanceName: string) {
       url: webhookUrl,
       byEvents: false,
       base64: true,
+      enabled: true,
       events: [
         "MESSAGES_UPSERT",
         "CONNECTION_UPDATE",
