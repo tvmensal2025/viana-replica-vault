@@ -89,10 +89,9 @@ const CadastroPage = () => {
         }}>
           {/* Overlay */}
           <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg, rgba(0,107,45,0.85) 0%, rgba(0,183,79,0.75) 50%, rgba(255,215,0,0.8) 100%)' }} />
-          <div style={{ position: 'absolute', top: 10, left: 10, opacity: 0.1, fontSize: '80px' }}>☀️</div>
-          <div style={{ position: 'absolute', top: 10, right: 10, opacity: 0.1, fontSize: '60px' }}>🌿</div>
           
-          <img src="/images/logo-colorida-igreen.png" alt="iGreen Energy" style={{ height: '60px', margin: '0 auto 20px' }} />
+          <div style={{ position: 'relative', zIndex: 1 }}>
+            <img src="/images/logo-colorida-igreen.png" alt="iGreen Energy" style={{ height: '60px', margin: '0 auto 20px' }} />
           <h1 style={{ color: 'white', fontSize: '36px', fontWeight: 900, margin: '0 0 10px', lineHeight: 1.2 }}>
             Economize de 8% a 20%
           </h1>
