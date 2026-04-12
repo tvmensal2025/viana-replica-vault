@@ -92,12 +92,13 @@ const CadastroPage = () => {
           
           <div style={{ position: 'relative', zIndex: 1 }}>
             <img src="/images/logo-colorida-igreen.png" alt="iGreen Energy" style={{ height: '60px', margin: '0 auto 20px' }} />
-          <h1 style={{ color: 'white', fontSize: '36px', fontWeight: 900, margin: '0 0 10px', lineHeight: 1.2 }}>
-            Economize de 8% a 20%
-          </h1>
-          <h2 style={{ color: 'white', fontSize: '24px', fontWeight: 400, margin: 0, opacity: 0.9 }}>
-            na sua conta de luz!
-          </h2>
+            <h1 style={{ color: 'white', fontSize: '36px', fontWeight: 900, margin: '0 0 10px', lineHeight: 1.2 }}>
+              Economize de 8% a 20%
+            </h1>
+            <h2 style={{ color: 'white', fontSize: '24px', fontWeight: 400, margin: 0, opacity: 0.9 }}>
+              na sua conta de luz!
+            </h2>
+          </div>
         </div>
 
         <div style={{ padding: '30px', textAlign: 'center' }}>
