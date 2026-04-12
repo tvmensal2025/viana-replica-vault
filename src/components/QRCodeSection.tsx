@@ -1,6 +1,10 @@
 import { QRCodeSVG } from "qrcode.react";
 import { useState, useEffect } from "react";
-import { Smartphone, Camera, FileText, CheckCircle2, ArrowRight } from "lucide-react";
+import { Smartphone, Camera, FileText, CheckCircle2 } from "lucide-react";
+
+const G_LOGO_DATA_URI = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><circle cx="20" cy="20" r="20" fill="white"/><text x="20" y="28" text-anchor="middle" font-family="Arial Black,sans-serif" font-size="26" font-weight="900" fill="#00B74F">G</text></svg>'
+)}`;
 
 interface QRCodeSectionProps {
   whatsappUrl: string;
@@ -86,8 +90,8 @@ const QRCodeSection = ({ whatsappUrl, consultantName, consultantId }: QRCodeSect
                     size={220}
                     level="H"
                     includeMargin={true}
-                    imageSettings={{
-                      src: "/images/logo-colorida-igreen.png",
+                  imageSettings={{
+                      src: G_LOGO_DATA_URI,
                       height: 40,
                       width: 40,
                       excavate: true,

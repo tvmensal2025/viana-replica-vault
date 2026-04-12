@@ -7,6 +7,11 @@ import { Smartphone, Camera, FileText, CheckCircle2, Zap, Shield, Clock, Users }
 import LoadingScreen from "@/components/LoadingScreen";
 import SEOHead from "@/components/SEOHead";
 import PixelInjector from "@/components/PixelInjector";
+import { SolarPanelSVG, SunRaysSVG } from "@/components/SolarPanelDecoration";
+
+const G_LOGO_DATA_URI = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><circle cx="20" cy="20" r="20" fill="white"/><text x="20" y="28" text-anchor="middle" font-family="Arial Black,sans-serif" font-size="26" font-weight="900" fill="#00B74F">G</text></svg>'
+)}`;
 
 const CadastroPage = () => {
   const { licenca } = useParams<{ licenca: string }>();
@@ -33,11 +38,9 @@ const CadastroPage = () => {
     );
   }
 
-  // Extrair número do WhatsApp
   const phoneMatch = consultant.phone?.match(/\d+/g)?.join('');
   const phoneNumber = phoneMatch ? `55${phoneMatch}` : "";
 
-  // Mensagem inicial para o bot
   const botMessage = encodeURIComponent(
     "Olá! Gostaria de fazer meu cadastro na iGreen Energy e enviar meus documentos."
   );
@@ -71,42 +74,61 @@ const CadastroPage = () => {
           </div>
         </header>
 
-        {/* Hero Section com QR Code */}
+        {/* Hero Section com QR Code + Solar Decorations */}
         <section 
           className={`relative overflow-hidden transition-all duration-1000 ${
             isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'
           }`}
           style={{ 
-            background: 'linear-gradient(135deg, hsl(130, 100%, 36%) 0%, hsl(130, 80%, 28%) 100%)',
+            background: 'linear-gradient(135deg, hsl(130, 100%, 20%) 0%, hsl(130, 90%, 32%) 40%, hsl(45, 100%, 50%) 100%)',
           }}
         >
-          {/* Decorative elements */}
+          {/* Solar panel decorations */}
           <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            <div className="absolute top-0 right-0 w-96 h-96 rounded-full opacity-10" 
-              style={{ background: 'radial-gradient(circle, white, transparent 70%)' }} 
+            {/* Top-right solar panel */}
+            <SolarPanelSVG className="absolute -top-10 -right-10 w-64 h-64 text-white opacity-[0.07] rotate-12 animate-[float_8s_ease-in-out_infinite]" />
+            {/* Bottom-left solar panel */}
+            <SolarPanelSVG className="absolute -bottom-16 -left-16 w-80 h-80 text-white opacity-[0.05] -rotate-12 animate-[float_10s_ease-in-out_infinite_1s]" />
+            {/* Mid-right small panel */}
+            <SolarPanelSVG className="absolute top-1/2 -right-8 w-40 h-40 text-white opacity-[0.04] rotate-45 animate-[float_12s_ease-in-out_infinite_2s]" />
+            {/* Sun rays center-top */}
+            <SunRaysSVG className="absolute -top-20 left-1/2 -translate-x-1/2 w-[500px] h-[500px] text-yellow-300 opacity-[0.15]" />
+            {/* Radial glows */}
+            <div className="absolute top-0 right-0 w-96 h-96 rounded-full opacity-15" 
+              style={{ background: 'radial-gradient(circle, hsl(45, 100%, 60%), transparent 70%)' }} 
             />
             <div className="absolute bottom-0 left-0 w-96 h-96 rounded-full opacity-10" 
-              style={{ background: 'radial-gradient(circle, white, transparent 70%)' }} 
+              style={{ background: 'radial-gradient(circle, hsl(130, 100%, 50%), transparent 70%)' }} 
+            />
+            {/* Grid pattern overlay */}
+            <div className="absolute inset-0 opacity-[0.03]"
+              style={{
+                backgroundImage: `
+                  linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px),
+                  linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)
+                `,
+                backgroundSize: '60px 60px'
+              }}
             />
           </div>
 
           <div className="container mx-auto px-4 py-12 md:py-20 relative z-10">
             {/* Badge */}
             <div className="flex justify-center mb-6">
-              <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-full border border-white/30">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+              <div className="inline-flex items-center gap-2 bg-white/15 backdrop-blur-md px-5 py-2.5 rounded-full border border-white/25 shadow-lg shadow-black/10">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-300 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-yellow-300"></span>
                 </span>
-                <span className="text-white text-sm font-semibold">Cadastro 100% Automático</span>
+                <span className="text-white text-sm font-semibold tracking-wide">Cadastro 100% Automático</span>
               </div>
             </div>
 
             {/* Title */}
-            <h1 className="text-3xl md:text-5xl lg:text-6xl font-black text-white text-center mb-4 font-heading">
+            <h1 className="text-3xl md:text-5xl lg:text-6xl font-black text-white text-center mb-4 font-heading drop-shadow-lg">
               ⚡ Cadastro em 3 Minutos
             </h1>
-            <p className="text-white/90 text-center text-lg md:text-xl max-w-3xl mx-auto mb-12">
+            <p className="text-white/90 text-center text-lg md:text-xl max-w-3xl mx-auto mb-12 drop-shadow">
               Escaneie o QR Code, envie seus documentos pelo WhatsApp e pronto!<br />
               Nosso sistema automatizado cuida de tudo para você.
             </p>
@@ -115,7 +137,14 @@ const CadastroPage = () => {
             <div className="grid lg:grid-cols-2 gap-8 md:gap-12 max-w-6xl mx-auto items-start">
               {/* QR Code Card */}
               <div className="order-2 lg:order-1">
-                <div className="bg-white rounded-3xl p-6 md:p-8 shadow-2xl transform hover:scale-105 transition-transform duration-300">
+                <div className="relative bg-white/95 backdrop-blur-sm rounded-3xl p-6 md:p-8 shadow-2xl transform hover:scale-[1.03] transition-all duration-300 border border-white/50"
+                  style={{
+                    boxShadow: '0 0 40px rgba(0, 183, 79, 0.2), 0 20px 60px rgba(0,0,0,0.15)'
+                  }}
+                >
+                  {/* Glow border effect */}
+                  <div className="absolute -inset-[1px] rounded-3xl bg-gradient-to-br from-[#00B74F]/30 via-transparent to-yellow-400/20 -z-10 blur-sm" />
+                  
                   <div className="flex flex-col items-center">
                     <div className="mb-6 text-center">
                       <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2 font-heading">
@@ -126,15 +155,17 @@ const CadastroPage = () => {
                       </p>
                     </div>
 
-                    {/* QR Code */}
-                    <div className="bg-white p-4 rounded-2xl shadow-inner mb-6 border-4 border-primary/10">
+                    {/* QR Code with green border glow */}
+                    <div className="relative bg-white p-4 rounded-2xl shadow-inner mb-6 border-4 border-[#00B74F]/15">
+                      <div className="absolute -inset-2 rounded-3xl bg-gradient-to-br from-[#00B74F]/10 to-yellow-400/10 -z-10 blur-md" />
                       <QRCodeSVG
                         value={whatsappBotUrl}
-                        size={window.innerWidth < 768 ? 200 : 240}
+                        size={typeof window !== 'undefined' && window.innerWidth < 768 ? 200 : 240}
                         level="H"
                         includeMargin={true}
+                        fgColor="#1a1a1a"
                         imageSettings={{
-                          src: "/images/logo-colorida-igreen.png",
+                          src: G_LOGO_DATA_URI,
                           height: 45,
                           width: 45,
                           excavate: true,
@@ -188,11 +219,11 @@ const CadastroPage = () => {
               {/* Steps */}
               <div className="order-1 lg:order-2 space-y-6">
                 <div className="flex gap-4 items-start group">
-                  <div className="flex-shrink-0 w-14 h-14 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center border-2 border-white/40 group-hover:scale-110 transition-transform">
-                    <Camera className="w-7 h-7 text-white" />
+                  <div className="flex-shrink-0 w-14 h-14 rounded-full bg-white/15 backdrop-blur-md flex items-center justify-center border-2 border-white/30 group-hover:scale-110 group-hover:bg-white/25 transition-all shadow-lg">
+                    <Camera className="w-7 h-7 text-white drop-shadow" />
                   </div>
                   <div>
-                    <h3 className="text-white font-bold text-xl mb-2 font-heading">
+                    <h3 className="text-white font-bold text-xl mb-2 font-heading drop-shadow">
                       1. Escaneie o QR Code
                     </h3>
                     <p className="text-white/80 leading-relaxed">
@@ -202,25 +233,25 @@ const CadastroPage = () => {
                 </div>
 
                 <div className="flex gap-4 items-start group">
-                  <div className="flex-shrink-0 w-14 h-14 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center border-2 border-white/40 group-hover:scale-110 transition-transform">
-                    <FileText className="w-7 h-7 text-white" />
+                  <div className="flex-shrink-0 w-14 h-14 rounded-full bg-white/15 backdrop-blur-md flex items-center justify-center border-2 border-white/30 group-hover:scale-110 group-hover:bg-white/25 transition-all shadow-lg">
+                    <FileText className="w-7 h-7 text-white drop-shadow" />
                   </div>
                   <div>
-                    <h3 className="text-white font-bold text-xl mb-2 font-heading">
+                    <h3 className="text-white font-bold text-xl mb-2 font-heading drop-shadow">
                       2. Envie seus Documentos
                     </h3>
                     <p className="text-white/80 leading-relaxed">
-                      Tire fotos do seu <strong>RG (frente e verso)</strong> e da <strong>conta de energia</strong>. Nosso bot extrai os dados automaticamente usando OCR.
+                      Tire fotos do seu <strong>RG (frente e verso)</strong> ou <strong>CNH (apenas frente)</strong> e da <strong>conta de energia</strong>. Nosso bot extrai os dados automaticamente.
                     </p>
                   </div>
                 </div>
 
                 <div className="flex gap-4 items-start group">
-                  <div className="flex-shrink-0 w-14 h-14 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center border-2 border-white/40 group-hover:scale-110 transition-transform">
-                    <CheckCircle2 className="w-7 h-7 text-white" />
+                  <div className="flex-shrink-0 w-14 h-14 rounded-full bg-white/15 backdrop-blur-md flex items-center justify-center border-2 border-white/30 group-hover:scale-110 group-hover:bg-white/25 transition-all shadow-lg">
+                    <CheckCircle2 className="w-7 h-7 text-white drop-shadow" />
                   </div>
                   <div>
-                    <h3 className="text-white font-bold text-xl mb-2 font-heading">
+                    <h3 className="text-white font-bold text-xl mb-2 font-heading drop-shadow">
                       3. Pronto! Cadastro Completo
                     </h3>
                     <p className="text-white/80 leading-relaxed">
@@ -232,12 +263,12 @@ const CadastroPage = () => {
                 {/* Stats */}
                 <div className="mt-8 pt-8 border-t border-white/20">
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="text-center bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-                      <div className="text-4xl font-black text-white mb-1">100%</div>
+                    <div className="text-center bg-white/10 backdrop-blur-md rounded-xl p-4 border border-white/20 shadow-lg">
+                      <div className="text-4xl font-black text-white mb-1 drop-shadow">100%</div>
                       <div className="text-white/80 text-sm uppercase tracking-wider">Automático</div>
                     </div>
-                    <div className="text-center bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-                      <div className="text-4xl font-black text-white mb-1">3min</div>
+                    <div className="text-center bg-white/10 backdrop-blur-md rounded-xl p-4 border border-white/20 shadow-lg">
+                      <div className="text-4xl font-black text-white mb-1 drop-shadow">3min</div>
                       <div className="text-white/80 text-sm uppercase tracking-wider">Tempo médio</div>
                     </div>
                   </div>
@@ -247,7 +278,7 @@ const CadastroPage = () => {
 
             {/* Security badge */}
             <div className="mt-12 flex justify-center">
-              <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm px-6 py-3 rounded-full border border-white/20">
+              <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-md px-6 py-3 rounded-full border border-white/20 shadow-lg">
                 <Shield className="w-5 h-5 text-white" />
                 <span className="text-white text-sm">
                   🔒 Seus dados estão seguros e protegidos
@@ -327,36 +358,12 @@ const CadastroPage = () => {
 
             <div className="max-w-4xl mx-auto space-y-6">
               {[
-                {
-                  step: "1",
-                  title: "Escaneie o QR Code",
-                  description: "Use a câmera do celular para escanear. O WhatsApp abre automaticamente.",
-                },
-                {
-                  step: "2",
-                  title: "Converse com o Bot",
-                  description: "Nosso assistente virtual vai te guiar em cada etapa do cadastro.",
-                },
-                {
-                  step: "3",
-                  title: "Envie RG (frente e verso)",
-                  description: "Tire fotos claras do seu documento. O sistema extrai os dados automaticamente.",
-                },
-                {
-                  step: "4",
-                  title: "Envie a Conta de Energia",
-                  description: "Foto da última fatura. Extraímos endereço, consumo e distribuidora.",
-                },
-                {
-                  step: "5",
-                  title: "Confirme os Dados",
-                  description: "Revise as informações extraídas e confirme se está tudo correto.",
-                },
-                {
-                  step: "6",
-                  title: "Receba o Link",
-                  description: "Em minutos você recebe o link para assinar e ativar seu desconto!",
-                },
+                { step: "1", title: "Escaneie o QR Code", description: "Use a câmera do celular para escanear. O WhatsApp abre automaticamente." },
+                { step: "2", title: "Converse com o Bot", description: "Nosso assistente virtual vai te guiar em cada etapa do cadastro." },
+                { step: "3", title: "Envie RG ou CNH", description: "RG: frente e verso. CNH: apenas a frente. O sistema extrai os dados automaticamente." },
+                { step: "4", title: "Envie a Conta de Energia", description: "Foto da última fatura. Extraímos endereço, consumo e distribuidora." },
+                { step: "5", title: "Confirme os Dados", description: "Revise as informações extraídas e confirme se está tudo correto." },
+                { step: "6", title: "Receba o Link", description: "Em minutos você recebe o link para assinar e ativar seu desconto!" },
               ].map((item) => (
                 <div key={item.step} className="glass-card p-6 flex gap-4 items-start hover:shadow-lg transition-shadow">
                   <div className="flex-shrink-0 w-12 h-12 rounded-full bg-primary text-white flex items-center justify-center font-bold text-xl">
