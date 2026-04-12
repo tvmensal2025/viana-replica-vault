@@ -20,6 +20,7 @@ export function LinksTab({ slug, baseUrl, onCopy, onQrOpen }: LinksTabProps) {
         </h2>
         <LinkCard emoji="🏠" title="Landing Page — Cliente" description="Para captar clientes que querem desconto na conta de luz" url={`https://${baseUrl}/${slug}`} onCopy={onCopy} previewUrl={`/${slug}`} />
         <LinkCard emoji="💼" title="Landing Page — Licenciado" description="Para recrutar novos licenciados para sua equipe" url={`https://${baseUrl}/licenciado/${slug}`} onCopy={onCopy} previewUrl={`/licenciado/${slug}`} />
+        <LinkCard emoji="📱" title="Página de Cadastro" description="Cadastro rápido em 3 minutos via WhatsApp com QR Code" url={`https://${baseUrl}/cadastro/${slug}`} onCopy={onCopy} previewUrl={`/cadastro/${slug}`} />
       </div>
 
       {/* Tracking Links */}

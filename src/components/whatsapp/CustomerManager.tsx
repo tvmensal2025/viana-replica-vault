@@ -147,6 +147,8 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
 
   const tipoFiltered = selectedTipo === "all"
     ? searchFiltered
+    : selectedTipo === "whatsapp"
+    ? searchFiltered.filter((c) => c.whatsapp_instance_id != null)
     : searchFiltered.filter((c) => (c.tipo_produto || "energia") === selectedTipo);
 
   const licenciadoFiltered = selectedLicenciado === "all"
@@ -266,16 +268,32 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
 
         {/* Search & Filters */}
         <div className="px-4 sm:px-5 pt-3 sm:pt-4 pb-2 sm:pb-3 space-y-2">
-          <div className="grid gap-2 sm:gap-3 sm:grid-cols-[minmax(0,1fr)_200px]">
+          <div className="space-y-3">
+            {/* Search bar */}
             <div className="relative">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
-              <Input placeholder="Buscar nome, telefone, CPF, e-mail..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10 h-9 sm:h-10 rounded-xl bg-secondary/30 border-border/50 focus:border-primary/40 text-sm" />
+              <Input placeholder="Buscar nome, telefone, CPF, e-mail..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10 h-10 sm:h-11 rounded-xl bg-secondary/30 border-border/50 focus:border-primary/40 text-sm" />
             </div>
-            {/* Tipo produto toggle */}
-            <div className="flex gap-1 bg-secondary/30 rounded-xl p-1 border border-border/50">
-              {([["all", "Todos"], ["energia", "⚡ Energia"], ["telefonia", "📱 Telecom"]] as const).map(([val, label]) => (
-                <button key={val} onClick={() => setSelectedTipo(val as any)} className={`flex-1 text-xs font-medium rounded-lg py-1.5 transition-all ${selectedTipo === val ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
-                  {label}
+            
+            {/* Tipo produto toggle - Mais espaçado e elegante */}
+            <div className="flex gap-2 bg-secondary/20 rounded-2xl p-1.5 border border-border/30">
+              {([
+                ["all", "Todos", "📊"], 
+                ["energia", "Energia", "⚡"], 
+                ["telefonia", "Telecom", "📱"], 
+                ["whatsapp", "WhatsApp", "💬"]
+              ] as const).map(([val, label, icon]) => (
+                <button 
+                  key={val} 
+                  onClick={() => setSelectedTipo(val as any)} 
+                  className={`flex-1 flex items-center justify-center gap-2 text-sm font-semibold rounded-xl py-2.5 px-3 transition-all duration-200 ${
+                    selectedTipo === val 
+                      ? "bg-gradient-to-br from-primary to-primary/80 text-white shadow-lg shadow-primary/25 scale-105" 
+                      : "text-muted-foreground hover:text-foreground hover:bg-secondary/40"
+                  }`}
+                >
+                  <span className="text-base">{icon}</span>
+                  <span className="hidden sm:inline">{label}</span>
                 </button>
               ))}
             </div>

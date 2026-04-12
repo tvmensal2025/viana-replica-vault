@@ -7,6 +7,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 
 const CRMLandingPage = lazy(() => import("./pages/CRMLandingPage"));
 const ConsultantPage = lazy(() => import("./pages/ConsultantPage"));
+const CadastroPage = lazy(() => import("./pages/CadastroPage"));
+const WhatsAppClientsPage = lazy(() => import("./pages/WhatsAppClientsPage"));
 const LicenciadaPage = lazy(() => import("./pages/LicenciadaPage"));
 const LicenciadaPreview = lazy(() => import("./pages/LicenciadaPreview"));
 const AssistentePage = lazy(() => import("./pages/AssistentePage"));
@@ -27,11 +29,13 @@ const App = () => (
           <Routes>
             <Route path="/auth" element={<Auth />} />
             <Route path="/admin" element={<Admin />} />
+            <Route path="/admin/whatsapp-clients" element={<WhatsAppClientsPage />} />
             <Route path="/super-admin" element={<SuperAdmin />} />
             <Route path="/assistente" element={<AssistentePage />} />
             <Route path="/crm" element={<CRMLandingPage />} />
             <Route path="/licenciado/preview" element={<LicenciadaPreview />} />
             <Route path="/licenciado/:licenca" element={<LicenciadaPage />} />
+            <Route path="/cadastro/:licenca" element={<CadastroPage />} />
             <Route path="/:licenca" element={<ConsultantPage />} />
             <Route path="/" element={<Navigate to="/auth" replace />} />
             <Route path="*" element={<NotFound />} />
