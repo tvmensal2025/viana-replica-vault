@@ -11,6 +11,8 @@ const corsHeaders = {
 };
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") || "";
+const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL") || "";
+const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY") || "";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -40,7 +42,7 @@ Deno.serve(async (req) => {
     // Buscar instância no banco
     const { data: instanceData, error: instanceError } = await supabase
       .from("whatsapp_instances")
-      .select("*, consultants(*)")
+      .select("id, instance_name, consultant_id")
       .eq("instance_name", instanceName)
       .single();
 
@@ -52,15 +54,30 @@ Deno.serve(async (req) => {
       });
     }
 
-    console.log(`✅ Instance found: ${instanceName} (consultant: ${instanceData.consultants?.name})`);
+    // Buscar consultor separadamente (sem join FK)
+    const { data: consultantData } = await supabase
+      .from("consultants")
+      .select("id, name, igreen_id")
+      .eq("id", instanceData.consultant_id)
+      .single();
 
-    const nomeRepresentante = instanceData.consultants?.name || "iGreen Energy";
-    const consultorId = instanceData.consultants?.igreen_id || "124170";
+    console.log(`✅ Instance found: ${instanceName} (consultant: ${consultantData?.name || "unknown"})`);
 
-    // Criar sender Evolution
+    const nomeRepresentante = consultantData?.name || "iGreen Energy";
+    const consultorId = consultantData?.igreen_id || "124170";
+
+    // Criar sender Evolution usando variáveis de ambiente
+    if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
+      console.error("❌ EVOLUTION_API_URL ou EVOLUTION_API_KEY não configurados");
+      return new Response(JSON.stringify({ error: "Evolution API not configured" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const { sendText, sendButtons, downloadMedia } = createEvolutionSender(
-      instanceData.api_url,
-      instanceData.api_key,
+      EVOLUTION_API_URL,
+      EVOLUTION_API_KEY,
       instanceName
     );
 
@@ -109,7 +126,7 @@ Deno.serve(async (req) => {
       .from("customers")
       .select("*")
       .eq("phone_whatsapp", phone)
-      .eq("whatsapp_instance_id", instanceData.id)
+      .eq("consultant_id", instanceData.consultant_id)
       .not("status", "in", `(${statusFinalizados.join(",")})`)
       .order("created_at", { ascending: false })
       .limit(1);
@@ -127,7 +144,6 @@ Deno.serve(async (req) => {
         .from("customers")
         .insert({
           phone_whatsapp: phone,
-          whatsapp_instance_id: instanceData.id,
           consultant_id: instanceData.consultant_id,
           status: "pending",
           conversation_step: "welcome",
@@ -144,7 +160,6 @@ Deno.serve(async (req) => {
       message_text: isFile ? "[arquivo]" : messageText,
       message_type: isFile ? "image" : "text",
       conversation_step: customer.conversation_step,
-      instance_name: instanceName,
     });
 
     const step = customer.conversation_step || "welcome";
@@ -174,7 +189,7 @@ Deno.serve(async (req) => {
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    // MÁQUINA DE ESTADOS - IGUAL AO WHAPI
+    // MÁQUINA DE ESTADOS
     // ═══════════════════════════════════════════════════════════════════
     switch (step) {
 
@@ -899,7 +914,7 @@ Deno.serve(async (req) => {
         console.log(`✅ Lead completo: ${merged.name} (${merged.id}) - disparando worker-portal`);
 
         // Buscar settings do consultor
-        const { data: settingsRows } = await supabase.from("settings").select("*").eq("consultant_id", instanceData.consultant_id);
+        const { data: settingsRows } = await supabase.from("settings").select("*");
         const settings: Record<string, string> = {};
         settingsRows?.forEach((s: any) => { settings[s.key] = s.value; });
 
@@ -986,7 +1001,7 @@ Deno.serve(async (req) => {
             .catch(err => console.error("⚠️ MinIO upload failed (non-blocking):", err?.message));
         }
 
-        for (const key of Object.keys(updates)) delete updates[key];
+        for (const k of Object.keys(updates)) delete updates[k];
         reply = "";
       }
     }
@@ -1036,7 +1051,6 @@ Deno.serve(async (req) => {
       message_text: reply || "[botões enviados]",
       message_type: "text",
       conversation_step: updates.conversation_step || step,
-      instance_name: instanceName,
     });
 
     return new Response(JSON.stringify({ ok: true }), {
