@@ -1,4 +1,4 @@
-# 📋 Changelog - Migração Evolution API
+# 📋 Changelog - Migração Evolution API e MinIO
 
 ## 🎯 Resumo da Atualização
 
@@ -10,13 +10,18 @@ Data: 11 de Abril de 2026
    - Servidor antigo → Novo servidor: `https://igreen-evolution-api.d9v63q.easypanel.host`
    - Testado e funcionando corretamente
 
-2. **Configuração do Ambiente de Desenvolvimento**
+2. **Migração do Servidor MinIO**
+   - Servidor antigo: `https://igreen-minio.b099mi.easypanel.host`
+   - Novo servidor: `https://igreen-minio.d9v63q.easypanel.host`
+   - 11 URLs de vídeos atualizadas em 8 arquivos
+
+3. **Configuração do Ambiente de Desenvolvimento**
    - Porta configurada: **8080**
    - Bun instalado e configurado
    - Todas as 653 dependências instaladas
    - Servidor de desenvolvimento rodando
 
-3. **Documentação Completa Criada**
+4. **Documentação Completa Criada**
    - Guias de migração
    - Scripts de teste e debug
    - Troubleshooting detalhado
@@ -27,8 +32,9 @@ Data: 11 de Abril de 2026
 ## 📚 Arquivos Adicionados
 
 ### Documentação Principal:
-- **RESUMO_MIGRACAO.md** - Resumo rápido da migração
-- **MIGRATION_EVOLUTION_SERVER.md** - Documentação técnica completa
+- **RESUMO_MIGRACAO.md** - Resumo rápido da migração Evolution API
+- **MIGRATION_EVOLUTION_SERVER.md** - Documentação técnica completa Evolution API
+- **MIGRACAO_MINIO.md** - Documentação da migração MinIO
 - **PROXIMOS_PASSOS.md** - Guia passo a passo
 - **INICIO_RAPIDO.md** - Guia de início rápido
 
@@ -59,6 +65,16 @@ EVOLUTION_API_KEY=429683C4C977415CAAFCCE10F7D57E11
 ```
 
 **Link:** https://supabase.com/dashboard/project/zlzasfhcxcznaprrragl/settings/functions
+
+### MinIO (Novo Servidor):
+
+```bash
+MINIO_SERVER_URL=https://igreen-minio.d9v63q.easypanel.host
+MINIO_ROOT_USER=testando200
+MINIO_ROOT_PASSWORD=200300400500600
+```
+
+**Console:** https://console-igreen-minio.d9v63q.easypanel.host/browser
 
 ---
 
@@ -92,10 +108,13 @@ http://localhost:8080
 ## ✅ Status Atual
 
 - ✅ Servidor Evolution API: **FUNCIONANDO**
+- ✅ Servidor MinIO: **MIGRADO**
 - ✅ Frontend na porta 8080: **RODANDO**
 - ✅ Dependências instaladas: **653 pacotes**
 - ✅ Documentação: **COMPLETA**
+- ✅ URLs de vídeos: **ATUALIZADAS**
 - ⚠️ Variáveis Supabase: **CONFIGURAR** (se ainda não fez)
+- ⏳ Testar vídeos no site
 
 ---
 
@@ -111,10 +130,12 @@ http://localhost:8080
 ## 📝 Próximos Passos
 
 1. ✅ Código enviado para GitHub
-2. ⏳ Configurar variáveis no Supabase (se ainda não fez)
-3. ⏳ Testar conexão WhatsApp
-4. ⏳ Verificar se QR Code aparece
-5. ⏳ Conectar WhatsApp e testar envio de mensagens
+2. ✅ URLs do MinIO atualizadas
+3. ⏳ Configurar variáveis no Supabase (se ainda não fez)
+4. ⏳ Testar conexão WhatsApp
+5. ⏳ Verificar se QR Code aparece
+6. ⏳ Testar vídeos no site
+7. ⏳ Conectar WhatsApp e testar envio de mensagens
 
 ---
 
@@ -144,11 +165,14 @@ http://localhost:8080
 
 ## 📊 Estatísticas
 
-- **Arquivos adicionados**: 13
-- **Linhas de documentação**: ~1.334
+- **Arquivos adicionados**: 14
+- **Arquivos modificados**: 9
+- **Linhas de documentação**: ~1.500
 - **Scripts criados**: 4
 - **Guias de troubleshooting**: 3
-- **Tempo de migração**: ~2 horas
+- **URLs de vídeos atualizadas**: 11
+- **Commits**: 4
+- **Tempo de migração**: ~3 horas
 
 ---
 
@@ -156,4 +180,13 @@ http://localhost:8080
 
 Migração completa e documentada. Todos os arquivos foram enviados para o GitHub.
 
-**Próximo passo:** Configure as variáveis no Supabase e teste a conexão WhatsApp! 🚀
+**Servidores migrados:**
+- ✅ Evolution API
+- ✅ MinIO
+
+**Próximos passos:**
+1. Configure as variáveis no Supabase
+2. Teste a conexão WhatsApp
+3. Verifique se os vídeos estão carregando no site
+
+**Tudo pronto para uso! 🚀**
