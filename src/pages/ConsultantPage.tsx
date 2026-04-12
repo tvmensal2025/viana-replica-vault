@@ -2,6 +2,7 @@ import { useParams } from "react-router-dom";
 import { useConsultant } from "@/hooks/useConsultant";
 import { useTrackView } from "@/hooks/useTrackView";
 import HeroSection from "@/components/HeroSection";
+import QRCodeSection from "@/components/QRCodeSection";
 import AboutSection from "@/components/AboutSection";
 import HowItWorksSection from "@/components/HowItWorksSection";
 import SolarPlantsSection from "@/components/SolarPlantsSection";
@@ -16,11 +17,30 @@ import WhatsAppFloat from "@/components/WhatsAppFloat";
 import LoadingScreen from "@/components/LoadingScreen";
 import SEOHead from "@/components/SEOHead";
 import PixelInjector from "@/components/PixelInjector";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 
 const ConsultantPage = () => {
   const { licenca } = useParams<{ licenca: string }>();
   const { data: consultant, isLoading } = useConsultant(licenca || "");
   useTrackView(consultant?.id, "client");
+
+  // Buscar instância WhatsApp do consultor para o QR code
+  const { data: instancePhone } = useQuery({
+    queryKey: ["instance-phone", consultant?.id],
+    queryFn: async () => {
+      if (!consultant?.id) return null;
+      const { data } = await supabase
+        .from("whatsapp_instances")
+        .select("instance_name")
+        .eq("consultant_id", consultant.id)
+        .limit(1)
+        .maybeSingle();
+      // Se tem instância, usar o telefone do consultor (é o número conectado)
+      return data ? consultant.phone : null;
+    },
+    enabled: !!consultant?.id,
+  });
 
   if (isLoading) return <LoadingScreen />;
 
@@ -36,6 +56,13 @@ const ConsultantPage = () => {
     );
   }
 
+  // Número para o QR code: priorizar o telefone da instância conectada
+  const qrPhone = instancePhone || consultant.phone;
+  const botMessage = encodeURIComponent(
+    "Olá! Gostaria de fazer meu cadastro na iGreen Energy e enviar meus documentos."
+  );
+  const whatsappBotUrl = `https://api.whatsapp.com/send?phone=${qrPhone}&text=${botMessage}`;
+
   const whatsappUrl = `https://api.whatsapp.com/send?phone=${consultant.phone}&text=${encodeURIComponent("Olá, gostaria de mais informações sobre o desconto na conta de luz oferecido pela iGreen Energy")}`;
 
   return (
@@ -47,6 +74,11 @@ const ConsultantPage = () => {
       />
       <div className="min-h-screen">
         <HeroSection cadastroUrl={consultant.cadastro_url} whatsappUrl={whatsappUrl} consultantId={consultant.id} />
+        <QRCodeSection
+          whatsappUrl={whatsappBotUrl}
+          consultantName={consultant.name}
+          consultantId={consultant.igreen_id || undefined}
+        />
         <AboutSection />
         <HowItWorksSection />
         <SolarPlantsSection />
