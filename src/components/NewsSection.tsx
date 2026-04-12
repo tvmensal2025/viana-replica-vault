@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { Play } from "lucide-react";
 
-const MINIO_BASE = "https://igreen-minio.b099mi.easypanel.host/igreen";
+const MINIO_BASE = "https://igreen-minio.d9v63q.easypanel.host/igreen";
 
 const videos = [
   `${MINIO_BASE}/noticia1.mp4`,

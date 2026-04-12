@@ -262,7 +262,7 @@ const CRMLandingPage = () => {
               onPause={() => trackCrmClick("video_pause")}
               onEnded={() => trackCrmClick("video_completed")}
             >
-              <source src="https://igreen-minio.b099mi.easypanel.host/igreen/Video%20para%20venda%20do%20crm.mp4" type="video/mp4" />
+              <source src="https://igreen-minio.d9v63q.easypanel.host/igreen/Video%20para%20venda%20do%20crm.mp4" type="video/mp4" />
               Seu navegador não suporta vídeos.
             </video>
           </div>
