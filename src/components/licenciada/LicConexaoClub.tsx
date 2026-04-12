@@ -18,7 +18,14 @@ const LicConexaoClub = () => (
           Serviço prestado pela iGreen que conecta o cliente ao iGreen Club, nosso clube de descontos em mais de 30 mil estabelecimentos em todo o Brasil
         </p>
       </div>
-      <img src="/images/conexao-club.webp" alt="iGreen Club" loading="lazy" className="rounded-2xl w-full max-w-2xl mx-auto mb-14 shadow-lg transition-transform duration-500 hover:scale-[1.02]" style={{ boxShadow: 'var(--shadow-card)' }} />
+      <img src="/images/conexao-club.webp" alt="iGreen Club" loading="lazy" className="rounded-2xl w-full max-w-2xl mx-auto mb-8 shadow-lg transition-transform duration-500 hover:scale-[1.02]" style={{ boxShadow: 'var(--shadow-card)' }} />
+
+      <div className="max-w-3xl mx-auto rounded-2xl overflow-hidden relative mb-14" style={{ boxShadow: 'var(--shadow-green-lg)' }}>
+        <div className="absolute inset-0 rounded-2xl border border-primary/20 z-10 pointer-events-none" />
+        <video controls playsInline className="w-full aspect-video relative z-0">
+          <source src="https://zlzasfhcxcznaprrragl.supabase.co/storage/v1/object/public/video%20igreen/club-de-beneficios.mp4" type="video/mp4" />
+        </video>
+      </div>
 
       <div className="glass-card max-w-3xl mx-auto mb-12">
         <h3 className="section-heading text-2xl md:text-3xl mb-8 !text-left">iGreen Club</h3>
