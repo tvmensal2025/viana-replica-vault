@@ -204,7 +204,7 @@ Deno.serve(async (req) => {
         try {
           console.log("📡 Chamando OCR Gemini para conta:", fileUrl?.substring(0, 100));
 
-          const ocrData = await ocrContaEnergia(fileUrl, GEMINI_API_KEY, null, null);
+          const ocrData = await ocrContaEnergia(fileUrl, GEMINI_API_KEY, undefined, undefined);
           console.log("📊 OCR Conta resultado:", JSON.stringify(ocrData).substring(0, 400));
 
           if (ocrData.sucesso && ocrData.dados) {
@@ -352,7 +352,7 @@ Deno.serve(async (req) => {
             docVersoUrl,
             customer.document_type || "RG",
             GEMINI_API_KEY,
-            null,
+            undefined,
             undefined,
             undefined
           );
