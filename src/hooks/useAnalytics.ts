@@ -60,6 +60,8 @@ export function useAnalytics(consultantId: string | null, periodDays: number = 3
   return useQuery({
     queryKey: ["analytics", consultantId, periodDays],
     enabled: !!consultantId,
+    refetchOnMount: "always",
+    staleTime: 30_000, // 30s to avoid excessive re-fetches
     queryFn: async () => {
       const sinceDate = new Date();
       sinceDate.setDate(sinceDate.getDate() - periodDays);
