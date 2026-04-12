@@ -1,65 +1,64 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Loader2, Search, Phone, Mail, MapPin, FileText, Calendar, CheckCircle, Clock, XCircle, Download } from "lucide-react";
+import { Loader2, Search, Phone, Mail, MapPin, FileText, Calendar, Download } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 
 interface Customer {
   id: string;
-  name: string;
-  cpf: string;
-  rg: string;
-  email: string;
+  name: string | null;
+  cpf: string | null;
+  rg: string | null;
+  email: string | null;
   phone_whatsapp: string;
-  phone_landline: string;
-  data_nascimento: string;
-  address_street: string;
-  address_number: string;
-  address_complement: string;
-  address_neighborhood: string;
-  address_city: string;
-  address_state: string;
-  cep: string;
-  distribuidora: string;
-  numero_instalacao: string;
-  electricity_bill_value: number;
-  conversation_step: string;
+  phone_landline: string | null;
+  data_nascimento: string | null;
+  address_street: string | null;
+  address_number: string | null;
+  address_complement: string | null;
+  address_neighborhood: string | null;
+  address_city: string | null;
+  address_state: string | null;
+  cep: string | null;
+  distribuidora: string | null;
+  numero_instalacao: string | null;
+  electricity_bill_value: number | null;
+  conversation_step: string | null;
   status: string;
   created_at: string;
   updated_at: string;
-  whatsapp_instances?: {
-    instance_name: string;
-  };
 }
 
 export default function WhatsAppClientsPage() {
-  const { user } = useAuth();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
 
   useEffect(() => {
-    if (user) {
-      loadCustomers();
-    }
-  }, [user]);
+    loadCustomers();
+  }, []);
 
   const loadCustomers = async () => {
     try {
       setLoading(true);
 
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("Usuário não autenticado");
+        return;
+      }
+
       // Buscar consultant_id do usuário logado
       const { data: consultant } = await supabase
         .from("consultants")
         .select("id")
-        .eq("email", user?.email)
+        .eq("id", user.id)
         .single();
 
       if (!consultant) {
@@ -70,12 +69,7 @@ export default function WhatsAppClientsPage() {
       // Buscar clientes do consultor
       const { data, error } = await supabase
         .from("customers")
-        .select(`
-          *,
-          whatsapp_instances!inner(
-            instance_name
-          )
-        `)
+        .select("*")
         .eq("consultant_id", consultant.id)
         .order("created_at", { ascending: false });
 
@@ -155,51 +149,28 @@ export default function WhatsAppClientsPage() {
 
   const exportToCSV = () => {
     const headers = [
-      "Nome",
-      "CPF",
-      "RG",
-      "Email",
-      "Telefone",
-      "Data Nascimento",
-      "Endereço",
-      "CEP",
-      "Cidade",
-      "Estado",
-      "Distribuidora",
-      "Nº Instalação",
-      "Valor Conta",
-      "Status",
-      "Step",
-      "Data Cadastro",
+      "Nome", "CPF", "RG", "Email", "Telefone", "Data Nascimento",
+      "Endereço", "CEP", "Cidade", "Estado", "Distribuidora",
+      "Nº Instalação", "Valor Conta", "Status", "Step", "Data Cadastro",
     ];
 
     const rows = filteredCustomers.map((c) => [
-      c.name || "",
-      c.cpf || "",
-      c.rg || "",
-      c.email || "",
-      c.phone_whatsapp || "",
-      c.data_nascimento || "",
+      c.name || "", c.cpf || "", c.rg || "", c.email || "",
+      c.phone_whatsapp || "", c.data_nascimento || "",
       `${c.address_street || ""} ${c.address_number || ""} ${c.address_complement || ""}`.trim(),
-      c.cep || "",
-      c.address_city || "",
-      c.address_state || "",
-      c.distribuidora || "",
-      c.numero_instalacao || "",
-      c.electricity_bill_value || "",
-      c.status || "",
+      c.cep || "", c.address_city || "", c.address_state || "",
+      c.distribuidora || "", c.numero_instalacao || "",
+      c.electricity_bill_value || "", c.status || "",
       getStepLabel(c.conversation_step || ""),
       c.created_at ? format(new Date(c.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR }) : "",
     ]);
 
     const csv = [headers, ...rows].map((row) => row.map((cell) => `"${cell}"`).join(",")).join("\n");
-
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
     link.download = `clientes-whatsapp-${format(new Date(), "yyyy-MM-dd")}.csv`;
     link.click();
-
     toast.success("Exportado com sucesso!");
   };
 
@@ -213,7 +184,6 @@ export default function WhatsAppClientsPage() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Clientes WhatsApp</h1>
@@ -225,7 +195,6 @@ export default function WhatsAppClientsPage() {
         </Button>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="pb-2">
@@ -235,7 +204,6 @@ export default function WhatsAppClientsPage() {
             <div className="text-2xl font-bold">{customers.length}</div>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Completos</CardTitle>
@@ -246,7 +214,6 @@ export default function WhatsAppClientsPage() {
             </div>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Pendentes</CardTitle>
@@ -257,7 +224,6 @@ export default function WhatsAppClientsPage() {
             </div>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Falhas</CardTitle>
@@ -270,7 +236,6 @@ export default function WhatsAppClientsPage() {
         </Card>
       </div>
 
-      {/* Filters */}
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-col md:flex-row gap-4">
@@ -283,7 +248,6 @@ export default function WhatsAppClientsPage() {
                 className="pl-10"
               />
             </div>
-
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
@@ -302,7 +266,6 @@ export default function WhatsAppClientsPage() {
         </CardContent>
       </Card>
 
-      {/* Customers List */}
       <div className="space-y-4">
         {filteredCustomers.length === 0 ? (
           <Card>
@@ -319,20 +282,16 @@ export default function WhatsAppClientsPage() {
                     <div className="flex items-center gap-3 mb-2">
                       <h3 className="text-xl font-semibold">{customer.name || "Nome não informado"}</h3>
                       {getStatusBadge(customer.status)}
-                      <Badge variant="outline">{getStepLabel(customer.conversation_step)}</Badge>
+                      <Badge variant="outline">{getStepLabel(customer.conversation_step || "")}</Badge>
                     </div>
-
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
                       {customer.cpf && (
                         <div className="flex items-center gap-2">
                           <FileText className="w-4 h-4 text-muted-foreground" />
                           <span className="text-muted-foreground">CPF:</span>
-                          <span className="font-medium">
-                            {customer.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}
-                          </span>
+                          <span className="font-medium">{customer.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}</span>
                         </div>
                       )}
-
                       {customer.phone_whatsapp && (
                         <div className="flex items-center gap-2">
                           <Phone className="w-4 h-4 text-muted-foreground" />
@@ -340,7 +299,6 @@ export default function WhatsAppClientsPage() {
                           <span className="font-medium">{customer.phone_whatsapp}</span>
                         </div>
                       )}
-
                       {customer.email && (
                         <div className="flex items-center gap-2">
                           <Mail className="w-4 h-4 text-muted-foreground" />
@@ -348,44 +306,33 @@ export default function WhatsAppClientsPage() {
                           <span className="font-medium">{customer.email}</span>
                         </div>
                       )}
-
                       {customer.address_city && (
                         <div className="flex items-center gap-2">
                           <MapPin className="w-4 h-4 text-muted-foreground" />
                           <span className="text-muted-foreground">Cidade:</span>
-                          <span className="font-medium">
-                            {customer.address_city}/{customer.address_state}
-                          </span>
+                          <span className="font-medium">{customer.address_city}/{customer.address_state}</span>
                         </div>
                       )}
-
                       {customer.distribuidora && (
                         <div className="flex items-center gap-2">
                           <span className="text-muted-foreground">Distribuidora:</span>
                           <span className="font-medium">{customer.distribuidora}</span>
                         </div>
                       )}
-
                       {customer.electricity_bill_value && (
                         <div className="flex items-center gap-2">
                           <span className="text-muted-foreground">Valor Conta:</span>
-                          <span className="font-medium">
-                            R$ {customer.electricity_bill_value.toFixed(2)}
-                          </span>
+                          <span className="font-medium">R$ {customer.electricity_bill_value.toFixed(2)}</span>
                         </div>
                       )}
-
                       <div className="flex items-center gap-2">
                         <Calendar className="w-4 h-4 text-muted-foreground" />
                         <span className="text-muted-foreground">Cadastro:</span>
-                        <span className="font-medium">
-                          {format(new Date(customer.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}
-                        </span>
+                        <span className="font-medium">{format(new Date(customer.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}</span>
                       </div>
                     </div>
                   </div>
                 </div>
-
                 {customer.address_street && (
                   <div className="mt-4 pt-4 border-t">
                     <p className="text-sm text-muted-foreground">

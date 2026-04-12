@@ -147,8 +147,6 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
 
   const tipoFiltered = selectedTipo === "all"
     ? searchFiltered
-    : selectedTipo === "whatsapp"
-    ? searchFiltered.filter((c) => c.whatsapp_instance_id != null)
     : searchFiltered.filter((c) => (c.tipo_produto || "energia") === selectedTipo);
 
   const licenciadoFiltered = selectedLicenciado === "all"

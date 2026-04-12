@@ -14,6 +14,7 @@ export const TIMEOUT_VIA_CEP = 10_000;
 export const TIMEOUT_FETCH_IMAGE = 30_000;
 export const TIMEOUT_GEMINI = 60_000;
 export const TIMEOUT_WHAPI = 20_000;
+export const TIMEOUT_EVOLUTION = 20_000;
 
 // ─── Log estruturado (para troubleshooting) ──────────────────────────────
 export function logStructured(
