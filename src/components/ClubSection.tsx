@@ -24,14 +24,14 @@ const ClubSection = () => {
         <div className="max-w-4xl mx-auto rounded-2xl overflow-hidden relative mb-14" style={{ boxShadow: 'var(--shadow-green-lg)' }}>
           <div className="absolute inset-0 rounded-2xl border border-primary/20 z-10 pointer-events-none" />
           <video controls className="w-full aspect-video relative z-0">
-            <source src="https://igreen-minio.d9v63q.easypanel.host/igreen/igreen-club1.mp4" type="video/mp4" />
+            <source src="https://zlzasfhcxcznaprrragl.supabase.co/storage/v1/object/public/video%20igreen/club-de-beneficios.mp4" type="video/mp4" />
           </video>
         </div>
 
         <div className="max-w-4xl mx-auto rounded-2xl overflow-hidden relative mb-14" style={{ boxShadow: 'var(--shadow-green-lg)' }}>
           <div className="absolute inset-0 rounded-2xl border border-primary/20 z-10 pointer-events-none" />
           <video controls className="w-full aspect-video relative z-0">
-            <source src="https://igreen-minio.d9v63q.easypanel.host/igreen/club-2.mp4" type="video/mp4" />
+            <source src="https://zlzasfhcxcznaprrragl.supabase.co/storage/v1/object/public/video%20igreen/igreen_club_3.mp4" type="video/mp4" />
           </video>
         </div>
 
