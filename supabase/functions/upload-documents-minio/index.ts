@@ -9,7 +9,7 @@ const corsHeaders = {
 async function hmacSHA256(key: Uint8Array, message: string): Promise<Uint8Array> {
   const cryptoKey = await crypto.subtle.importKey(
     "raw",
-    key,
+    key.buffer as ArrayBuffer,
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"]
@@ -59,7 +59,7 @@ async function uploadToMinIO(params: MinIOUploadParams): Promise<void> {
   const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, "");
   const dateStamp = amzDate.slice(0, 8);
 
-  const payloadHash = toHex(new Uint8Array(await crypto.subtle.digest("SHA-256", fileBytes)));
+  const payloadHash = toHex(new Uint8Array(await crypto.subtle.digest("SHA-256", fileBytes.buffer as ArrayBuffer)));
 
   const canonicalUri = `/${bucket}/${objectKey}`;
   const canonicalQuerystring = "";
