@@ -1,6 +1,7 @@
 import { useParams } from "react-router-dom";
 import { useConsultant } from "@/hooks/useConsultant";
 import { useTrackView } from "@/hooks/useTrackView";
+import { useInstancePhone } from "@/hooks/useInstancePhone";
 import { QRCodeSVG } from "qrcode.react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Smartphone, Camera, FileText, CheckCircle2, Zap, Shield, Clock, Users, Printer, Sun, Leaf } from "lucide-react";

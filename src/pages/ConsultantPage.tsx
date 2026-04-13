@@ -17,29 +17,14 @@ import WhatsAppFloat from "@/components/WhatsAppFloat";
 import LoadingScreen from "@/components/LoadingScreen";
 import SEOHead from "@/components/SEOHead";
 import PixelInjector from "@/components/PixelInjector";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { useInstancePhone } from "@/hooks/useInstancePhone";
 
 const ConsultantPage = () => {
   const { licenca } = useParams<{ licenca: string }>();
   const { data: consultant, isLoading } = useConsultant(licenca || "");
   useTrackView(consultant?.id, "client");
 
-  // Buscar telefone conectado na instância WhatsApp do consultor
-  const { data: instancePhone } = useQuery({
-    queryKey: ["instance-phone", consultant?.id],
-    queryFn: async () => {
-      if (!consultant?.id) return null;
-      const { data } = await supabase
-        .from("whatsapp_instances")
-        .select("connected_phone")
-        .eq("consultant_id", consultant.id)
-        .limit(1)
-        .maybeSingle();
-      return (data as any)?.connected_phone || null;
-    },
-    enabled: !!consultant?.id,
-  });
+  const { data: instancePhone } = useInstancePhone(consultant?.id);
 
   if (isLoading) return <LoadingScreen />;
 
