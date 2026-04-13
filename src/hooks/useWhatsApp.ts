@@ -7,6 +7,7 @@ import {
   logoutInstance,
   deleteInstance,
   setInstanceWebhook,
+  fetchInstances,
   EvolutionAuthError,
 } from "@/services/evolutionApi";
 import type { ConnectionStatus } from "@/types/whatsapp";
@@ -225,6 +226,23 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       .upsert({ consultant_id: consultantId, instance_name: name }, { onConflict: "consultant_id" });
   }, [consultantId]);
 
+  const fetchAndSaveConnectedPhone = useCallback(async (name: string) => {
+    try {
+      const instances = await fetchInstances();
+      const inst = instances?.find((i) => i?.instance?.instanceName === name);
+      const ownerJid = (inst as any)?.instance?.owner || (inst as any)?.owner || "";
+      const phone = ownerJid.replace(/@.*$/, "");
+      if (phone) {
+        await supabase
+          .from("whatsapp_instances")
+          .update({ connected_phone: phone } as any)
+          .eq("consultant_id", consultantId);
+      }
+    } catch {
+      // Non-critical
+    }
+  }, [consultantId]);
+
   const deleteInstanceDb = useCallback(async () => {
     await supabase.from("whatsapp_instances").delete().eq("consultant_id", consultantId);
   }, [consultantId]);
@@ -250,6 +268,8 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
         instanceSavedRef.current = true;
         // Ensure webhook is configured for this instance
         setInstanceWebhook(name).catch(() => {/* non-critical */});
+        // Try to fetch and save the connected phone number
+        fetchAndSaveConnectedPhone(name).catch(() => {/* non-critical */});
       } catch {
         // Non-critical persistence failure
       }
