@@ -7,6 +7,7 @@ import {
   logoutInstance,
   deleteInstance,
   setInstanceWebhook,
+  fetchInstances,
   EvolutionAuthError,
 } from "@/services/evolutionApi";
 import type { ConnectionStatus } from "@/types/whatsapp";
