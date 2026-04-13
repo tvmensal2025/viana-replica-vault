@@ -13,6 +13,14 @@ export async function baixarImagem(
       console.log("📥 Usando base64 da Evolution API");
       const mime = mediaMessage?.mimetype || "image/jpeg";
       console.log(`📥 Imagem Evolution: b64 len: ${base64FromEvolution.length}, tipo: ${mime}`);
+      
+      // Verificar se é PDF
+      if (mime === "application/pdf" || mime.includes("pdf")) {
+        console.log("📄 Detectado PDF - Gemini suporta PDF diretamente");
+        // Gemini suporta PDF diretamente, não precisa converter
+        return { b64: base64FromEvolution, mime: "application/pdf" };
+      }
+      
       return { b64: base64FromEvolution, mime };
     } catch (e: any) {
       console.error("⚠️ Erro ao processar base64 Evolution:", e.message);
@@ -23,15 +31,47 @@ export async function baixarImagem(
   if (url) {
     try {
       console.log("📥 Baixando imagem via URL direta:", url.substring(0, 100));
+      
+      // Verificar se é data URL (data:mime;base64,...)
+      if (url.startsWith("data:")) {
+        console.log("📥 Detectado data URL");
+        const match = url.match(/^data:([^;]+);base64,(.+)$/);
+        if (match) {
+          const mime = match[1];
+          const b64 = match[2];
+          console.log(`📥 Data URL: tipo: ${mime}, b64 len: ${b64.length}`);
+          
+          // Se for PDF, retornar diretamente
+          if (mime === "application/pdf" || mime.includes("pdf")) {
+            console.log("📄 Data URL é PDF - usando diretamente");
+            return { b64, mime: "application/pdf" };
+          }
+          
+          return { b64, mime };
+        }
+      }
+      
       const imgRes = await fetchWithTimeout(url, { timeout: TIMEOUT_FETCH_IMAGE });
       if (imgRes.ok) {
         const buf = await imgRes.arrayBuffer();
         const u8 = new Uint8Array(buf);
         const mime = imgRes.headers.get("content-type") || "image/jpeg";
         console.log(`📥 Imagem baixada: ${u8.length} bytes, tipo: ${mime}`);
+        
         if (u8.length < 1000) {
           console.warn("⚠️ Imagem muito pequena (<1KB), pode ser preview ou erro");
         }
+        
+        // Se for PDF, verificar tamanho
+        if (mime === "application/pdf" || mime.includes("pdf")) {
+          const sizeMB = u8.length / (1024 * 1024);
+          console.log(`📄 PDF baixado: ${sizeMB.toFixed(2)} MB`);
+          
+          if (sizeMB > 20) {
+            console.warn(`⚠️ PDF muito grande (${sizeMB.toFixed(2)} MB), pode falhar no Gemini`);
+          }
+        }
+        
         let bin = "";
         for (let i = 0; i < u8.length; i += 8192) {
           bin += String.fromCharCode(...u8.subarray(i, Math.min(i + 8192, u8.length)));

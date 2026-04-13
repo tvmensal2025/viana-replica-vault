@@ -1,5 +1,7 @@
 # 🎉 RESUMO FINAL - MIGRAÇÃO EVOLUTION API COMPLETA
 
+> **📋 Para visão completa do projeto, veja:** [`RESUMO_EXECUTIVO_COMPLETO.md`](./RESUMO_EXECUTIVO_COMPLETO.md)
+
 ## ✅ MISSÃO CUMPRIDA!
 
 **Data:** 12 de abril de 2026  

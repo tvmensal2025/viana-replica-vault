@@ -269,7 +269,13 @@ Deno.serve(async (req) => {
         try {
           console.log("📡 Chamando OCR Gemini para conta:", fileUrl?.substring(0, 100));
 
-          const ocrData = await ocrContaEnergia(fileUrl, GEMINI_API_KEY, undefined, undefined);
+          // Passar base64 e mediaMessage para OCR (importante para PDFs)
+          const ocrData = await ocrContaEnergia(
+            fileUrl, 
+            GEMINI_API_KEY, 
+            fileBase64 || undefined, 
+            documentMessage || imageMessage
+          );
           console.log("📊 OCR Conta resultado:", JSON.stringify(ocrData).substring(0, 400));
 
           if (ocrData.sucesso && ocrData.dados) {
@@ -390,6 +396,11 @@ Deno.serve(async (req) => {
         }
 
         updates.document_front_url = fileUrl || "evolution-media:pending";
+        
+        // Salvar base64 da frente para usar depois no OCR conjunto
+        if (fileBase64) {
+          updates.document_front_base64 = fileBase64;
+        }
 
         // CNH só tem frente — pular verso
         if (customer.document_type === "CNH") {
@@ -406,8 +417,8 @@ Deno.serve(async (req) => {
               "nao_aplicavel",
               "CNH",
               GEMINI_API_KEY,
-              undefined,
-              undefined,
+              fileBase64 || undefined,
+              documentMessage || imageMessage,
               undefined
             );
             console.log("📊 OCR CNH resultado:", JSON.stringify(ocrData).substring(0, 400));
@@ -454,17 +465,21 @@ Deno.serve(async (req) => {
         try {
           const docFrenteUrl = customer.document_front_url || updates.document_front_url;
           const docVersoUrl = updates.document_back_url || customer.document_back_url;
+          
+          // Recuperar base64 da frente (se foi salvo)
+          const frenteBase64 = customer.document_front_base64 || undefined;
 
           console.log("📡 Chamando OCR documento (frente+verso)");
+          console.log(`📡 Frente base64: ${frenteBase64 ? 'SIM' : 'NÃO'}, Verso base64: ${fileBase64 ? 'SIM' : 'NÃO'}`);
 
           const ocrData = await ocrDocumentoFrenteVerso(
             docFrenteUrl,
             docVersoUrl,
             customer.document_type || "RG",
             GEMINI_API_KEY,
-            undefined,
-            undefined,
-            undefined
+            frenteBase64 || undefined,
+            undefined, // frenteMediaId (não temos mais)
+            fileBase64 || undefined // versoBase64
           );
           console.log("📊 OCR Doc resultado:", JSON.stringify(ocrData).substring(0, 400));
 
