@@ -225,6 +225,24 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       .upsert({ consultant_id: consultantId, instance_name: name }, { onConflict: "consultant_id" });
   }, [consultantId]);
 
+  const fetchAndSaveConnectedPhone = useCallback(async (name: string) => {
+    try {
+      // Fetch instances from Evolution API to get owner number
+      const instances = await fetchInstances();
+      const inst = instances?.find((i: any) => i?.instance?.instanceName === name || i?.instanceName === name);
+      const ownerJid = inst?.instance?.owner || inst?.owner || "";
+      const phone = ownerJid.replace(/@.*$/, "");
+      if (phone) {
+        await supabase
+          .from("whatsapp_instances")
+          .update({ connected_phone: phone } as any)
+          .eq("consultant_id", consultantId);
+      }
+    } catch {
+      // Non-critical
+    }
+  }, [consultantId]);
+
   const deleteInstanceDb = useCallback(async () => {
     await supabase.from("whatsapp_instances").delete().eq("consultant_id", consultantId);
   }, [consultantId]);
