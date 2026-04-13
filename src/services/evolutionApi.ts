@@ -196,14 +196,16 @@ export async function setInstanceWebhook(instanceName: string) {
   const webhookUrl = `${SUPABASE_URL}/functions/v1/evolution-webhook`;
 
   return request(`webhook/set/${instanceName}`, "POST", {
-    url: webhookUrl,
-    byEvents: false,
-    base64: true,
-    enabled: true,
-    events: [
-      "MESSAGES_UPSERT",
-      "CONNECTION_UPDATE",
-    ],
+    webhook: {
+      url: webhookUrl,
+      byEvents: false,
+      base64: true,
+      enabled: true,
+      events: [
+        "MESSAGES_UPSERT",
+        "CONNECTION_UPDATE",
+      ],
+    },
   });
 }
 
@@ -239,11 +241,21 @@ export async function logoutInstance(instanceName: string) {
   return request<void>(`instance/logout/${instanceName}`, "DELETE");
 }
 
+export interface EvolutionInstanceSummary {
+  instance?: {
+    instanceName?: string;
+    status?: string;
+    owner?: string;
+    ownerJid?: string;
+  };
+  name?: string;
+  connectionStatus?: string;
+  owner?: string;
+  ownerJid?: string;
+}
+
 export async function fetchInstances() {
-  return request<{ instance: { instanceName: string; status: string } }[]>(
-    "instance/fetchInstances",
-    "GET"
-  );
+  return request<EvolutionInstanceSummary[]>("instance/fetchInstances", "GET");
 }
 
 // ─── Chat / Conversations ───
