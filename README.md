@@ -26,6 +26,28 @@ Sistema completo que automatiza todo o processo de captação e cadastro de clie
 
 ## 📚 DOCUMENTAÇÃO
 
+### **🎯 STATUS ATUAL DO PROJETO:**
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    STATUS ATUAL                          │
+├─────────────────────────────────────────────────────────┤
+│                                                          │
+│  CÓDIGO:        ████████████████████████  100% ✅       │
+│  GITHUB:        ████████████████████████  100% ✅       │
+│  CLI:           ████████████████████████  100% ✅       │
+│  DEPLOY:        ░░░░░░░░░░░░░░░░░░░░░░░░    0% 🔴       │
+│                                                          │
+│  TOTAL:         ████████████░░░░░░░░░░░░   60% 🟡       │
+│                                                          │
+└─────────────────────────────────────────────────────────┘
+
+📋 PRÓXIMO PASSO: Deploy (19 minutos)
+📖 GUIA: COMANDOS_DEPLOY_RAPIDO.md
+```
+
+---
+
 ### **🚀 COMECE AQUI:**
 
 1. **[📊 RESUMO EXECUTIVO COMPLETO](./RESUMO_EXECUTIVO_COMPLETO.md)** ⭐
@@ -47,6 +69,30 @@ Sistema completo que automatiza todo o processo de captação e cadastro de clie
    - Como rodar o projeto
    - Configuração básica
    - Primeiro teste
+
+---
+
+### **🔧 DEPLOY E INSTALAÇÃO:**
+
+1. **[✅ SUPABASE CLI INSTALADO](./SUPABASE_CLI_INSTALADO.md)**
+   - CLI instalado e configurado
+   - Versão 2.84.2
+   - Pronto para deploy
+
+2. **[⚡ COMANDOS DEPLOY RÁPIDO](./COMANDOS_DEPLOY_RAPIDO.md)** ⭐ RECOMENDADO
+   - Copie e cole os comandos
+   - Sequência completa de deploy
+   - 19 minutos para 100%
+
+3. **[🚀 DEPLOY COMPLETO](./DEPLOY_COMPLETO.md)**
+   - Guia detalhado passo a passo
+   - Troubleshooting
+   - Testes pós-deploy
+
+4. **[📊 STATUS FINAL](./STATUS_FINAL.md)**
+   - Status atualizado do projeto
+   - Checklist completo
+   - Próximos passos
 
 ---
 

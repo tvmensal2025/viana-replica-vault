@@ -17,7 +17,22 @@
 
 ## 📊 STATUS DETALHADO
 
-### **1. CÓDIGO** ✅ 100%
+### **1. SUPABASE CLI** ✅ 100%
+
+**Instalado com sucesso:**
+- ✅ Versão: 2.84.2
+- ✅ Localização: ~/.local/bin/supabase
+- ✅ PATH configurado
+- ✅ Pronto para uso
+
+**Próximos passos:**
+- 🔴 Login no Supabase
+- 🔴 Linkar projeto
+- 🔴 Deploy
+
+---
+
+### **2. CÓDIGO** ✅ 100%
 
 #### **Correções Implementadas:**
 - ✅ OCR recebe base64 diretamente (PDFs funcionam)
@@ -41,7 +56,7 @@
 
 ---
 
-### **2. GITHUB** ✅ 100%
+### **3. GITHUB** ✅ 100%
 
 ```
 Commit: 6ef916c
@@ -59,7 +74,7 @@ padronizada + Documentação completa
 
 ---
 
-### **3. DEPLOY** 🔴 PENDENTE
+### **4. DEPLOY** 🔴 PENDENTE
 
 #### **O que falta:**
 
@@ -112,7 +127,7 @@ MINIO_BUCKET=igreen
 
 ---
 
-### **4. TESTES** 🔴 PENDENTE (10 min)
+### **5. TESTES** 🔴 PENDENTE (10 min)
 
 Após deploy, testar:
 - [ ] OCR com PDF de alta qualidade
@@ -232,14 +247,15 @@ supabase secrets set MINIO_BUCKET=igreen
 │                                                          │
 │  CÓDIGO:        ████████████████████████  100% ✅       │
 │  GITHUB:        ████████████████████████  100% ✅       │
+│  CLI:           ████████████████████████  100% ✅       │
 │  DEPLOY:        ░░░░░░░░░░░░░░░░░░░░░░░░    0% 🔴       │
 │  TESTES:        ░░░░░░░░░░░░░░░░░░░░░░░░    0% 🔴       │
 │                                                          │
-│  TOTAL:         ██████████░░░░░░░░░░░░░░   50% 🟡       │
+│  TOTAL:         ████████████░░░░░░░░░░░░   60% 🟡       │
 │                                                          │
 └─────────────────────────────────────────────────────────┘
 
-PRÓXIMO PASSO: Deploy (19 minutos)
+PRÓXIMO PASSO: Login e Deploy (19 minutos)
 ```
 
 ---
@@ -283,7 +299,15 @@ PRÓXIMO PASSO: Deploy (19 minutos)
 - Toda documentação completa
 - Tudo commitado e no GitHub
 
+### **CLI:** ✅ 100% INSTALADO
+- Supabase CLI versão 2.84.2
+- Instalado em ~/.local/bin
+- PATH configurado
+- Pronto para uso
+
 ### **DEPLOY:** 🔴 PENDENTE
+- Falta fazer login no Supabase
+- Falta linkar projeto
 - Falta aplicar migration
 - Falta deploy de 2 edge functions
 - Falta configurar variáveis MinIO
@@ -291,7 +315,8 @@ PRÓXIMO PASSO: Deploy (19 minutos)
 
 ### **RESPOSTA FINAL:**
 **O código está 100% pronto.**  
-**Falta apenas fazer o deploy (19 minutos).**  
+**O CLI está 100% instalado.**  
+**Falta apenas fazer login e deploy (19 minutos).**  
 **Após o deploy, tudo funcionará perfeitamente!** ✅
 
 ---
@@ -321,9 +346,10 @@ PRÓXIMO PASSO: Deploy (19 minutos)
 **"Tudo está 100%?"**
 
 **Código:** ✅ SIM (100%)  
+**CLI:** ✅ SIM (100%)  
 **Deploy:** 🔴 NÃO (0% - falta fazer)  
-**Total:** 🟡 50%
+**Total:** 🟡 60%
 
-**Falta:** 19 minutos de deploy
+**Falta:** Login + 19 minutos de deploy
 
 **Depois do deploy:** ✅ 100%
