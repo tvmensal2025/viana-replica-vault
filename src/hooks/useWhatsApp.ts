@@ -228,10 +228,9 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
 
   const fetchAndSaveConnectedPhone = useCallback(async (name: string) => {
     try {
-      // Fetch instances from Evolution API to get owner number
       const instances = await fetchInstances();
-      const inst = instances?.find((i: any) => i?.instance?.instanceName === name || i?.instanceName === name);
-      const ownerJid = inst?.instance?.owner || inst?.owner || "";
+      const inst = instances?.find((i) => i?.instance?.instanceName === name);
+      const ownerJid = (inst as any)?.instance?.owner || (inst as any)?.owner || "";
       const phone = ownerJid.replace(/@.*$/, "");
       if (phone) {
         await supabase
