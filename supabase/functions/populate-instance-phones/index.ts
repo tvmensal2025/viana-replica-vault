@@ -31,24 +31,28 @@ Deno.serve(async (req) => {
       continue;
     }
 
-    // Try to get instance details from Evolution API
     try {
-      const res = await fetch(`${evolutionUrl}/instance/connectionState/${dbInst.instance_name}`, {
+      const res = await fetch(`${evolutionUrl}/instance/fetchInstances?instanceName=${dbInst.instance_name}`, {
         headers: { "Content-Type": "application/json", apikey: evolutionKey },
       });
-      const stateData = await res.json();
+      const data = await res.json();
       
-      // Also try fetchInstances with instance filter
-      const res2 = await fetch(`${evolutionUrl}/instance/fetchInstances?instanceName=${dbInst.instance_name}`, {
-        headers: { "Content-Type": "application/json", apikey: evolutionKey },
-      });
-      const instanceData = await res2.json();
+      let ownerJid = "";
+      if (Array.isArray(data) && data.length > 0) {
+        ownerJid = data[0]?.ownerJid || "";
+      }
       
-      results.push({ 
-        instance: dbInst.instance_name, 
-        state: stateData,
-        instanceDetails: JSON.stringify(instanceData).substring(0, 500),
-      });
+      const phone = ownerJid.replace(/@.*$/, "");
+      
+      if (phone) {
+        const { error } = await supabase
+          .from("whatsapp_instances")
+          .update({ connected_phone: phone })
+          .eq("instance_name", dbInst.instance_name);
+        results.push({ instance: dbInst.instance_name, phone, saved: !error });
+      } else {
+        results.push({ instance: dbInst.instance_name, not_connected: true });
+      }
     } catch (e: any) {
       results.push({ instance: dbInst.instance_name, error: e?.message });
     }
