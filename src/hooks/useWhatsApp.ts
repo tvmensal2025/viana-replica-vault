@@ -229,9 +229,18 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
   const fetchAndSaveConnectedPhone = useCallback(async (name: string) => {
     try {
       const instances = await fetchInstances();
-      const inst = instances?.find((i) => i?.instance?.instanceName === name);
-      const ownerJid = (inst as any)?.instance?.owner || (inst as any)?.owner || "";
-      const phone = ownerJid.replace(/@.*$/, "");
+      const inst = instances?.find((instance) => {
+        const instanceName = instance?.instance?.instanceName ?? instance?.name;
+        return instanceName === name;
+      });
+      const ownerJid =
+        inst?.instance?.ownerJid ??
+        inst?.instance?.owner ??
+        inst?.ownerJid ??
+        inst?.owner ??
+        "";
+      const phone = typeof ownerJid === "string" ? ownerJid.replace(/@.*$/, "") : "";
+
       if (phone) {
         await supabase
           .from("whatsapp_instances")
@@ -274,7 +283,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
     }
     // Always try to fetch and save the connected phone number
     fetchAndSaveConnectedPhone(name).catch(() => {/* non-critical */});
-  }, [addLog, resetRecoveryCounter, resetTimeoutCounter, saveInstance, setHealth, setStatus]);
+  }, [addLog, fetchAndSaveConnectedPhone, resetRecoveryCounter, resetTimeoutCounter, saveInstance, setHealth, setStatus]);
 
   /* ── Check state with diagnostic parsing ── */
   const checkState = useCallback(async (name: string): Promise<ConnectionCheckState> => {
