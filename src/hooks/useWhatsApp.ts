@@ -250,6 +250,8 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
         instanceSavedRef.current = true;
         // Ensure webhook is configured for this instance
         setInstanceWebhook(name).catch(() => {/* non-critical */});
+        // Try to fetch and save the connected phone number
+        fetchAndSaveConnectedPhone(name).catch(() => {/* non-critical */});
       } catch {
         // Non-critical persistence failure
       }
