@@ -25,19 +25,18 @@ const ConsultantPage = () => {
   const { data: consultant, isLoading } = useConsultant(licenca || "");
   useTrackView(consultant?.id, "client");
 
-  // Buscar instância WhatsApp do consultor para o QR code
+  // Buscar telefone conectado na instância WhatsApp do consultor
   const { data: instancePhone } = useQuery({
     queryKey: ["instance-phone", consultant?.id],
     queryFn: async () => {
       if (!consultant?.id) return null;
       const { data } = await supabase
         .from("whatsapp_instances")
-        .select("instance_name")
+        .select("connected_phone")
         .eq("consultant_id", consultant.id)
         .limit(1)
         .maybeSingle();
-      // Se tem instância, usar o telefone do consultor (é o número conectado)
-      return data ? consultant.phone : null;
+      return (data as any)?.connected_phone || null;
     },
     enabled: !!consultant?.id,
   });
