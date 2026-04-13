@@ -175,8 +175,32 @@ Deno.serve(async (req) => {
           conversation_step: "welcome",
         })
         .select().single();
-      if (error) { console.error("Error creating customer:", error); return new Response(JSON.stringify({ error: "Failed to create customer" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }); }
-      customer = newCustomer;
+      if (error) {
+        console.error("Error creating customer:", error);
+        // Fallback: if insert failed (e.g. duplicate), try to reuse existing record
+        const { data: fallback } = await supabase
+          .from("customers")
+          .select("*")
+          .eq("phone_whatsapp", phone)
+          .eq("consultant_id", instanceData.consultant_id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (fallback) {
+          console.log(`♻️ Reusing existing record for ${phone} (step: ${fallback.conversation_step})`);
+          // Reset to welcome if it was finalized
+          if (stepsFinalizados.includes(fallback.conversation_step || "") || statusFinalizados.includes(fallback.status)) {
+            await supabase.from("customers").update({ conversation_step: "welcome", status: "pending" }).eq("id", fallback.id);
+            fallback.conversation_step = "welcome";
+            fallback.status = "pending";
+          }
+          customer = fallback;
+        } else {
+          return new Response(JSON.stringify({ error: "Failed to create customer" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+      } else {
+        customer = newCustomer;
+      }
     }
 
     // Log inbound
