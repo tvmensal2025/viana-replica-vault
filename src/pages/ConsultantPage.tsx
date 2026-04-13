@@ -17,29 +17,14 @@ import WhatsAppFloat from "@/components/WhatsAppFloat";
 import LoadingScreen from "@/components/LoadingScreen";
 import SEOHead from "@/components/SEOHead";
 import PixelInjector from "@/components/PixelInjector";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { useInstancePhone } from "@/hooks/useInstancePhone";
 
 const ConsultantPage = () => {
   const { licenca } = useParams<{ licenca: string }>();
   const { data: consultant, isLoading } = useConsultant(licenca || "");
   useTrackView(consultant?.id, "client");
 
-  // Buscar telefone conectado na instância WhatsApp do consultor
-  const { data: instancePhone } = useQuery({
-    queryKey: ["instance-phone", consultant?.id],
-    queryFn: async () => {
-      if (!consultant?.id) return null;
-      const { data } = await supabase
-        .from("whatsapp_instances")
-        .select("connected_phone")
-        .eq("consultant_id", consultant.id)
-        .limit(1)
-        .maybeSingle();
-      return (data as any)?.connected_phone || null;
-    },
-    enabled: !!consultant?.id,
-  });
+  const { data: instancePhone } = useInstancePhone(consultant?.id);
 
   if (isLoading) return <LoadingScreen />;
 
@@ -55,14 +40,20 @@ const ConsultantPage = () => {
     );
   }
 
-  // Número para o QR code: priorizar o telefone da instância conectada
-  const qrPhone = instancePhone || consultant.phone;
+  // Normalizar telefone do perfil com prefixo 55
+  const rawPhone = consultant.phone?.replace(/\D/g, '') || "";
+  const normalizedPhone = rawPhone.startsWith("55") ? rawPhone : `55${rawPhone}`;
+  
+  // QR code: priorizar connected_phone da instância
+  const qrPhone = instancePhone || normalizedPhone;
   const botMessage = encodeURIComponent(
     "Olá! Gostaria de fazer meu cadastro na iGreen Energy e enviar meus documentos."
   );
   const whatsappBotUrl = `https://api.whatsapp.com/send?phone=${qrPhone}&text=${botMessage}`;
 
-  const whatsappUrl = `https://api.whatsapp.com/send?phone=${consultant.phone}&text=${encodeURIComponent("Olá, gostaria de mais informações sobre o desconto na conta de luz oferecido pela iGreen Energy")}`;
+  // Botão de atendimento: também priorizar instância
+  const contactPhone = instancePhone || normalizedPhone;
+  const whatsappUrl = `https://api.whatsapp.com/send?phone=${contactPhone}&text=${encodeURIComponent("Olá, gostaria de mais informações sobre o desconto na conta de luz oferecido pela iGreen Energy")}`;
 
   return (
     <>

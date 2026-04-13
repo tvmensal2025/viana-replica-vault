@@ -1,6 +1,7 @@
 import { useParams } from "react-router-dom";
 import { useConsultant } from "@/hooks/useConsultant";
 import { useTrackView } from "@/hooks/useTrackView";
+import { useInstancePhone } from "@/hooks/useInstancePhone";
 import { QRCodeSVG } from "qrcode.react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Smartphone, Camera, FileText, CheckCircle2, Zap, Shield, Clock, Users, Printer, Sun, Leaf } from "lucide-react";
@@ -21,7 +22,7 @@ const CadastroPage = () => {
   const printRef = useRef<HTMLDivElement>(null);
   
   useTrackView(consultant?.id, "cadastro");
-
+  const { data: instancePhone } = useInstancePhone(consultant?.id);
   useEffect(() => {
     setIsVisible(true);
   }, []);
@@ -48,8 +49,10 @@ const CadastroPage = () => {
     );
   }
 
-  const phoneMatch = consultant.phone?.match(/\d+/g)?.join('');
-  const phoneNumber = phoneMatch ? `55${phoneMatch}` : "";
+  // Priorizar connected_phone da instância; fallback para telefone do perfil com prefixo 55
+  const fallbackPhone = consultant.phone?.replace(/\D/g, '') || "";
+  const normalizedFallback = fallbackPhone.startsWith("55") ? fallbackPhone : `55${fallbackPhone}`;
+  const phoneNumber = instancePhone || normalizedFallback;
 
   const botMessage = encodeURIComponent(
     "Olá! Gostaria de fazer meu cadastro na iGreen Energy e enviar meus documentos."
