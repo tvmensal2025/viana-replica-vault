@@ -19,16 +19,8 @@ const QRCodeSection = ({ whatsappUrl, consultantName, consultantId }: QRCodeSect
     setIsVisible(true);
   }, []);
 
-  // Extrair número do WhatsApp da URL
-  const phoneMatch = whatsappUrl.match(/phone=(\d+)/);
-  const phoneNumber = phoneMatch ? phoneMatch[1] : "";
-
-  // Mensagem inicial para o bot
-  const botMessage = encodeURIComponent(
-    "Olá! Gostaria de fazer meu cadastro na iGreen Energy e enviar meus documentos."
-  );
-
-  const whatsappBotUrl = `https://api.whatsapp.com/send?phone=${phoneNumber}&text=${botMessage}`;
+  // Usar a URL recebida diretamente (já contém o número correto da instância)
+  const whatsappBotUrl = whatsappUrl;
 
   return (
     <section 
