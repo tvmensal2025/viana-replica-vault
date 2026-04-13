@@ -29,6 +29,32 @@ Deno.serve(async (req) => {
     const body = await req.json();
     console.log("Evolution webhook received:", JSON.stringify(body).substring(0, 500));
 
+    // ─── Handle CONNECTION_UPDATE events ─────────────────────────────────
+    const eventType = body.event;
+    if (eventType === "connection.update" || eventType === "CONNECTION_UPDATE") {
+      const connState = body.data?.state || body.state;
+      const connInstance = body.instance || body.data?.instance || req.headers.get("x-instance-name");
+      console.log(`📡 CONNECTION_UPDATE: instance=${connInstance}, state=${connState}`);
+
+      if (connState === "open" && connInstance) {
+        // Extract the owner's phone number from the connection data
+        const ownerJid = body.data?.ownerJid || body.ownerJid || "";
+        const ownerPhone = ownerJid ? ownerJid.replace(/@.*$/, "") : "";
+        
+        if (ownerPhone) {
+          console.log(`📱 Saving connected phone: ${ownerPhone} for instance: ${connInstance}`);
+          await supabase
+            .from("whatsapp_instances")
+            .update({ connected_phone: ownerPhone })
+            .eq("instance_name", connInstance);
+        }
+      }
+
+      return new Response(JSON.stringify({ ok: true, event: "connection_update" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Identificar instância (pode vir no body ou header)
     const instanceName = body.instance || req.headers.get("x-instance-name");
     if (!instanceName) {
