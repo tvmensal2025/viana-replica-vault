@@ -877,18 +877,21 @@ export type Database = {
       }
       whatsapp_instances: {
         Row: {
+          connected_phone: string | null
           consultant_id: string
           created_at: string | null
           id: string
           instance_name: string
         }
         Insert: {
+          connected_phone?: string | null
           consultant_id: string
           created_at?: string | null
           id?: string
           instance_name: string
         }
         Update: {
+          connected_phone?: string | null
           consultant_id?: string
           created_at?: string | null
           id?: string
