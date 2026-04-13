@@ -22,7 +22,7 @@ const CadastroPage = () => {
   const printRef = useRef<HTMLDivElement>(null);
   
   useTrackView(consultant?.id, "cadastro");
-
+  const { data: instancePhone } = useInstancePhone(consultant?.id);
   useEffect(() => {
     setIsVisible(true);
   }, []);
