@@ -18,46 +18,43 @@ Deno.serve(async (req) => {
   const evolutionUrl = (Deno.env.get("EVOLUTION_API_URL") || "").replace(/\/+$/, "");
   const evolutionKey = Deno.env.get("EVOLUTION_API_KEY") || "";
 
-  if (!evolutionUrl || !evolutionKey) {
-    return new Response(JSON.stringify({ error: "Evolution API not configured" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
+  // Get all instances from our DB
+  const { data: dbInstances } = await supabase
+    .from("whatsapp_instances")
+    .select("instance_name, consultant_id, connected_phone");
 
-  // Fetch all instances from Evolution API
-  const res = await fetch(`${evolutionUrl}/instance/fetchInstances`, {
-    headers: { "Content-Type": "application/json", apikey: evolutionKey },
-  });
-
-  if (!res.ok) {
-    return new Response(JSON.stringify({ error: "Failed to fetch instances", status: res.status }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
-  const instances = await res.json();
   const results: any[] = [];
 
-  for (const inst of instances) {
-    const name = inst?.instance?.instanceName || inst?.instanceName;
-    const owner = inst?.instance?.owner || inst?.owner || "";
-    const phone = owner.replace(/@.*$/, "");
+  for (const dbInst of (dbInstances || [])) {
+    if (dbInst.connected_phone) {
+      results.push({ instance: dbInst.instance_name, phone: dbInst.connected_phone, already_set: true });
+      continue;
+    }
 
-    if (name && phone) {
-      const { error } = await supabase
-        .from("whatsapp_instances")
-        .update({ connected_phone: phone })
-        .eq("instance_name", name);
-
-      results.push({ instance: name, phone, saved: !error, error: error?.message });
-    } else {
-      results.push({ instance: name, phone: null, skipped: true });
+    // Try to get instance details from Evolution API
+    try {
+      const res = await fetch(`${evolutionUrl}/instance/connectionState/${dbInst.instance_name}`, {
+        headers: { "Content-Type": "application/json", apikey: evolutionKey },
+      });
+      const stateData = await res.json();
+      
+      // Also try fetchInstances with instance filter
+      const res2 = await fetch(`${evolutionUrl}/instance/fetchInstances?instanceName=${dbInst.instance_name}`, {
+        headers: { "Content-Type": "application/json", apikey: evolutionKey },
+      });
+      const instanceData = await res2.json();
+      
+      results.push({ 
+        instance: dbInst.instance_name, 
+        state: stateData,
+        instanceDetails: JSON.stringify(instanceData).substring(0, 500),
+      });
+    } catch (e: any) {
+      results.push({ instance: dbInst.instance_name, error: e?.message });
     }
   }
 
-  return new Response(JSON.stringify({ results, total: instances.length }), {
+  return new Response(JSON.stringify({ results }), {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 });
