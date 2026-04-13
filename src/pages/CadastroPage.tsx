@@ -49,8 +49,10 @@ const CadastroPage = () => {
     );
   }
 
-  const phoneMatch = consultant.phone?.match(/\d+/g)?.join('');
-  const phoneNumber = phoneMatch ? `55${phoneMatch}` : "";
+  // Priorizar connected_phone da instância; fallback para telefone do perfil com prefixo 55
+  const fallbackPhone = consultant.phone?.replace(/\D/g, '') || "";
+  const normalizedFallback = fallbackPhone.startsWith("55") ? fallbackPhone : `55${fallbackPhone}`;
+  const phoneNumber = instancePhone || normalizedFallback;
 
   const botMessage = encodeURIComponent(
     "Olá! Gostaria de fazer meu cadastro na iGreen Energy e enviar meus documentos."
