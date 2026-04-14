@@ -518,9 +518,18 @@ export async function executarAutomacao(customerId, options = {}) {
     await ensureDirs();
     
     // ─── 1. Buscar e validar dados ────────────────────────────────────────
-    console.log('\n📥 Buscando dados do cliente...');
+    console.log('\n📥 Buscando dados do cliente + consultor...');
     const cliente = await buscarCliente(customerId);
+    
+    // Extrair igreen_id do consultor para URL individualizada
+    const consultant = cliente.consultants;
+    const consultorId = consultant?.igreen_id || CONSULTOR_ID_FALLBACK;
+    const consultorName = consultant?.name || 'Consultor';
     console.log(`✅ Cliente: ${cliente.name}`);
+    console.log(`👤 Consultor: ${consultorName} (iGreen ID: ${consultorId})`);
+    
+    // URL individualizada por consultor
+    const PORTAL_URL = `https://digital.igreenenergy.com.br/?id=${consultorId}&sendcontract=true`;
     
     const data = formatarDados(cliente);
     
