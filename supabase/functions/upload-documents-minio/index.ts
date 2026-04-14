@@ -222,17 +222,10 @@ Deno.serve(async (req) => {
 
     console.log(`📦 Iniciando upload MinIO para customer: ${customer_id}`);
 
-    // Buscar dados do cliente E consultor
+    // Buscar dados do cliente
     const { data: customer, error: customerError } = await supabase
       .from("customers")
-      .select(`
-        *,
-        consultants:consultant_id (
-          id,
-          name,
-          igreen_id
-        )
-      `)
+      .select("*")
       .eq("id", customer_id)
       .single();
 
@@ -242,6 +235,17 @@ Deno.serve(async (req) => {
         JSON.stringify({ error: "Customer not found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // Buscar consultor separadamente
+    let consultant: any = null;
+    if (customer.consultant_id) {
+      const { data: c } = await supabase
+        .from("consultants")
+        .select("id, name, igreen_id")
+        .eq("id", customer.consultant_id)
+        .single();
+      consultant = c;
     }
 
     // Extrair dados do consultor
