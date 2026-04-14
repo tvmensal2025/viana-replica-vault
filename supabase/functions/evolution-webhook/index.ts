@@ -54,6 +54,18 @@ function isDuplicate(messageId: string): boolean {
   return false;
 }
 
+// ─── Cooldown de reconexão (evitar loop infinito) ────────────────────
+const reconnectCooldowns = new Map<string, number>();
+const RECONNECT_COOLDOWN_MS = 120_000; // 2 minutos entre tentativas
+
+function canReconnect(instance: string): boolean {
+  const now = Date.now();
+  const last = reconnectCooldowns.get(instance) || 0;
+  if (now - last < RECONNECT_COOLDOWN_MS) return false;
+  reconnectCooldowns.set(instance, now);
+  return true;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
