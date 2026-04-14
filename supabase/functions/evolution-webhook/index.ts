@@ -54,6 +54,18 @@ function isDuplicate(messageId: string): boolean {
   return false;
 }
 
+// ─── Cooldown de reconexão (evitar loop infinito) ────────────────────
+const reconnectCooldowns = new Map<string, number>();
+const RECONNECT_COOLDOWN_MS = 120_000; // 2 minutos entre tentativas
+
+function canReconnect(instance: string): boolean {
+  const now = Date.now();
+  const last = reconnectCooldowns.get(instance) || 0;
+  if (now - last < RECONNECT_COOLDOWN_MS) return false;
+  reconnectCooldowns.set(instance, now);
+  return true;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -74,7 +86,8 @@ Deno.serve(async (req) => {
     if (eventType === "connection.update" || eventType === "CONNECTION_UPDATE") {
       const connState = body.data?.state || body.state;
       const connInstance = body.instance || body.data?.instance || req.headers.get("x-instance-name");
-      console.log(`📡 CONNECTION_UPDATE: instance=${connInstance}, state=${connState}`);
+      const statusReason = body.data?.statusReason || 0;
+      console.log(`📡 CONNECTION_UPDATE: instance=${connInstance}, state=${connState}, reason=${statusReason}`);
 
       if (connState === "open" && connInstance) {
         // Extract the owner's phone number from the connection data
@@ -88,6 +101,33 @@ Deno.serve(async (req) => {
             .update({ connected_phone: ownerPhone })
             .eq("instance_name", connInstance);
         }
+      }
+
+      // ─── Auto-reconexão: se a instância caiu, tentar reconectar ────────
+      if (connState === "close" && connInstance && EVOLUTION_API_URL && EVOLUTION_API_KEY && canReconnect(connInstance)) {
+        const baseUrl = EVOLUTION_API_URL.replace(/\/$/, "");
+        console.log(`🔄 Instância ${connInstance} desconectou (reason=${statusReason}). Tentando reconectar em 5s...`);
+        
+        try {
+          await new Promise(r => setTimeout(r, 5000));
+          
+          const reconnRes = await fetchWithTimeout(`${baseUrl}/instance/connect/${connInstance}`, {
+            method: "GET",
+            headers: { "apikey": EVOLUTION_API_KEY },
+            timeout: 10_000,
+          });
+          
+          if (reconnRes.ok) {
+            console.log(`✅ Reconexão iniciada para ${connInstance}`);
+          } else {
+            const errText = await reconnRes.text();
+            console.warn(`⚠️ Falha ao reconectar ${connInstance}: ${reconnRes.status} ${errText.substring(0, 200)}`);
+          }
+        } catch (e: any) {
+          console.warn(`⚠️ Erro ao tentar reconectar ${connInstance}: ${e.message}`);
+        }
+      } else if (connState === "close" && connInstance) {
+        console.log(`⏳ Reconexão em cooldown para ${connInstance}, aguardando 2 min`);
       }
 
       return new Response(JSON.stringify({ ok: true, event: "connection_update" }), {
