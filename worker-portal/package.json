@@ -1,27 +1,24 @@
 {
-  "name": "portal-worker-igreen",
-  "version": "5.1.0",
-  "description": "Portal Worker - Automação iGreen Energy com Playwright",
+  "name": "worker-portal-igreen",
+  "version": "1.0.0",
+  "description": "Worker VPS para automação do portal iGreen com Playwright",
   "type": "module",
   "main": "server.mjs",
   "scripts": {
     "start": "node server.mjs",
-    "dev": "node server.mjs"
+    "dev": "node --watch server.mjs",
+    "test": "node ../scripts/submit-lead-to-portal.mjs --file=../scripts/fixtures/lead-test.json"
   },
-  "keywords": [
-    "playwright",
-    "automation",
-    "igreen",
-    "portal",
-    "worker"
-  ],
-  "author": "iGreen Energy",
-  "license": "MIT",
   "dependencies": {
-    "@supabase/supabase-js": "^2.39.0",
-    "playwright-chromium": "^1.40.0"
+    "@google/generative-ai": "^0.21.0",
+    "@supabase/supabase-js": "^2.97.0",
+    "dotenv": "^17.3.1",
+    "express": "^4.22.1",
+    "playwright": "^1.49.1"
   },
   "engines": {
     "node": ">=18.0.0"
-  }
+  },
+  "author": "Max Nutrition + iGreen Energy",
+  "license": "MIT"
 }
