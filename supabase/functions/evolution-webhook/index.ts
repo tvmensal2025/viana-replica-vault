@@ -158,7 +158,15 @@ Deno.serve(async (req) => {
     }
 
     const phone = normalizePhone(remoteJid.replace("@s.whatsapp.net", ""));
-    console.log(`📱 Mensagem de: ${phone} | Texto: "${messageText}" | Botão: ${buttonId} | Arquivo: ${isFile}`);
+
+    // ─── Rate limit check ─────────────────────────────────────────
+    if (isRateLimited(phone)) {
+      console.warn(`🚫 Rate limited: ${phone} (>${RATE_LIMIT_MAX} msgs em ${RATE_LIMIT_WINDOW_MS}ms)`);
+      return new Response(JSON.stringify({ ok: true, msg: "rate_limited" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
 
     // ─── Buscar ou criar cliente ──────────────────────────────────────
     const statusFinalizados = [
