@@ -83,15 +83,26 @@ export async function executarAutomacao(customerId, supabase) {
     // ─── 3. ABRIR NAVEGADOR ───────────────────────────────────────
     console.log('🌐 Abrindo navegador...');
 
-    browser = await chromium.launch({
-      headless: process.env.HEADLESS === '1',
+    const isHeadless = process.env.HEADLESS !== '0'; // headless por padrão
+    console.log(`🖥️ Modo headless: ${isHeadless}`);
+
+    const launchOptions = {
+      headless: isHeadless,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
         '--disable-blink-features=AutomationControlled',
+        '--start-maximized',
       ],
-    });
+    };
+
+    // Usar Chromium do sistema se disponível
+    if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+      launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+    }
+
+    browser = await chromium.launch(launchOptions);
 
     const context = await browser.newContext({
       viewport: { width: 1280, height: 900 },
