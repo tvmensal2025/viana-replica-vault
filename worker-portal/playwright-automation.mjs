@@ -5,9 +5,6 @@
 
 import { chromium } from 'playwright-chromium';
 
-const IGREEN_CONSULTOR_ID = process.env.IGREEN_CONSULTOR_ID || '124170';
-const PORTAL_URL = `https://digital.igreenenergy.com.br/?id=${IGREEN_CONSULTOR_ID}&sendcontract=true`;
-
 /**
  * Executar automação completa
  */
@@ -18,14 +15,22 @@ export async function executarAutomacao(customerId, supabase) {
   try {
     console.log(`🎯 Iniciando automação para customer: ${customerId}`);
 
-    // ─── 1. BUSCAR DADOS DO CLIENTE ───────────────────────────────
+    // ─── 1. BUSCAR DADOS DO CLIENTE + CONSULTOR ───────────────────
     if (!supabase) {
       throw new Error('Supabase não configurado');
     }
 
+    // Buscar cliente COM consultor (join)
     const { data: customer, error } = await supabase
       .from('customers')
-      .select('*')
+      .select(`
+        *,
+        consultants:consultant_id (
+          id,
+          name,
+          igreen_id
+        )
+      `)
       .eq('id', customerId)
       .single();
 
@@ -33,7 +38,21 @@ export async function executarAutomacao(customerId, supabase) {
       throw new Error(`Cliente não encontrado: ${customerId}`);
     }
 
+    // Extrair dados do consultor
+    const consultant = customer.consultants as any;
+    const consultorId = consultant?.igreen_id || consultant?.id;
+    const consultorName = consultant?.name || 'Consultor';
+
+    if (!consultorId) {
+      throw new Error(`Consultor não encontrado para o cliente: ${customer.name}`);
+    }
+
     console.log(`📊 Dados do cliente carregados: ${customer.name}`);
+    console.log(`👤 Consultor: ${consultorName} (ID: ${consultorId})`);
+
+    // Montar URL do portal com ID do consultor INDIVIDUAL
+    const PORTAL_URL = `https://digital.igreenenergy.com.br/?id=${consultorId}&sendcontract=true`;
+    console.log(`🔗 URL do portal: ${PORTAL_URL}`);
 
     // ─── 2. VALIDAR CAMPOS OBRIGATÓRIOS ───────────────────────────
     const camposObrigatorios = {
