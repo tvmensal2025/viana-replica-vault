@@ -222,10 +222,17 @@ Deno.serve(async (req) => {
 
     console.log(`📦 Iniciando upload MinIO para customer: ${customer_id}`);
 
-    // Buscar dados do cliente
+    // Buscar dados do cliente E consultor
     const { data: customer, error: customerError } = await supabase
       .from("customers")
-      .select("*")
+      .select(`
+        *,
+        consultants:consultant_id (
+          id,
+          name,
+          igreen_id
+        )
+      `)
       .eq("id", customer_id)
       .single();
 
@@ -237,7 +244,14 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Extrair nome e data
+    // Extrair dados do consultor
+    const consultant = customer.consultants as any;
+    const consultantId = consultant?.igreen_id || consultant?.id || "sem_consultor";
+    const consultantName = consultant?.name || "Consultor";
+
+    console.log(`👤 Consultor: ${consultantName} (ID: ${consultantId})`);
+
+    // Extrair nome e data do cliente
     const fullName = customer.name || "Cliente Desconhecido";
     const { firstName, lastName } = extractFirstLastName(fullName);
     const dateFormatted = formatDate(customer.data_nascimento);
@@ -245,8 +259,12 @@ Deno.serve(async (req) => {
     // Normalizar nome para usar no arquivo
     const firstNameNorm = normalizeFileName(firstName);
     const lastNameNorm = normalizeFileName(lastName);
+    
+    // FORMATO: consultor_id/nome_sobrenome_data
     const baseFileName = `${firstNameNorm}_${lastNameNorm}_${dateFormatted}`;
+    const folderPath = `documentos/${consultantId}`;
 
+    console.log(`📝 Consultor: ${consultantId}`);
     console.log(`📝 Nome base do arquivo: ${baseFileName}`);
 
     const uploads: Array<{ type: string; url: string; success: boolean; error?: string }> = [];
@@ -257,7 +275,7 @@ Deno.serve(async (req) => {
         console.log("📄 Baixando conta de energia...");
         const { bytes, contentType } = await downloadFile(customer.electricity_bill_photo_url);
         const ext = getFileExtension(contentType, customer.electricity_bill_photo_url);
-        const objectKey = `documentos/${baseFileName}_conta.${ext}`;
+        const objectKey = `${folderPath}/${baseFileName}_conta.${ext}`;
 
         console.log(`📤 Uploading conta: ${objectKey}`);
         await uploadToMinIO({
@@ -285,7 +303,7 @@ Deno.serve(async (req) => {
         console.log("📄 Baixando documento frente...");
         const { bytes, contentType } = await downloadFile(customer.document_front_url);
         const ext = getFileExtension(contentType, customer.document_front_url);
-        const objectKey = `documentos/${baseFileName}_doc_frente.${ext}`;
+        const objectKey = `${folderPath}/${baseFileName}_doc_frente.${ext}`;
 
         console.log(`📤 Uploading doc frente: ${objectKey}`);
         await uploadToMinIO({
@@ -313,7 +331,7 @@ Deno.serve(async (req) => {
         console.log("📄 Baixando documento verso...");
         const { bytes, contentType } = await downloadFile(customer.document_back_url);
         const ext = getFileExtension(contentType, customer.document_back_url);
-        const objectKey = `documentos/${baseFileName}_doc_verso.${ext}`;
+        const objectKey = `${folderPath}/${baseFileName}_doc_verso.${ext}`;
 
         console.log(`📤 Uploading doc verso: ${objectKey}`);
         await uploadToMinIO({
@@ -344,7 +362,10 @@ Deno.serve(async (req) => {
       JSON.stringify({
         success: true,
         customer_id,
+        consultant_id: consultantId,
+        consultant_name: consultantName,
         base_file_name: baseFileName,
+        folder_path: folderPath,
         uploads,
         summary: {
           total: totalCount,
