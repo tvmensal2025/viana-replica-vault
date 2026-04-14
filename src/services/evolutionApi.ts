@@ -119,10 +119,17 @@ async function request<T>(
             ? (json.response as Record<string, unknown>).message
             : json?.error || json?.message;
 
-        if (Array.isArray(msg) && typeof msg[0] === "string") {
-          detail = msg[0];
+        if (Array.isArray(msg)) {
+          // Handle nested arrays like [["instance requires..."]]
+          const flat = msg.flat();
+          detail = typeof flat[0] === "string" ? flat[0] : JSON.stringify(flat);
         } else if (typeof msg === "string") {
           detail = msg;
+        }
+
+        // Don't crash the whole app for "not connected" — let callers handle gracefully
+        if (/not connected/i.test(detail)) {
+          console.warn(`[EvolutionAPI] Instance not connected: ${detail}`);
         }
 
         throw new Error(detail);
