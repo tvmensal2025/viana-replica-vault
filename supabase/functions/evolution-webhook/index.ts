@@ -220,20 +220,22 @@ Deno.serve(async (req) => {
     let fileUrl: string | null = null;
     let fileBase64: string | null = null;
 
-    // Se tem arquivo, tentar extrair URL ou baixar via Evolution
+    // Se tem arquivo, SEMPRE baixar via Evolution API (getBase64FromMediaMessage)
+    // As URLs mmg.whatsapp.net são criptografadas e expiram — não servem para OCR
     if (isFile) {
-      fileUrl = extractMediaUrl(message);
-      if (!fileUrl) {
-        // Baixar via Evolution API
-        console.log("📥 Baixando mídia via Evolution API...");
-        fileBase64 = await downloadMedia(key, message);
-        if (fileBase64) {
-          // Converter base64 para data URL
-          const mimeType = imageMessage?.mimetype || documentMessage?.mimetype || "application/octet-stream";
-          fileUrl = `data:${mimeType};base64,${fileBase64}`;
-          console.log(`✅ Mídia baixada (${mimeType})`);
+      console.log("📥 Baixando mídia via Evolution API (getBase64FromMediaMessage)...");
+      fileBase64 = await downloadMedia(key, message);
+      if (fileBase64) {
+        const mimeType = imageMessage?.mimetype || documentMessage?.mimetype || "application/octet-stream";
+        fileUrl = `data:${mimeType};base64,${fileBase64}`;
+        console.log(`✅ Mídia baixada via Evolution (${mimeType}, b64 len: ${fileBase64.length})`);
+      } else {
+        // Fallback: tentar URL direta (pode funcionar para URLs públicas)
+        fileUrl = extractMediaUrl(message);
+        if (fileUrl) {
+          console.warn("⚠️ downloadMedia falhou, usando URL direta como fallback:", fileUrl.substring(0, 80));
         } else {
-          console.error("❌ Falha ao baixar mídia");
+          console.error("❌ Falha total ao baixar mídia — sem base64 e sem URL");
         }
       }
     }
