@@ -483,7 +483,12 @@ Deno.serve(async (req) => {
           updates.conversation_step = "aguardando_doc_frente";
           reply = "📄 *CNH*\n\n📸 Envie a *FRENTE da sua CNH*.\n\nFormatos: JPG, PNG ou PDF";
         } else {
-          reply = "Escolha o tipo de documento (toque em um botão):";
+          const sent = await sendButtons(remoteJid, "📋 Qual documento de identidade você vai enviar?\n\nToque em uma opção:", [
+            { id: "tipo_rg_novo", title: "📄 RG Novo" },
+            { id: "tipo_rg_antigo", title: "📄 RG Antigo" },
+            { id: "tipo_cnh", title: "🪪 CNH" },
+          ]);
+          if (!sent) reply = "Escolha: *1* = RG Novo, *2* = RG Antigo, *3* = CNH";
         }
         break;
       }
@@ -1021,7 +1026,10 @@ Deno.serve(async (req) => {
           updates.conversation_step = "finalizando";
           reply = "";
         } else {
-          reply = getReplyForStep("ask_finalizar", customer);
+          const sent = await sendButtons(remoteJid, "📋 Todos os dados foram preenchidos!\n\nDeseja finalizar o cadastro?", [
+            { id: "btn_finalizar", title: "✅ Finalizar" },
+          ]);
+          if (!sent) reply = "Digite *FINALIZAR* ou *1* para confirmar o cadastro:";
         }
         break;
       }
@@ -1067,14 +1075,19 @@ Deno.serve(async (req) => {
         break;
       }
 
-      // ─── DEFAULT ─────────────────────────────────────────────────────
+      // ─── DEFAULT (step desconhecido — NUNCA travar) ──────────────────
       default: {
-        updates.conversation_step = "welcome";
-        reply =
-          `👋 Olá! Eu sou o assistente da *${nomeRepresentante}* em parceria com a *iGreen Energy*!\n\n` +
-          "📸 *Envie uma FOTO ou PDF da sua conta de energia* para começarmos!\n\n" +
-          "Formatos aceitos: JPG, PNG ou PDF";
-        updates.conversation_step = "aguardando_conta";
+        console.warn(`⚠️ Step desconhecido: ${currentStep} — resetando para aguardando_conta`);
+        // Não resetar se é um step de edição (editing_*)
+        if (currentStep?.startsWith("editing_")) {
+          reply = "❌ Opção inválida. Digite novamente:";
+        } else {
+          updates.conversation_step = "aguardando_conta";
+          reply =
+            `👋 Olá! Eu sou o assistente da *${nomeRepresentante}* em parceria com a *iGreen Energy*!\n\n` +
+            "📸 *Envie uma FOTO ou PDF da sua conta de energia* para começarmos!\n\n" +
+            "Formatos aceitos: JPG, PNG ou PDF";
+        }
         break;
       }
     }
