@@ -263,7 +263,7 @@ Deno.serve(async (req) => {
     const statusFinalizados = [
       'data_complete', 'portal_submitting', 'awaiting_otp', 'validating_otp',
       'awaiting_manual_submit', 'portal_submitted', 'registered_igreen',
-      'awaiting_signature', 'complete', 'automation_failed',
+      'awaiting_signature', 'complete',
     ];
     const stepsFinalizados = ['complete', 'portal_submitting'];
 
@@ -277,6 +277,14 @@ Deno.serve(async (req) => {
       .limit(1);
 
     let customer = activeRecords?.[0] || null;
+
+    // Se a automação falhou, permitir que o cliente recomece
+    if (customer && customer.status === "automation_failed") {
+      console.log(`♻️ Telefone ${phone}: automation_failed → resetando para welcome`);
+      await supabase.from("customers").update({ conversation_step: "welcome", status: "pending", error_message: null }).eq("id", customer.id);
+      customer.conversation_step = "welcome";
+      customer.status = "pending";
+    }
 
     if (customer && stepsFinalizados.includes(customer.conversation_step || "")) {
       console.log(`📱 Telefone ${phone}: cliente com step="${customer.conversation_step}" (finalizado). Criando novo.`);
