@@ -1,9 +1,8 @@
 FROM node:20-slim
 
-# Instalar dependências do Chromium + xvfb
+# Instalar Chromium do sistema + xvfb + dependências
 RUN apt-get update && apt-get install -y \
     chromium \
-    chromium-driver \
     xvfb \
     fonts-liberation \
     libnss3 \
@@ -22,6 +21,7 @@ RUN apt-get update && apt-get install -y \
     libxdamage1 \
     libxrandr2 \
     xdg-utils \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -29,7 +29,11 @@ WORKDIR /app
 # Copiar package.json
 COPY package.json ./
 
-# Instalar dependências (npm install gera o lock file automaticamente)
+# Pular download do Chromium pelo Playwright (usaremos o do sistema)
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
+
+# Instalar dependências
 RUN npm install --omit=dev --no-package-lock
 
 # Copiar código
@@ -38,12 +42,14 @@ COPY . .
 # Expor porta
 EXPOSE 3100
 
-# Variáveis de ambiente padrão
+# Variáveis de ambiente
 ENV HEADLESS=1
 ENV PORT=3100
 ENV NODE_ENV=production
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
-# Comando de inicialização com xvfb-run
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+  CMD curl -sf http://localhost:3100/health || exit 1
+
+# Comando de inicialização com xvfb
 CMD ["xvfb-run", "--auto-servernum", "--server-args=-screen 0 1280x900x24", "node", "server.mjs"]

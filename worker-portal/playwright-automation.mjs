@@ -4,13 +4,33 @@
  */
 
 import { chromium } from 'playwright-chromium';
+import fs from 'fs';
+
+// Detectar Chromium do sistema
+function findSystemChromium() {
+  const paths = [
+    process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
+    process.env.PUPPETEER_EXECUTABLE_PATH,
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/google-chrome',
+  ].filter(Boolean);
+
+  for (const p of paths) {
+    try {
+      fs.accessSync(p, fs.constants.X_OK);
+      return p;
+    } catch { /* próximo */ }
+  }
+  return undefined;
+}
 
 /**
  * Executar automação completa
  */
 export async function executarAutomacao(customerId, supabase) {
   let browser = null;
-  let page = null;
 
   try {
     console.log(`🎯 Iniciando automação para customer: ${customerId}`);
@@ -20,7 +40,6 @@ export async function executarAutomacao(customerId, supabase) {
       throw new Error('Supabase não configurado');
     }
 
-    // Buscar cliente COM consultor (join)
     const { data: customer, error } = await supabase
       .from('customers')
       .select(`
@@ -38,8 +57,7 @@ export async function executarAutomacao(customerId, supabase) {
       throw new Error(`Cliente não encontrado: ${customerId}`);
     }
 
-    // Extrair dados do consultor
-    const consultant = customer.consultants as any;
+    const consultant = customer.consultants;
     const consultorId = consultant?.igreen_id || consultant?.id;
     const consultorName = consultant?.name || 'Consultor';
 
@@ -47,12 +65,9 @@ export async function executarAutomacao(customerId, supabase) {
       throw new Error(`Consultor não encontrado para o cliente: ${customer.name}`);
     }
 
-    console.log(`📊 Dados do cliente carregados: ${customer.name}`);
-    console.log(`👤 Consultor: ${consultorName} (ID: ${consultorId})`);
+    console.log(`📊 Dados: ${customer.name} | Consultor: ${consultorName} (${consultorId})`);
 
-    // Montar URL do portal com ID do consultor INDIVIDUAL
     const PORTAL_URL = `https://digital.igreenenergy.com.br/?id=${consultorId}&sendcontract=true`;
-    console.log(`🔗 URL do portal: ${PORTAL_URL}`);
 
     // ─── 2. VALIDAR CAMPOS OBRIGATÓRIOS ───────────────────────────
     const camposObrigatorios = {
@@ -83,154 +98,144 @@ export async function executarAutomacao(customerId, supabase) {
     // ─── 3. ABRIR NAVEGADOR ───────────────────────────────────────
     console.log('🌐 Abrindo navegador...');
 
-    // SEMPRE headless em produção — evita erro de X Server
-    const isHeadless = process.env.HEADLESS !== '0';
-    console.log(`🖥️ Modo headless: ${isHeadless}`);
-
-    // Auto-detectar Chromium do sistema (prioridade sobre Playwright bundled)
-    const systemChromiumPaths = [
-      process.env.PUPPETEER_EXECUTABLE_PATH,
-      '/usr/bin/chromium',
-      '/usr/bin/chromium-browser',
-      '/usr/bin/google-chrome-stable',
-      '/usr/bin/google-chrome',
-    ].filter(Boolean);
-
-    let executablePath = undefined;
-    for (const p of systemChromiumPaths) {
-      try {
-        const { accessSync } = await import('fs');
-        accessSync(p);
-        executablePath = p;
-        console.log(`✅ Usando Chromium do sistema: ${p}`);
-        break;
-      } catch { /* não existe, tentar próximo */ }
+    const executablePath = findSystemChromium();
+    if (executablePath) {
+      console.log(`✅ Chromium: ${executablePath}`);
+    } else {
+      console.log('⚠️ Usando Playwright bundled Chromium');
     }
 
-    if (!executablePath) {
-      console.log('⚠️ Nenhum Chromium do sistema encontrado — usando Playwright bundled');
-    }
-
-    const launchOptions = {
-      headless: isHeadless,
+    browser = await chromium.launch({
+      headless: true,
       executablePath,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
         '--disable-blink-features=AutomationControlled',
-        '--start-maximized',
         '--disable-gpu',
         '--disable-software-rasterizer',
+        '--single-process',
       ],
-    };
-
-    browser = await chromium.launch(launchOptions);
+    });
 
     const context = await browser.newContext({
       viewport: { width: 1280, height: 900 },
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     });
 
-    page = await context.newPage();
+    const page = await context.newPage();
 
     // ─── 4. NAVEGAR PARA O PORTAL ─────────────────────────────────
-    console.log(`🌐 Navegando para: ${PORTAL_URL}`);
-    await page.goto(PORTAL_URL, { waitUntil: 'networkidle', timeout: 30000 });
+    console.log(`🌐 Navegando: ${PORTAL_URL}`);
+    await page.goto(PORTAL_URL, { waitUntil: 'networkidle', timeout: 45000 });
     await page.waitForTimeout(2000);
-
     console.log('✅ Portal carregado');
 
     // ─── 5. PREENCHER FORMULÁRIO ──────────────────────────────────
     console.log('📝 Preenchendo formulário...');
 
+    // Helper para preencher campo com retry
+    async function fillField(selector, value, fieldName) {
+      if (!value) return false;
+      try {
+        const field = page.locator(selector).first();
+        if (await field.count() > 0) {
+          await field.scrollIntoViewIfNeeded().catch(() => {});
+          await field.fill('');
+          await field.fill(String(value));
+          await page.waitForTimeout(300);
+          console.log(`  ✓ ${fieldName}: ${String(value).substring(0, 30)}`);
+          return true;
+        }
+        console.log(`  ⚠ ${fieldName}: campo não encontrado (${selector})`);
+        return false;
+      } catch (err) {
+        console.log(`  ⚠ ${fieldName}: ${err.message}`);
+        return false;
+      }
+    }
+
+    // Helper para clicar com retry
+    async function clickButton(textOrSelector, label, timeout = 15000) {
+      try {
+        const btn = page.locator(textOrSelector).first();
+        if (await btn.count() > 0) {
+          await btn.scrollIntoViewIfNeeded().catch(() => {});
+          await btn.click();
+          await page.waitForLoadState('networkidle', { timeout }).catch(() => {});
+          await page.waitForTimeout(1000);
+          console.log(`  ✓ Clicou: ${label}`);
+          return true;
+        }
+        console.log(`  ⚠ Botão não encontrado: ${label}`);
+        return false;
+      } catch (err) {
+        console.log(`  ⚠ Erro ao clicar ${label}: ${err.message}`);
+        return false;
+      }
+    }
+
     // Fase 1: CEP + Valor da conta
-    await page.fill('input[name="cep"]', formatarCEP(customer.cep));
-    await page.waitForTimeout(300);
+    await fillField('input[name="cep"]', formatarCEP(customer.cep), 'CEP');
 
     const valorConta = customer.electricity_bill_value || 300;
-    await page.fill('input[name="valor"]', String(valorConta));
-    await page.waitForTimeout(300);
+    await fillField('input[name="valor"]', String(valorConta), 'Valor conta');
 
-    await page.click('button:has-text("Calcular")');
-    await page.waitForLoadState('networkidle', { timeout: 15000 });
+    await clickButton('button:has-text("Calcular")', 'Calcular');
 
     // Fase 2: Garantir desconto
-    await page.click('button:has-text("Garantir")');
-    await page.waitForLoadState('networkidle', { timeout: 15000 });
+    await clickButton('button:has-text("Garantir")', 'Garantir desconto');
 
     // Fase 3: Dados pessoais
-    await page.fill('input[name="nome"]', customer.name);
-    await page.waitForTimeout(300);
-
-    await page.fill('input[name="cpf"]', formatarCPF(customer.cpf));
-    await page.waitForTimeout(300);
+    await fillField('input[name="nome"]', customer.name, 'Nome');
+    await fillField('input[name="cpf"]', formatarCPF(customer.cpf), 'CPF');
 
     if (customer.data_nascimento) {
-      await page.fill('input[name="nascimento"]', customer.data_nascimento);
-      await page.waitForTimeout(300);
+      await fillField('input[name="nascimento"]', customer.data_nascimento, 'Nascimento');
     }
 
-    await page.fill('input[name="whatsapp"]', formatarTelefone(customer.phone_whatsapp));
-    await page.waitForTimeout(300);
-
-    await page.fill('input[name="email"]', customer.email);
-    await page.waitForTimeout(300);
-
-    await page.fill('input[name="email_confirm"]', customer.email);
-    await page.waitForTimeout(300);
+    await fillField('input[name="whatsapp"]', formatarTelefone(customer.phone_whatsapp), 'WhatsApp');
+    await fillField('input[name="email"]', customer.email, 'Email');
+    await fillField('input[name="email_confirm"]', customer.email, 'Confirmar email');
 
     // Endereço
-    await page.fill('input[name="cep"]', formatarCEP(customer.cep));
-    await page.waitForTimeout(1000); // Aguardar autocomplete
+    await fillField('input[name="cep"]', formatarCEP(customer.cep), 'CEP (endereço)');
+    await page.waitForTimeout(1500); // Aguardar autocomplete
 
-    await page.fill('input[name="endereco"]', customer.address_street);
-    await page.waitForTimeout(300);
-
-    await page.fill('input[name="numero"]', customer.address_number);
-    await page.waitForTimeout(300);
+    await fillField('input[name="endereco"]', customer.address_street, 'Endereço');
+    await fillField('input[name="numero"]', customer.address_number, 'Número');
 
     if (customer.address_neighborhood) {
-      await page.fill('input[name="bairro"]', customer.address_neighborhood);
-      await page.waitForTimeout(300);
+      await fillField('input[name="bairro"]', customer.address_neighborhood, 'Bairro');
     }
-
     if (customer.address_city) {
-      await page.fill('input[name="cidade"]', customer.address_city);
-      await page.waitForTimeout(300);
+      await fillField('input[name="cidade"]', customer.address_city, 'Cidade');
     }
-
     if (customer.address_state) {
-      await page.fill('input[name="estado"]', customer.address_state);
-      await page.waitForTimeout(300);
+      await fillField('input[name="estado"]', customer.address_state, 'Estado');
     }
-
     if (customer.address_complement) {
-      await page.fill('input[name="complemento"]', customer.address_complement);
-      await page.waitForTimeout(300);
+      await fillField('input[name="complemento"]', customer.address_complement, 'Complemento');
     }
 
     // Dados da conta de energia
-    await page.fill('input[name="distribuidora"]', customer.distribuidora);
-    await page.waitForTimeout(300);
-
-    await page.fill('input[name="instalacao"]', customer.numero_instalacao);
-    await page.waitForTimeout(300);
+    await fillField('input[name="distribuidora"]', customer.distribuidora, 'Distribuidora');
+    await fillField('input[name="instalacao"]', customer.numero_instalacao, 'Nº instalação');
 
     console.log('✅ Formulário preenchido');
 
     // ─── 6. SUBMETER FORMULÁRIO ──────────────────────────────────
-    console.log('🎉 Clicando em Calcular/Garantir/Enviar...');
+    console.log('📤 Submetendo...');
 
-    // Tentar clicar no botão de envio do formulário
-    const submitButton = page.locator('button:has-text("Enviar"), button:has-text("Finalizar"), button:has-text("Cadastrar")').first();
-    if (await submitButton.count() > 0) {
-      await submitButton.click();
-      await page.waitForTimeout(4000);
-    }
+    await clickButton(
+      'button:has-text("Enviar"), button:has-text("Finalizar"), button:has-text("Cadastrar")',
+      'Enviar/Finalizar',
+      20000
+    );
 
     // ─── 7. VERIFICAR SE PRECISA OTP ──────────────────────────────
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(3000);
 
     const otpInput = page.locator('input[placeholder*="digo"], input[name="otp"], input[placeholder*="SMS"], input[placeholder*="código"]').first();
     const needsOTP = await otpInput.count() > 0;
@@ -238,7 +243,6 @@ export async function executarAutomacao(customerId, supabase) {
     if (needsOTP) {
       console.log('📱 Campo OTP detectado - aguardando código do cliente...');
 
-      // Atualizar status E conversation_step para que o webhook saiba aceitar OTP
       await supabase
         .from('customers')
         .update({
@@ -247,7 +251,19 @@ export async function executarAutomacao(customerId, supabase) {
         })
         .eq('id', customerId);
 
-      // Aguardar OTP (polling no banco - o cliente digita no WhatsApp)
+      // Enviar mensagem pedindo OTP via Evolution API
+      try {
+        await enviarMensagemWhatsApp(
+          customerId,
+          '📱 *Código de verificação!*\n\n' +
+          'Você recebeu um SMS com um código de 6 dígitos.\n' +
+          'Por favor, digite o código aqui para concluir seu cadastro.',
+          supabase
+        );
+      } catch (e) {
+        console.warn('⚠️ Erro ao pedir OTP via WhatsApp:', e.message);
+      }
+
       const otpCode = await aguardarOTP(customerId, supabase);
 
       if (otpCode) {
@@ -255,47 +271,48 @@ export async function executarAutomacao(customerId, supabase) {
         await otpInput.fill(otpCode);
         await page.waitForTimeout(1000);
 
-        // Clicar no botão de validar/confirmar OTP
-        const confirmButton = page.locator('button:has-text("Validar"), button:has-text("Confirmar"), button:has-text("Enviar"), button[type="submit"]').first();
-        if (await confirmButton.count() > 0) {
-          await confirmButton.click();
-          await page.waitForTimeout(5000);
-        }
+        await clickButton(
+          'button:has-text("Validar"), button:has-text("Confirmar"), button:has-text("Enviar"), button[type="submit"]',
+          'Confirmar OTP',
+          20000
+        );
       } else {
-        throw new Error('Timeout aguardando OTP');
+        throw new Error('Timeout aguardando OTP do cliente');
       }
     }
 
-    // ─── 8. CAPTURAR LINK DE ASSINATURA (CERTOSIGN) ───────────────
-    await page.waitForTimeout(3000);
+    // ─── 8. CAPTURAR LINK DE ASSINATURA ───────────────────────────
+    await page.waitForTimeout(4000);
 
-    // Tentar capturar o link de assinatura da página final
-    let linkAssinatura = page.url();
+    let linkAssinatura = null;
 
-    // Procurar por links de assinatura na página (CertoSign, D4Sign, etc.)
+    // Procurar links de assinatura
     const signatureLinks = await page.locator('a[href*="certosign"], a[href*="d4sign"], a[href*="assinatura"], a[href*="sign"]').all();
     for (const link of signatureLinks) {
       const href = await link.getAttribute('href');
-      if (href) {
+      if (href && href.startsWith('http')) {
         linkAssinatura = href;
-        console.log(`🔗 Link de assinatura encontrado: ${href}`);
         break;
       }
     }
 
-    // Se não encontrou link explícito, verificar texto da página
-    if (linkAssinatura === page.url()) {
-      const pageText = await page.textContent('body');
+    // Fallback: procurar no texto da página
+    if (!linkAssinatura) {
+      const pageText = await page.textContent('body').catch(() => '');
       const linkMatch = pageText?.match(/(https?:\/\/[^\s]*(?:certosign|d4sign|assinatura|sign)[^\s]*)/i);
       if (linkMatch) {
         linkAssinatura = linkMatch[1];
-        console.log(`🔗 Link de assinatura extraído do texto: ${linkAssinatura}`);
       }
     }
 
-    console.log(`📄 URL final / Link assinatura: ${linkAssinatura}`);
+    // Fallback: URL atual da página
+    if (!linkAssinatura) {
+      linkAssinatura = page.url();
+    }
 
-    // ─── 9. ATUALIZAR BANCO E ENVIAR LINK VIA WHATSAPP ────────────
+    console.log(`📄 Link assinatura: ${linkAssinatura}`);
+
+    // ─── 9. ATUALIZAR BANCO E ENVIAR LINK ─────────────────────────
     await supabase
       .from('customers')
       .update({
@@ -305,39 +322,55 @@ export async function executarAutomacao(customerId, supabase) {
       })
       .eq('id', customerId);
 
-    // Enviar link de assinatura via WhatsApp
+    // Enviar link via WhatsApp
     try {
-      await enviarLinkAssinaturaWhatsApp(customerId, linkAssinatura, supabase);
+      await enviarMensagemWhatsApp(
+        customerId,
+        '🎉 *Parabéns! Seu cadastro foi realizado com sucesso!*\n\n' +
+        '📝 Agora falta apenas a *assinatura digital* para finalizar.\n\n' +
+        `🔗 Acesse o link abaixo para assinar:\n${linkAssinatura}\n\n` +
+        '⚠️ *Importante:*\n' +
+        '• Abra o link pelo celular\n' +
+        '• Siga as instruções de validação facial\n' +
+        '• O link expira em 48 horas\n\n' +
+        'Qualquer dúvida, responda aqui! ☀️🌱',
+        supabase
+      );
       console.log('✅ Link de assinatura enviado via WhatsApp!');
     } catch (whatsErr) {
-      console.error('⚠️ Erro ao enviar link via WhatsApp (não-bloqueante):', whatsErr.message);
+      console.error('⚠️ Erro ao enviar link via WhatsApp:', whatsErr.message);
     }
 
-    console.log('✅ Automação concluída!');
+    console.log('✅ Automação concluída com sucesso!');
 
   } catch (error) {
     console.error('❌ Erro na automação:', error.message);
     throw error;
+  } finally {
+    // SEMPRE fechar o navegador para evitar leak de memória
+    if (browser) {
+      try {
+        await browser.close();
+        console.log('🔒 Navegador fechado');
+      } catch (e) {
+        console.warn('⚠️ Erro ao fechar navegador:', e.message);
+      }
+    }
   }
 }
 
 /**
- * Enviar link de assinatura via WhatsApp (Evolution API)
+ * Enviar mensagem genérica via WhatsApp (Evolution API)
  */
-async function enviarLinkAssinaturaWhatsApp(customerId, linkAssinatura, supabase) {
-  // Buscar dados do cliente + instância do consultor
+async function enviarMensagemWhatsApp(customerId, mensagem, supabase) {
   const { data: customer } = await supabase
     .from('customers')
     .select('phone_whatsapp, consultant_id')
     .eq('id', customerId)
     .single();
 
-  if (!customer) {
-    console.warn('⚠️ Cliente não encontrado para envio WhatsApp');
-    return;
-  }
+  if (!customer) throw new Error('Cliente não encontrado');
 
-  // Buscar instância WhatsApp do consultor
   const { data: instance } = await supabase
     .from('whatsapp_instances')
     .select('instance_name')
@@ -345,33 +378,17 @@ async function enviarLinkAssinaturaWhatsApp(customerId, linkAssinatura, supabase
     .limit(1)
     .single();
 
-  if (!instance) {
-    console.warn('⚠️ Instância WhatsApp não encontrada para o consultor');
-    return;
-  }
+  if (!instance) throw new Error('Instância WhatsApp não encontrada');
 
   const EVOLUTION_API_URL = (process.env.EVOLUTION_API_URL || '').replace(/\/$/, '');
   const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '';
 
   if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
-    console.warn('⚠️ EVOLUTION_API_URL ou EVOLUTION_API_KEY não configurados');
-    return;
+    throw new Error('EVOLUTION_API_URL ou EVOLUTION_API_KEY não configurados');
   }
 
-  // Normalizar telefone para JID
   let phone = (customer.phone_whatsapp || '').replace(/\D/g, '');
   if (!phone.startsWith('55')) phone = '55' + phone;
-  const remoteJid = `${phone}@s.whatsapp.net`;
-
-  const mensagem =
-    '🎉 *Parabéns! Seu cadastro foi realizado com sucesso!*\n\n' +
-    '📝 Agora falta apenas a *assinatura digital* para finalizar.\n\n' +
-    `🔗 Acesse o link abaixo para assinar:\n${linkAssinatura}\n\n` +
-    '⚠️ *Importante:*\n' +
-    '• Abra o link pelo celular\n' +
-    '• Siga as instruções de validação facial\n' +
-    '• O link expira em 48 horas\n\n' +
-    'Qualquer dúvida, responda aqui! ☀️🌱';
 
   const res = await fetch(`${EVOLUTION_API_URL}/message/sendText/${instance.instance_name}`, {
     method: 'POST',
@@ -380,7 +397,7 @@ async function enviarLinkAssinaturaWhatsApp(customerId, linkAssinatura, supabase
       'apikey': EVOLUTION_API_KEY,
     },
     body: JSON.stringify({
-      number: remoteJid,
+      number: `${phone}@s.whatsapp.net`,
       text: mensagem,
     }),
   });
@@ -390,11 +407,11 @@ async function enviarLinkAssinaturaWhatsApp(customerId, linkAssinatura, supabase
     throw new Error(`Evolution API ${res.status}: ${body.substring(0, 200)}`);
   }
 
-  console.log(`✅ Mensagem enviada para ${remoteJid} via instância ${instance.instance_name}`);
+  console.log(`✅ Msg enviada para ${phone} via ${instance.instance_name}`);
 }
 
 /**
- * Aguardar OTP do cliente
+ * Aguardar OTP do cliente (polling no banco)
  */
 async function aguardarOTP(customerId, supabase, timeoutMs = 180000) {
   const inicio = Date.now();
@@ -403,7 +420,6 @@ async function aguardarOTP(customerId, supabase, timeoutMs = 180000) {
   while (Date.now() - inicio < timeoutMs) {
     tentativas++;
 
-    // Buscar OTP no banco
     const { data: customer } = await supabase
       .from('customers')
       .select('otp_code, otp_received_at')
@@ -414,7 +430,6 @@ async function aguardarOTP(customerId, supabase, timeoutMs = 180000) {
       return customer.otp_code;
     }
 
-    // Feedback a cada 30 segundos
     if (tentativas % 10 === 0) {
       console.log(`⏳ Aguardando OTP... (${Math.floor((Date.now() - inicio) / 1000)}s)`);
     }
@@ -422,7 +437,7 @@ async function aguardarOTP(customerId, supabase, timeoutMs = 180000) {
     await new Promise(resolve => setTimeout(resolve, 3000));
   }
 
-  throw new Error(`Timeout após ${tentativas} tentativas aguardando OTP`);
+  return null; // Retorna null em vez de throw para tratamento mais limpo
 }
 
 /**
@@ -430,21 +445,18 @@ async function aguardarOTP(customerId, supabase, timeoutMs = 180000) {
  */
 function formatarCPF(cpf) {
   if (!cpf) return '';
-  const numeros = cpf.replace(/\D/g, '');
-  return numeros.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+  return cpf.replace(/\D/g, '').replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
 }
 
 function formatarCEP(cep) {
   if (!cep) return '';
-  const numeros = cep.replace(/\D/g, '');
-  return numeros.replace(/(\d{5})(\d{3})/, '$1-$2');
+  return cep.replace(/\D/g, '').replace(/(\d{5})(\d{3})/, '$1-$2');
 }
 
 function formatarTelefone(tel) {
   if (!tel) return '';
-  const numeros = tel.replace(/\D/g, '');
-  if (numeros.length === 11) {
-    return `+55 (${numeros.slice(0, 2)}) ${numeros.slice(2, 7)}-${numeros.slice(7)}`;
-  }
-  return `+55 ${numeros}`;
+  const n = tel.replace(/\D/g, '');
+  if (n.length === 11) return `+55 (${n.slice(0, 2)}) ${n.slice(2, 7)}-${n.slice(7)}`;
+  if (n.length === 13 && n.startsWith('55')) return `+55 (${n.slice(2, 4)}) ${n.slice(4, 9)}-${n.slice(9)}`;
+  return `+55 ${n}`;
 }
