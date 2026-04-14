@@ -1,0 +1,27 @@
+{
+  "name": "portal-worker-igreen",
+  "version": "5.1.0",
+  "description": "Portal Worker - Automação iGreen Energy com Playwright",
+  "type": "module",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node server.mjs"
+  },
+  "keywords": [
+    "playwright",
+    "automation",
+    "igreen",
+    "portal",
+    "worker"
+  ],
+  "author": "iGreen Energy",
+  "license": "MIT",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "playwright-chromium": "^1.40.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

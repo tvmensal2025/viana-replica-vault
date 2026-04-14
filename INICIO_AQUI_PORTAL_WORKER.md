@@ -20,7 +20,54 @@ https://easypanel.io
 
 ---
 
-### **2️⃣ CORRIGIR DOCKERFILE** (2 min)
+### **2️⃣ CORRIGIR REPOSITÓRIO** (2 min)
+
+**Aba: Source → Github**
+
+**❌ ERRO ATUAL:**
+```
+Repositório: viana-replica-vault
+Caminho de Build: /worker-portal
+```
+
+**O portal worker NÃO está neste repositório!**
+
+---
+
+**✅ OPÇÃO 1: Usar repositório existente (se já existe)**
+
+Se você já tem o código do portal worker em outro repositório:
+
+```
+Proprietário: tvmensal2025
+Repositório: whapi-connect-joy
+Ramo: main
+Caminho de Build: /worker-portal
+```
+
+**✅ Salvar**
+
+---
+
+**✅ OPÇÃO 2: Criar novo repositório**
+
+Se não existe, você precisa:
+
+1. Criar repositório no GitHub: `portal-worker-igreen`
+2. Fazer upload do código do portal worker
+3. Configurar no Easypanel:
+   ```
+   Proprietário: tvmensal2025
+   Repositório: portal-worker-igreen
+   Ramo: main
+   Caminho de Build: /
+   ```
+
+**✅ Salvar**
+
+---
+
+### **3️⃣ CORRIGIR DOCKERFILE** (2 min)
 
 **Aba: Source → Dockerfile**
 
@@ -55,7 +102,7 @@ CMD ["xvfb-run", "--auto-servernum", "--server-args=-screen 0 1280x900x24", "nod
 
 ---
 
-### **3️⃣ VERIFICAR VARIÁVEIS** (2 min)
+### **4️⃣ VERIFICAR VARIÁVEIS** (2 min)
 
 **Aba: Environment**
 
@@ -75,7 +122,7 @@ PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 ---
 
-### **4️⃣ IMPLANTAR** (5 min)
+### **5️⃣ IMPLANTAR** (5 min)
 
 **Clicar no botão verde "Implantar"**
 
