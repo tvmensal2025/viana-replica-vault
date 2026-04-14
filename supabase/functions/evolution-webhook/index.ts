@@ -278,6 +278,14 @@ Deno.serve(async (req) => {
 
     let customer = activeRecords?.[0] || null;
 
+    // Se a automação falhou, permitir que o cliente recomece
+    if (customer && customer.status === "automation_failed") {
+      console.log(`♻️ Telefone ${phone}: automation_failed → resetando para welcome`);
+      await supabase.from("customers").update({ conversation_step: "welcome", status: "pending", error_message: null }).eq("id", customer.id);
+      customer.conversation_step = "welcome";
+      customer.status = "pending";
+    }
+
     if (customer && stepsFinalizados.includes(customer.conversation_step || "")) {
       console.log(`📱 Telefone ${phone}: cliente com step="${customer.conversation_step}" (finalizado). Criando novo.`);
       customer = null;
