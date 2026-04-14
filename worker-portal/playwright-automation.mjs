@@ -557,11 +557,11 @@ export async function executarAutomacao(customerId, options = {}) {
     await closeActiveBrowser();   // Garante que só 1 browser existe
     await killOrphanedChromium(); // Mata processos órfãos do sistema
     
-    const isHeadless = headless !== undefined ? Boolean(headless) : (process.env.HEADLESS === '1');
+    const isHeadless = headless !== undefined ? Boolean(headless) : (process.env.HEADLESS !== '0');
     console.log(`   🖥️  headless=${isHeadless} (HEADLESS env=${process.env.HEADLESS})`);
     browser = await chromium.launch({
-      headless: false,
-      slowMo: 100,
+      headless: isHeadless,
+      slowMo: isHeadless ? 50 : 100,
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--start-maximized'],
     });
     activeBrowser = browser; // Registrar como browser ativo

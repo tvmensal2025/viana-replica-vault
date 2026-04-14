@@ -31,7 +31,7 @@ RUN chmod +x start.sh
 # Variáveis de ambiente
 ENV NODE_ENV=production
 ENV PORT=3100
-ENV HEADLESS=0
+ENV HEADLESS=1
 ENV DISPLAY=:99
 
 # Expor portas: 3100 (API) + 6080 (noVNC web)
