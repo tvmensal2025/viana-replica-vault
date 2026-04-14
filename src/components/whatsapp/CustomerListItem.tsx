@@ -1,6 +1,7 @@
 import {
   Trash2, Phone, Mail, MapPin, Zap, ChevronDown, ChevronUp, Pencil,
   CreditCard, User, MessageCircle, Building2, AlertTriangle, FileText, ClipboardCopy, Users,
+  Download, Image, FileDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
