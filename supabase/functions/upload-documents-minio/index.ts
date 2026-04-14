@@ -248,8 +248,6 @@ Deno.serve(async (req) => {
       consultant = c;
     }
 
-    // Extrair dados do consultor
-    const consultant = customer.consultants as any;
     const consultantId = consultant?.igreen_id || consultant?.id || "sem_consultor";
     const consultantName = consultant?.name || "Consultor";
 
