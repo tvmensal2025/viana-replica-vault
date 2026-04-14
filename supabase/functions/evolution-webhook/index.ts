@@ -263,7 +263,7 @@ Deno.serve(async (req) => {
     const statusFinalizados = [
       'data_complete', 'portal_submitting', 'awaiting_otp', 'validating_otp',
       'awaiting_manual_submit', 'portal_submitted', 'registered_igreen',
-      'awaiting_signature', 'complete', 'automation_failed',
+      'awaiting_signature', 'complete',
     ];
     const stepsFinalizados = ['complete', 'portal_submitting'];
 
