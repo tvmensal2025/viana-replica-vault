@@ -12,7 +12,7 @@ export function normalizePhone(raw: string): string {
 // ─── Timeouts (ms) para evitar travamentos ──────────────────────────────
 export const TIMEOUT_VIA_CEP = 10_000;
 export const TIMEOUT_FETCH_IMAGE = 30_000;
-export const TIMEOUT_GEMINI = 60_000;
+export const TIMEOUT_GEMINI = 50_000; // 50s (buffer de 10s antes do timeout da Edge Function)
 export const TIMEOUT_WHAPI = 20_000;
 export const TIMEOUT_EVOLUTION = 20_000;
 
