@@ -543,7 +543,13 @@ Deno.serve(async (req) => {
           const cpf = updates.cpf || customer.cpf || "—";
           const rg = updates.rg || customer.rg || "—";
           const nasc = updates.data_nascimento || customer.data_nascimento || "—";
-          reply = `📋 *Dados extraídos da CNH:*\n\n👤 Nome: *${nome}*\n🆔 CPF: *${cpf}*\n🪪 RG: *${rg}*\n🎂 Nascimento: *${nasc}*\n\n✅ Dados corretos?\n\n1️⃣ *SIM* - Continuar\n2️⃣ *NÃO* - Reenviar CNH\n3️⃣ *EDITAR* - Corrigir dados`;
+          const chnConfirmMsg = `📋 *Dados extraídos da CNH:*\n\n👤 Nome: *${nome}*\n🆔 CPF: *${cpf}*\n🪪 RG: *${rg}*\n🎂 Nascimento: *${nasc}*\n\nEstá tudo correto?`;
+          const sent = await sendButtons(remoteJid, chnConfirmMsg, [
+            { id: "sim_doc", title: "✅ SIM" },
+            { id: "nao_doc", title: "❌ NÃO" },
+            { id: "editar_doc", title: "✏️ EDITAR" }
+          ]);
+          reply = "";
           break;
         }
 
