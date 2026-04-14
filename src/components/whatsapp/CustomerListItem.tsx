@@ -216,59 +216,8 @@ export function CustomerListItem({
             </div>
           )}
 
-          {/* ── Documentos para download ── */}
-          {(c.electricity_bill_photo_url || c.document_front_url || c.document_back_url) && (
-            <div className="mt-3 pt-3 border-t border-border/20">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="h-6 w-6 rounded-md bg-blue-500/10 flex items-center justify-center">
-                  <FileDown className="h-3 w-3 text-blue-400" />
-                </div>
-                <span className="text-[11px] font-semibold text-foreground uppercase tracking-wider">Documentos</span>
-                <div className="flex-1 h-px bg-border" />
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {c.electricity_bill_photo_url && c.electricity_bill_photo_url !== "evolution-media:pending" && (
-                  <a
-                    href={c.electricity_bill_photo_url}
-                    download={`conta_energia_${(c.name || "cliente").replace(/\s+/g, "_")}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex"
-                  >
-                    <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 text-blue-400 border-blue-500/20 hover:bg-blue-500/10">
-                      <Download className="w-3 h-3" /> Conta de Energia
-                    </Button>
-                  </a>
-                )}
-                {c.document_front_url && c.document_front_url !== "evolution-media:pending" && c.document_front_url !== "collected" && (
-                  <a
-                    href={c.document_front_url}
-                    download={`doc_frente_${(c.name || "cliente").replace(/\s+/g, "_")}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex"
-                  >
-                    <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 text-blue-400 border-blue-500/20 hover:bg-blue-500/10">
-                      <Image className="w-3 h-3" /> Doc Frente
-                    </Button>
-                  </a>
-                )}
-                {c.document_back_url && c.document_back_url !== "evolution-media:pending" && c.document_back_url !== "collected" && c.document_back_url !== "nao_aplicavel" && (
-                  <a
-                    href={c.document_back_url}
-                    download={`doc_verso_${(c.name || "cliente").replace(/\s+/g, "_")}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex"
-                  >
-                    <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 text-blue-400 border-blue-500/20 hover:bg-blue-500/10">
-                      <Image className="w-3 h-3" /> Doc Verso
-                    </Button>
-                  </a>
-                )}
-              </div>
-            </div>
-          )}
+          {/* ── Documentos para download via MinIO ── */}
+          <DocumentDownloadSection customerId={c.id} customerName={c.name} />
 
           <div className="flex justify-between gap-2 mt-3 pt-3 border-t border-border/20">
             <div className="flex gap-2">
