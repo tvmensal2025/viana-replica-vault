@@ -437,7 +437,13 @@ Deno.serve(async (req) => {
 
         if (resp === "sim_conta" || resp === "sim" || resp === "s" || resp === "1" || resp === "ok" || resp === "correto" || resp === "✅") {
           updates.conversation_step = "ask_tipo_documento";
-          reply = "✅ Dados da conta confirmados!\n\n📋 Qual documento de identidade você vai enviar?\n\nToque em uma opção:";
+          const tipoMsg = "✅ Dados da conta confirmados!\n\n📋 Qual documento de identidade você vai enviar?\n\nToque em uma opção:";
+          await sendButtons(remoteJid, tipoMsg, [
+            { id: "tipo_rg_novo", title: "📄 RG Novo" },
+            { id: "tipo_rg_antigo", title: "📄 RG Antigo" },
+            { id: "tipo_cnh", title: "🪪 CNH" },
+          ]);
+          reply = "";
 
         } else if (resp === "nao_conta" || resp === "nao" || resp === "não" || resp === "n" || resp === "2" || resp === "errado" || resp === "❌") {
           updates.conversation_step = "aguardando_conta";
