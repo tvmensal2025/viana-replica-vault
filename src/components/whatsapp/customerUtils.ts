@@ -39,9 +39,6 @@ export interface Customer {
   customer_referred_by_name?: string | null;
   customer_referred_by_phone?: string | null;
   tipo_produto?: string | null;
-  electricity_bill_photo_url?: string | null;
-  document_front_url?: string | null;
-  document_back_url?: string | null;
 }
 
 export interface ParsedCustomer {
