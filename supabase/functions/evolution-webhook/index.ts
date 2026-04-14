@@ -74,7 +74,8 @@ Deno.serve(async (req) => {
     if (eventType === "connection.update" || eventType === "CONNECTION_UPDATE") {
       const connState = body.data?.state || body.state;
       const connInstance = body.instance || body.data?.instance || req.headers.get("x-instance-name");
-      console.log(`📡 CONNECTION_UPDATE: instance=${connInstance}, state=${connState}`);
+      const statusReason = body.data?.statusReason || 0;
+      console.log(`📡 CONNECTION_UPDATE: instance=${connInstance}, state=${connState}, reason=${statusReason}`);
 
       if (connState === "open" && connInstance) {
         // Extract the owner's phone number from the connection data
@@ -87,6 +88,32 @@ Deno.serve(async (req) => {
             .from("whatsapp_instances")
             .update({ connected_phone: ownerPhone })
             .eq("instance_name", connInstance);
+        }
+      }
+
+      // ─── Auto-reconexão: se a instância caiu, tentar reconectar ────────
+      if (connState === "close" && connInstance && EVOLUTION_API_URL && EVOLUTION_API_KEY) {
+        const baseUrl = EVOLUTION_API_URL.replace(/\/$/, "");
+        console.log(`🔄 Instância ${connInstance} desconectou (reason=${statusReason}). Tentando reconectar...`);
+        
+        try {
+          // Aguardar 3s antes de tentar reconectar (evitar loop rápido)
+          await new Promise(r => setTimeout(r, 3000));
+          
+          const reconnRes = await fetchWithTimeout(`${baseUrl}/instance/connect/${connInstance}`, {
+            method: "GET",
+            headers: { "apikey": EVOLUTION_API_KEY },
+            timeout: 10_000,
+          });
+          
+          if (reconnRes.ok) {
+            console.log(`✅ Reconexão iniciada para ${connInstance}`);
+          } else {
+            const errText = await reconnRes.text();
+            console.warn(`⚠️ Falha ao reconectar ${connInstance}: ${reconnRes.status} ${errText.substring(0, 200)}`);
+          }
+        } catch (e: any) {
+          console.warn(`⚠️ Erro ao tentar reconectar ${connInstance}: ${e.message}`);
         }
       }
 
