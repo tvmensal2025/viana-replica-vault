@@ -21,8 +21,8 @@ import { existsSync, writeFileSync, readFileSync, copyFileSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 
-const CONSULTOR_ID = process.env.IGREEN_CONSULTOR_ID || '124170';
-const PORTAL_URL = `https://digital.igreenenergy.com.br/?id=${CONSULTOR_ID}&sendcontract=true`;
+const CONSULTOR_ID_FALLBACK = process.env.IGREEN_CONSULTOR_ID || '124170';
+// PORTAL_URL agora é gerado dinamicamente por cliente (usa igreen_id do consultor)
 const PORTAL_WORKER_URL = process.env.PORTAL_WORKER_URL || 'http://localhost:3100';
 const SCREENSHOTS_DIR = './screenshots';
 const FIXTURES_DIR = './fixtures';
