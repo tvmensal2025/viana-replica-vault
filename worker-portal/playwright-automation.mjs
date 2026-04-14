@@ -151,7 +151,14 @@ function getSupabase() {
 async function buscarCliente(customerId) {
   const { data, error } = await getSupabase()
     .from('customers')
-    .select('*')
+    .select(`
+      *,
+      consultants:consultant_id (
+        id,
+        name,
+        igreen_id
+      )
+    `)
     .eq('id', customerId)
     .single();
   if (error) throw new Error(`Erro ao buscar cliente: ${error.message}`);
