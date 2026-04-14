@@ -1,457 +1,914 @@
 /**
- * Portal Worker - iGreen Energy
- * Servidor de automação com Playwright
- * Versão: 5.1.0
+ * Worker VPS - Servidor HTTP para automação do portal iGreen
+ * 
+ * Endpoints:
+ * - POST /submit-lead    - Dispara automação Playwright
+ * - POST /confirm-otp    - Recebe código OTP (manual)
+ * - POST /webhook/whapi  - Recebe webhook do Whapi (WhatsApp)
+ * - GET  /otp/:id        - Playwright busca OTP
+ * - GET  /health         - Health check
  */
 
-import http from 'http';
+import express from 'express';
 import { createClient } from '@supabase/supabase-js';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+import dotenv from 'dotenv';
+// SOLUÇÃO 2: Import ESTÁTICO garante UMA ÚNICA instância do módulo (e do activeBrowser)
 import { executarAutomacao } from './playwright-automation.mjs';
 
-// ═══════════════════════════════════════════════════════════════════
-// CONFIGURAÇÃO
-// ═══════════════════════════════════════════════════════════════════
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
+// Carregar variáveis de ambiente (.env.local da raiz do projeto)
+dotenv.config({ path: join(__dirname, '..', '.env.local') });
+dotenv.config({ path: join(__dirname, '..', '.env') });
+dotenv.config({ path: join(__dirname, '.env') });
+if (!process.env.SUPABASE_URL && process.env.VITE_SUPABASE_URL) process.env.SUPABASE_URL = process.env.VITE_SUPABASE_URL;
+if (!process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.VITE_SUPABASE_PUBLISHABLE_KEY) process.env.SUPABASE_SERVICE_ROLE_KEY = process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+const app = express();
 const PORT = process.env.PORT || 3100;
-const WORKER_SECRET = process.env.WORKER_SECRET || 'igreen-worker-secret-2024';
-const SUPABASE_URL = process.env.SUPABASE_URL || '';
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const SECRET = process.env.WORKER_SECRET || 'change-me-in-production';
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-// Supabase client
-let supabase = null;
-if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
-  supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-  console.log('✅ Supabase configurado');
-} else {
-  console.warn('⚠️ Supabase NÃO configurado (SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY faltando)');
-}
+// Armazenar códigos OTP em memória (backup do Supabase)
+const otpCodes = new Map();
 
-// ═══════════════════════════════════════════════════════════════════
-// FILA DE PROCESSAMENTO
-// ═══════════════════════════════════════════════════════════════════
-
-const queue = [];
-let currentJob = null;
-let isProcessingLock = false;
+// ═══════════════════════════════════════════════════════════════════════════════
+// SISTEMA DE FILA - Processa 1 lead por vez, na ordem de chegada
+// ═══════════════════════════════════════════════════════════════════════════════
+const queue = [];          // Array de jobs: { customer_id, options, addedAt, status }
+let currentJob = null;     // Job sendo processado agora
+let processedCount = 0;    // Total já processados desde o boot
+let failedCount = 0;       // Total que falharam
+let isProcessingLock = false; // SOLUÇÃO 4: Mutex real para processNextInQueue
+const retryTracker = new Map(); // customer_id → número de tentativas
+// SOLUÇÃO 3: Set de IDs processados recentemente (evita re-entrada após finally)
 const recentlyProcessed = new Set();
-const retryTracker = new Map();
-const activities = [];
-const MAX_ACTIVITIES = 50;
 
-function logActivity(event, customerId, message) {
-  const activity = {
-    at: new Date().toISOString(),
-    event,
-    customer_id: customerId,
-    message,
-  };
-  activities.unshift(activity);
-  if (activities.length > MAX_ACTIVITIES) activities.pop();
-  console.log(`📊 [${event}] ${customerId}: ${message}`);
+// Log de atividades (para dashboard - "por que abriu")
+const ACTIVITY_MAX = 50;
+const activityLog = [];
+function pushActivity(event, customer_id, message) {
+  activityLog.push({ at: new Date().toISOString(), event, customer_id: customer_id || null, message: message || '' });
+  if (activityLog.length > ACTIVITY_MAX) activityLog.shift();
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// PROCESSAMENTO DA FILA
-// ═══════════════════════════════════════════════════════════════════
+// SOLUÇÃO 1: addToQueue agora é ASYNC e faz AWAIT no update do Supabase
+async function addToQueue(customer_id, options = {}) {
+  // Evitar duplicatas na fila
+  const alreadyInQueue = queue.some(j => j.customer_id === customer_id);
+  const isCurrentJob = currentJob?.customer_id === customer_id;
+  // SOLUÇÃO 3: Também checar se foi processado recentemente
+  const wasRecentlyProcessed = recentlyProcessed.has(customer_id);
+  if (alreadyInQueue || isCurrentJob || wasRecentlyProcessed) {
+    if (wasRecentlyProcessed) console.log(`🔒 ${customer_id} processado recentemente, ignorando`);
+    return { position: alreadyInQueue ? queue.findIndex(j => j.customer_id === customer_id) + 1 : 0, duplicate: true };
+  }
+
+  // Controle de retentativas (máximo 3)
+  const retryCount = retryTracker.get(customer_id) || 0;
+  if (retryCount >= 3) {
+    console.log(`🚫 ${customer_id} já falhou ${retryCount}x. Não vai retentar.`);
+    return { position: -1, duplicate: false, maxRetries: true };
+  }
+
+  const job = {
+    customer_id,
+    options,
+    addedAt: new Date().toISOString(),
+    status: 'waiting',
+    attempt: retryCount + 1
+  };
+  queue.push(job);
+  const position = queue.length;
+  console.log(`📋 FILA: +1 lead (${customer_id}) | Posição: ${position} | Tentativa: ${job.attempt} | Total na fila: ${queue.length}`);
+
+  // SOLUÇÃO 1: AWAIT no update do Supabase (antes era .then() fire-and-forget)
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      await supabase.from('customers').update({
+        status: 'portal_submitting',
+        updated_at: new Date().toISOString(),
+      }).eq('id', customer_id);
+      console.log(`   ✅ Status → portal_submitting (CONFIRMADO no banco)`);
+    } catch (e) {
+      console.warn(`   ⚠️  Erro ao atualizar status: ${e.message}`);
+    }
+  }
+  
+  // Iniciar processamento se não tem nada rodando
+  processNextInQueue();
+  
+  return { position, duplicate: false };
+}
 
 async function processNextInQueue() {
-  if (isProcessingLock) {
-    console.log('🔒 Processamento já em andamento (lock ativo)');
-    return;
-  }
-
-  if (currentJob) {
-    console.log('⏳ Job atual ainda processando:', currentJob.customer_id);
-    return;
-  }
-
-  if (queue.length === 0) {
-    return;
-  }
+  // SOLUÇÃO 4: Mutex real - impede execuções paralelas
+  if (isProcessingLock) return;
+  // Se já tem algo processando ou fila vazia, sai
+  if (currentJob || queue.length === 0) return;
 
   isProcessingLock = true;
 
+  // Pegar próximo da fila
+  currentJob = queue.shift();
+  currentJob.status = 'processing';
+  currentJob.startedAt = new Date().toISOString();
+  const jobCustomerId = currentJob.customer_id; // Salvar ID antes do finally
+
+  console.log(`\n${'='.repeat(70)}`);
+  console.log(`🚀 FILA: Processando lead ${currentJob.customer_id}`);
+  console.log(`   Entrou na fila: ${currentJob.addedAt}`);
+  console.log(`   Restantes na fila: ${queue.length}`);
+  console.log('='.repeat(70));
+  pushActivity('job_started', currentJob.customer_id, 'Automação iniciada - navegador aberto no iGreen');
+
   try {
-    const job = queue.shift();
-    currentJob = job;
+    // NÃO fazer pkill aqui - a automação já gerencia o browser internamente
+    // O pkill matava o browser que a própria automação acabou de abrir!
+    // closeActiveBrowser() + killOrphanedChromium() dentro de playwright-automation.mjs
+    // já cuidam disso de forma segura.
 
-    console.log(`🎯 Processando lead: ${job.customer_id} (fila: ${queue.length})`);
-    logActivity('job_started', job.customer_id, 'Automação iniciada - navegador aberto no iGreen');
-
-    await executarAutomacao(job.customer_id, supabase);
-
-    console.log(`✅ Lead processado: ${job.customer_id}`);
-    logActivity('job_finished', job.customer_id, 'Finalizar clicado - página iGreen deixada aberta');
-
-    recentlyProcessed.add(job.customer_id);
-    setTimeout(() => recentlyProcessed.delete(job.customer_id), 5 * 60 * 1000);
-
-    retryTracker.delete(job.customer_id);
-
+    // SOLUÇÃO 2: Usa import estático (top-level) - UMA instância do módulo
+    const result = await executarAutomacao(currentJob.customer_id, currentJob.options);
+    
+    processedCount++;
+    retryTracker.delete(currentJob.customer_id); // Sucesso: limpar contador
+    pushActivity('job_finished', currentJob.customer_id, 'Finalizar clicado - página iGreen deixada aberta');
+    console.log(`✅ FILA: Lead ${currentJob.customer_id} processado com sucesso! (Total: ${processedCount})`);
+    if (result?.pageUrl) {
+      await sendLinkToCustomer(currentJob.customer_id, result.pageUrl);
+    }
   } catch (error) {
-    const customerId = currentJob?.customer_id || 'unknown';
-    console.error(`❌ Erro ao processar lead ${customerId}:`, error.message);
-
-    const attempts = (retryTracker.get(customerId) || 0) + 1;
-    retryTracker.set(customerId, attempts);
+    failedCount++;
+    const attempts = (retryTracker.get(jobCustomerId) || 0) + 1;
+    retryTracker.set(jobCustomerId, attempts);
+    pushActivity('job_failed', jobCustomerId, `Falha (${attempts}/3): ${error.message}`);
+    console.error(`❌ FILA: Lead ${jobCustomerId} falhou (tentativa ${attempts}/3): ${error.message}`);
 
     if (attempts < 3) {
-      const retryJob = { ...currentJob, retry: attempts };
-      queue.unshift(retryJob);
-      console.log(`🔄 Re-enfileirado para retry (${attempts}/3): ${customerId}`);
-      logActivity('job_retry', customerId, `Falha (${attempts}/3): ${error.message}`);
+      // Re-enfileirar para retry automático — NUNCA deixar de abrir
+      const retryJob = {
+        customer_id: jobCustomerId,
+        options: currentJob.options || {},
+        status: 'waiting',
+        attempt: attempts,
+        addedAt: new Date().toISOString(),
+      };
+      queue.unshift(retryJob); // Frente da fila para retry rápido
+      console.log(`   🔄 Re-enfileirado para retry (${attempts}/3) - próxima tentativa em 5s`);
     } else {
-      console.error(`❌ Lead falhou após 3 tentativas: ${customerId}`);
-      logActivity('job_failed', customerId, `Falha definitiva após 3 tentativas: ${error.message}`);
-
+      // Só marca automation_failed após 3 tentativas
+      const supabase = getSupabase();
       if (supabase) {
-        await supabase
-          .from('customers')
-          .update({
+        try {
+          await supabase.from('customers').update({
             status: 'automation_failed',
             error_message: `Tentativa ${attempts}/3: ${error.message}`,
-          })
-          .eq('id', customerId);
+            updated_at: new Date().toISOString(),
+          }).eq('id', jobCustomerId);
+          console.log(`   📊 Status → automation_failed (após 3 tentativas)`);
+        } catch (_) {}
       }
-
-      retryTracker.delete(customerId);
     }
   } finally {
+    // SOLUÇÃO 3: Marcar como processado recentemente (5 min de cooldown)
+    recentlyProcessed.add(jobCustomerId);
+    setTimeout(() => recentlyProcessed.delete(jobCustomerId), 5 * 60 * 1000);
+
     currentJob = null;
     isProcessingLock = false;
-
-    if (queue.length > 0) {
-      setTimeout(() => processNextInQueue(), 1000);
-    }
+    // Processar próximo da fila (delay de 2s)
+    setTimeout(() => processNextInQueue(), 2000);
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// AUTO-RECUPERAÇÃO DE LEADS PENDENTES
-// ═══════════════════════════════════════════════════════════════════
+function getQueueStatus() {
+  return {
+    currentJob: currentJob ? {
+      customer_id: currentJob.customer_id,
+      startedAt: currentJob.startedAt,
+    } : null,
+    queueLength: queue.length,
+    waiting: queue.map((j, i) => ({
+      position: i + 1,
+      customer_id: j.customer_id,
+      addedAt: j.addedAt,
+    })),
+    stats: {
+      processed: processedCount,
+      failed: failedCount,
+      processing: currentJob ? 1 : 0,
+      waiting: queue.length,
+    }
+  };
+}
 
+function getSupabase() {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return null;
+  return createClient(SUPABASE_URL, SUPABASE_KEY);
+}
+
+const linkSentRecently = new Set();
+const LINK_SENT_TTL_MS = 15 * 60 * 1000;
+
+/**
+ * Envia o link da página iGreen para o cliente via WhatsApp (Whapi).
+ * Chamado após clicar em Finalizar para o usuário continuar no celular.
+ * Faz até 3 tentativas para não deixar o cliente sem o link.
+ * Não envia de novo se já enviou para este cliente nos últimos 15 min (evita mensagem sozinha/duplicada).
+ */
+async function sendLinkToCustomer(customerId, pageUrl) {
+  if (linkSentRecently.has(customerId)) {
+    console.log('   ⏭️  Link já enviado para este cliente recentemente; não reenviar.');
+    return;
+  }
+  if (!pageUrl || typeof pageUrl !== 'string') {
+    console.error('   ❌ sendLinkToCustomer: pageUrl inválido');
+    pushActivity('link_failed', customerId, 'Link não enviado: URL inválida');
+    return;
+  }
+  const supabase = getSupabase();
+  if (!supabase) {
+    console.error('   ❌ sendLinkToCustomer: Supabase não configurado');
+    pushActivity('link_failed', customerId, 'Link não enviado: Supabase indisponível');
+    return;
+  }
+  try {
+    const { data: customer, error: errCustomer } = await supabase
+      .from('customers')
+      .select('phone_whatsapp')
+      .eq('id', customerId)
+      .single();
+    if (errCustomer || !customer?.phone_whatsapp) {
+      console.error('   ❌ sendLinkToCustomer: cliente ou phone não encontrado', errCustomer?.message || '');
+      pushActivity('link_failed', customerId, 'Link não enviado: telefone não encontrado');
+      return;
+    }
+    const { data: settingsRows } = await supabase.from('settings').select('key, value');
+    const settings = {};
+    (settingsRows || []).forEach((s) => { settings[s.key] = s.value; });
+    const whapiToken = settings.whapi_token || process.env.WHAPI_TOKEN;
+    const whapiUrl = (settings.whapi_api_url || process.env.WHAPI_API_URL || 'https://gate.whapi.cloud').replace(/\/$/, '') + '/';
+    if (!whapiToken) {
+      console.error('   ❌ sendLinkToCustomer: Whapi token não configurado nas Settings');
+      pushActivity('link_failed', customerId, 'Link não enviado: Whapi token ausente');
+      return;
+    }
+    let phone = String(customer.phone_whatsapp).replace(/\D/g, '');
+    if (phone && !phone.startsWith('55')) phone = '55' + phone;
+    const chatId = phone ? `${phone}@s.whatsapp.net` : '';
+    if (!chatId) {
+      console.error('   ❌ sendLinkToCustomer: chatId vazio');
+      pushActivity('link_failed', customerId, 'Link não enviado: número inválido');
+      return;
+    }
+    const message = `✅ Cadastro finalizado!\n\nAcesse o link abaixo para continuar pelo celular:\n${pageUrl}\n\nQualquer dúvida, estamos à disposição.`;
+    const maxAttempts = 3;
+    const delayMs = 1500;
+    let lastError = null;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const res = await fetch(`${whapiUrl}messages/text`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${whapiToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ to: chatId, body: message, typing_time: 0 }),
+        });
+        if (res.ok) {
+          linkSentRecently.add(customerId);
+          setTimeout(() => linkSentRecently.delete(customerId), LINK_SENT_TTL_MS);
+          console.log('   📤 Link da página enviado por WhatsApp para o cliente');
+          pushActivity('link_sent', customerId, 'Link da página iGreen enviado por WhatsApp');
+          return;
+        }
+        lastError = `${res.status} ${await res.text()}`;
+      } catch (e) {
+        lastError = e.message || String(e);
+      }
+      if (attempt < maxAttempts) {
+        console.warn(`   ⚠️  Tentativa ${attempt}/${maxAttempts} falhou, nova tentativa em ${delayMs}ms...`);
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+    }
+    console.error('   ❌ sendLinkToCustomer: falhou após', maxAttempts, 'tentativas:', lastError);
+    pushActivity('link_failed', customerId, `Link NÃO enviado após ${maxAttempts} tentativas: ${String(lastError).slice(0, 80)}`);
+  } catch (e) {
+    console.error('   ❌ sendLinkToCustomer:', e.message);
+    pushActivity('link_failed', customerId, `Link não enviado: ${e.message}`);
+  }
+}
+
+// Middleware
+app.use(express.json());
+
+// Logging middleware
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+  next();
+});
+
+// Middleware de autenticação (exceto health, OTP polling, e webhook)
+app.use((req, res, next) => {
+  if (req.path === '/health' || req.path === '/dashboard' || req.path === '/status' || req.path.startsWith('/otp/') || req.path === '/webhook/whapi') {
+    return next();
+  }
+  
+  const auth = req.headers.authorization;
+  if (!auth || auth !== `Bearer ${SECRET}`) {
+    console.warn('❌ Unauthorized request:', req.path);
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+});
+
+/**
+ * POST /submit-lead
+ * Adiciona lead na fila de processamento (processa 1 por vez)
+ */
+app.post('/submit-lead', async (req, res) => {
+  const { customer_id, headless, stop_before_submit } = req.body;
+  
+  if (!customer_id) {
+    return res.status(400).json({ error: 'customer_id required' });
+  }
+
+  const isHeadless = headless !== undefined ? Boolean(headless) : (process.env.HEADLESS === '1');
+  const stopBeforeSubmit = Boolean(stop_before_submit);
+  
+  console.log(`\n${'='.repeat(70)}`);
+  console.log(`📥 NOVO LEAD RECEBIDO`);
+  console.log(`   Customer ID: ${customer_id}`);
+  console.log(`   Timestamp: ${new Date().toISOString()}`);
+  console.log('='.repeat(70));
+  
+  const result = await addToQueue(customer_id, { headless: isHeadless, stopBeforeSubmit });
+  if (!result.duplicate) pushActivity('lead_received', customer_id, 'Lead adicionado à fila (WhatsApp finalizou cadastro)');
+
+  const status = getQueueStatus();
+  
+  res.json({ 
+    success: true, 
+    message: result.duplicate 
+      ? 'Lead já está na fila ou processando' 
+      : `Lead adicionado na fila (posição ${result.position})`,
+    customer_id,
+    position: result.position,
+    duplicate: result.duplicate,
+    queue: {
+      processing: status.currentJob?.customer_id || null,
+      waiting: status.queueLength,
+      totalProcessed: status.stats.processed,
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
+/**
+ * POST /clear-queue
+ * Zera a fila de leads (não cancela o job atual, mas nenhum novo será processado após ele)
+ */
+app.post('/clear-queue', (req, res) => {
+  const n = queue.length;
+  queue.length = 0;
+  pushActivity('queue_cleared', null, `Fila zerada pelo usuário (${n} lead(s) removido(s))`);
+  console.log(`🧹 FILA: zerada pelo usuário (${n} removidos)`);
+  res.json({
+    success: true,
+    message: n ? `Fila zerada (${n} lead(s) removido(s))` : 'Fila já estava vazia',
+    queueLength: 0,
+    removed: n,
+    currentJob: currentJob ? currentJob.customer_id : null,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+/**
+ * POST /confirm-otp
+ * Recebe código OTP do WhatsApp e armazena para o script usar
+ */
+app.post('/confirm-otp', async (req, res) => {
+  const { customer_id, otp_code } = req.body;
+  
+  if (!customer_id || !otp_code) {
+    return res.status(400).json({ 
+      error: 'customer_id and otp_code required' 
+    });
+  }
+  
+  // Validar formato do código (6 dígitos)
+  const codeClean = otp_code.replace(/\D/g, '');
+  if (codeClean.length !== 6) {
+    return res.status(400).json({ 
+      error: 'OTP code must be 6 digits' 
+    });
+  }
+  
+  console.log(`\n${'='.repeat(70)}`);
+  console.log(`🔐 OTP RECEBIDO`);
+  console.log(`   Customer ID: ${customer_id}`);
+  console.log(`   Code: ${codeClean}`);
+  console.log(`   Timestamp: ${new Date().toISOString()}`);
+  console.log('='.repeat(70));
+  
+  // Armazenar código em memória (expira em 5 minutos)
+  otpCodes.set(customer_id, {
+    code: codeClean,
+    timestamp: Date.now(),
+    expiresAt: Date.now() + (5 * 60 * 1000) // 5 minutos
+  });
+  
+  // TAMBÉM salvar no Supabase (redundância - automação busca de ambos)
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      await supabase.from('customers').update({
+        otp_code: codeClean,
+        otp_received_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq('id', customer_id);
+      console.log(`✅ OTP também salvo no Supabase`);
+    } catch (e) {
+      console.warn(`⚠️  Erro ao salvar OTP no Supabase: ${e.message}`);
+    }
+  }
+  
+  // Limpar códigos expirados
+  cleanExpiredOtpCodes();
+  
+  res.json({ 
+    success: true, 
+    message: 'OTP code received and stored (memory + supabase)',
+    customer_id,
+    code: codeClean
+  });
+  
+  console.log(`✅ OTP armazenado. Total de códigos em memória: ${otpCodes.size}`);
+});
+
+/**
+ * GET /otp/:customer_id
+ * Retorna código OTP armazenado (usado pelo script Playwright)
+ * Verifica: 1) memória local, 2) Supabase
+ */
+app.get('/otp/:customer_id', async (req, res) => {
+  const { customer_id } = req.params;
+  
+  // 1. Verificar memória local
+  const otpData = otpCodes.get(customer_id);
+  if (otpData && Date.now() <= otpData.expiresAt) {
+    console.log(`📤 OTP (memória) para ${customer_id}: ${otpData.code}`);
+    return res.json({ 
+      code: otpData.code,
+      customer_id,
+      source: 'memory',
+      expiresAt: new Date(otpData.expiresAt).toISOString()
+    });
+  }
+  
+  // Limpar expirado
+  if (otpData) otpCodes.delete(customer_id);
+  
+  // 2. Verificar Supabase
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('customers')
+        .select('otp_code, otp_received_at, status')
+        .eq('id', customer_id)
+        .single();
+      
+      if (!error && data?.otp_code) {
+        console.log(`📤 OTP (Supabase) para ${customer_id}: ${data.otp_code}`);
+        return res.json({ 
+          code: data.otp_code,
+          customer_id,
+          source: 'supabase',
+          received_at: data.otp_received_at
+        });
+      }
+    } catch (_) {}
+  }
+  
+  return res.status(404).json({ 
+    error: 'OTP code not found',
+    customer_id,
+    waiting: true
+  });
+});
+
+// ─── Extrair OTP de mensagem WhatsApp ─────────────────────────────────────────
+function extrairOTP(texto) {
+  if (!texto || typeof texto !== 'string') return null;
+  const textoLimpo = texto.trim();
+  
+  const padroes = [
+    /(?:c[oó]digo|code|otp|token|verifica[cç][aã]o)[^\d]*(\d{4,8})/i,
+    /c[oó]digo\s*:?\s*(\d{4,8})/i,
+    /^(\d{4,8})$/,
+    /\b(\d{4,8})\b/,
+  ];
+
+  for (const padrao of padroes) {
+    const match = textoLimpo.match(padrao);
+    if (match && match[1] && match[1].length >= 4 && match[1].length <= 8) {
+      return match[1];
+    }
+  }
+  return null;
+}
+
+/**
+ * POST /webhook/whapi
+ * Recebe mensagens do Whapi (WhatsApp) e extrai OTP
+ */
+app.post('/webhook/whapi', async (req, res) => {
+  try {
+    const payload = req.body;
+    
+    console.log('\n' + '='.repeat(70));
+    console.log('📩 WEBHOOK WHAPI RECEBIDO');
+    console.log('='.repeat(70));
+    console.log(`Payload: ${JSON.stringify(payload).substring(0, 500)}`);
+
+    const messages = payload.messages || 
+                     (payload.message ? [payload.message] : []) ||
+                     (payload.data?.messages || []);
+
+    if (messages.length === 0) {
+      return res.status(200).json({ ok: true, processed: 0 });
+    }
+
+    let processadas = 0;
+    const supabase = getSupabase();
+
+    for (const msg of messages) {
+      // Ignora mensagens enviadas por nós
+      if (msg.from_me || msg.fromMe) continue;
+
+      // Apenas texto
+      const tipoMensagem = msg.type || msg.message?.type;
+      if (tipoMensagem !== 'text' && tipoMensagem !== 'conversation') continue;
+
+      const texto = msg.text?.body || msg.body || msg.conversation || 
+                    msg.message?.conversation || msg.message?.text?.body || '';
+      const remetente = msg.from || msg.chat_id || msg.chatId || '';
+
+      console.log(`📱 De: ${remetente} | Texto: "${texto}"`);
+
+      if (!texto || !remetente) continue;
+
+      const otpCode = extrairOTP(texto);
+      if (!otpCode) {
+        console.log('   ⏭️  Sem OTP na mensagem');
+        continue;
+      }
+
+      console.log(`   🔑 OTP extraído: ${otpCode}`);
+
+      if (!supabase) {
+        console.warn('   ⚠️  Supabase não configurado');
+        continue;
+      }
+
+      // Buscar cliente pelo telefone
+      const digits = remetente.replace(/\D/g, '');
+      const phoneVariants = [
+        digits.slice(-11),
+        digits.slice(-13),
+        digits,
+      ].filter(q => q.length >= 10);
+
+      const { data: customer, error } = await supabase
+        .from('customers')
+        .select('id, name, status, phone_whatsapp')
+        .or(phoneVariants.map(q => `phone_whatsapp.ilike.%${q}`).join(','))
+        .in('status', ['awaiting_otp', 'portal_submitting'])
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (error || !customer) {
+        console.log(`   ⚠️  Nenhum cliente aguardando OTP para ${remetente}`);
+        continue;
+      }
+
+      // Salvar OTP no Supabase
+      await supabase.from('customers').update({
+        otp_code: otpCode,
+        otp_received_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq('id', customer.id);
+
+      // Também salvar em memória (backup)
+      otpCodes.set(customer.id, {
+        code: otpCode,
+        timestamp: Date.now(),
+        expiresAt: Date.now() + (5 * 60 * 1000)
+      });
+
+      console.log(`   ✅ OTP salvo para ${customer.name} (${customer.id})`);
+      processadas++;
+    }
+
+    res.status(200).json({ ok: true, processed: processadas });
+
+  } catch (error) {
+    console.error('❌ Erro no webhook:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /health
+ * Health check endpoint
+ */
+/**
+ * GET /screenshots/:customerId
+ * Lista screenshots de uma execução (para diagnóstico)
+ */
+app.get('/screenshots/:customerId', async (req, res) => {
+  const { customerId } = req.params;
+  try {
+    const { readdirSync } = await import('fs');
+    const files = readdirSync('./screenshots')
+      .filter(f => f.includes(customerId))
+      .sort();
+    res.json({ customerId, screenshots: files, total: files.length });
+  } catch (e) {
+    res.json({ customerId, screenshots: [], error: e.message });
+  }
+});
+
+/**
+ * GET /screenshot/:filename
+ * Serve um screenshot específico
+ */
+app.get('/screenshot/:filename', async (req, res) => {
+  const { filename } = req.params;
+  const { join } = await import('path');
+  const { existsSync } = await import('fs');
+  const filepath = join('./screenshots', filename);
+  if (!existsSync(filepath)) return res.status(404).json({ error: 'Not found' });
+  res.sendFile(filepath, { root: '.' });
+});
+
+/**
+ * GET /page-dump/:customerId
+ * Retorna o HTML salvo da última execução (para diagnóstico)
+ */
+app.get('/page-dump/:customerId', async (req, res) => {
+  const { customerId } = req.params;
+  try {
+    const { readdirSync, readFileSync } = await import('fs');
+    const files = readdirSync('./screenshots')
+      .filter(f => f.includes(customerId) && f.endsWith('.html'))
+      .sort()
+      .reverse();
+    if (files.length === 0) return res.json({ error: 'No HTML dumps found' });
+    const content = readFileSync(`./screenshots/${files[0]}`, 'utf-8');
+    res.json({ file: files[0], contentLength: content.length, content: content.substring(0, 50000) });
+  } catch (e) {
+    res.json({ error: e.message });
+  }
+});
+
+/**
+ * GET /queue
+ * Mostra status completo da fila de processamento
+ */
+app.get('/queue', (req, res) => {
+  res.json(getQueueStatus());
+});
+
+/**
+ * GET /status
+ * JSON com fila + últimas atividades (por que abriu, etc.) - sem auth para ver no navegador
+ */
+app.get('/status', (req, res) => {
+  const status = getQueueStatus();
+  res.json({
+    timestamp: new Date().toISOString(),
+    queue: status,
+    activities: activityLog.slice(-30).reverse(),
+    whyItOpens: 'O navegador abre quando um lead finaliza no WhatsApp (POST /submit-lead) ou quando o worker encontra leads pendentes no banco (polling a cada 5s).',
+  });
+});
+
+/**
+ * GET /dashboard
+ * Página HTML simples para ver o que está acontecendo (sem auth)
+ */
+app.get('/dashboard', (req, res) => {
+  const status = getQueueStatus();
+  const activities = activityLog.slice(-25).reverse();
+  const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Status - Automação iGreen</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 700px; margin: 24px auto; padding: 0 16px; }
+    h1 { color: #0d9488; }
+    .card { background: #f0fdfa; border: 1px solid #99f6e4; border-radius: 8px; padding: 16px; margin: 16px 0; }
+    .activity { font-size: 14px; margin: 6px 0; padding: 6px; background: #fff; border-radius: 4px; }
+    .time { color: #64748b; font-size: 12px; }
+    .event { font-weight: 600; }
+    code { background: #e2e8f0; padding: 2px 6px; border-radius: 4px; }
+    p { color: #475569; }
+  </style>
+</head>
+<body>
+  <h1>Status da automação</h1>
+  <div class="card">
+    <p><strong>Por que o navegador abre sozinho?</strong></p>
+    <p>Quando um cliente finaliza o cadastro no WhatsApp, o sistema envia o lead para o worker. O worker abre o navegador, preenche o portal iGreen e clica em Finalizar. A <strong>página do iGreen permanece aberta</strong> para você conferir (não fechamos mais).</p>
+  </div>
+  <div class="card">
+    <p><strong>Agora:</strong></p>
+    <p>Processando: ${status.currentJob ? status.currentJob.customer_id : '—'}</p>
+    <p>Na fila: ${status.queueLength} | Concluídos: ${status.stats.processed} | Falhas: ${status.stats.failed}</p>
+  </div>
+  <h2>Últimas atividades</h2>
+  ${activities.length ? activities.map(a => `
+  <div class="activity">
+    <span class="time">${a.at}</span>
+    <span class="event">${a.event}</span>
+    ${a.customer_id ? `<code>${a.customer_id}</code>` : ''}
+    ${a.message ? ` — ${a.message}` : ''}
+  </div>`).join('') : '<p>Nenhuma atividade ainda.</p>'}
+  <p style="margin-top: 24px;"><a href="/status">Ver JSON completo (/status)</a></p>
+</body>
+</html>`;
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(html);
+});
+
+/**
+ * GET /health
+ * Health check endpoint
+ */
+app.get('/health', (req, res) => {
+  const status = getQueueStatus();
+  res.json({ 
+    status: 'ok',
+    service: 'worker-portal',
+    version: '5.1.0',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+    otpCodesInMemory: otpCodes.size,
+    supabaseConfigured: !!(SUPABASE_URL && SUPABASE_KEY),
+    queue: status.stats,
+    currentJob: status.currentJob,
+  });
+});
+
+/**
+ * Limpar códigos OTP expirados
+ */
+function cleanExpiredOtpCodes() {
+  const now = Date.now();
+  let cleaned = 0;
+  
+  for (const [customerId, otpData] of otpCodes.entries()) {
+    if (now > otpData.expiresAt) {
+      otpCodes.delete(customerId);
+      cleaned++;
+    }
+  }
+  
+  if (cleaned > 0) {
+    console.log(`🧹 Limpeza: ${cleaned} código(s) OTP expirado(s) removido(s)`);
+  }
+}
+
+// Limpar códigos expirados a cada 1 minuto
+setInterval(cleanExpiredOtpCodes, 60 * 1000);
+
+/**
+ * Busca leads pendentes: data_complete + portal_submitting travados (>2 min).
+ * Roda na inicialização e a cada 5 segundos.
+ */
 async function recuperarLeadsPendentes() {
+  // SOLUÇÃO 5: Não rodar polling enquanto tem job processando
   if (currentJob || isProcessingLock) {
     return;
   }
 
+  const supabase = getSupabase();
   if (!supabase) {
+    console.log('⚠️  Supabase não configurado - não é possível recuperar leads pendentes');
     return;
   }
 
   try {
-    const { data: leadsCompletos } = await supabase
+    // Buscar leads que precisam ser processados:
+    // 1) data_complete: dados coletados, aguardando automação
+    // 2) portal_submitting travados (>2 min): nunca abriu (worker reiniciou/crashou)
+    const twoMinAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+    const { data: leadsComplete, error: err1 } = await supabase
       .from('customers')
-      .select('id, name, updated_at')
+      .select('id, name, status, conversation_step, created_at, updated_at')
       .eq('status', 'data_complete')
       .order('updated_at', { ascending: true })
       .limit(5);
-
-    const doisMinutosAtras = new Date(Date.now() - 2 * 60 * 1000).toISOString();
-    const { data: leadsTravados } = await supabase
+    const { data: leadsStuck, error: err2 } = await supabase
       .from('customers')
-      .select('id, name, updated_at')
+      .select('id, name, status, conversation_step, created_at, updated_at')
       .eq('status', 'portal_submitting')
-      .lt('updated_at', doisMinutosAtras)
+      .lt('updated_at', twoMinAgo)
       .order('updated_at', { ascending: true })
       .limit(3);
 
-    // AUTO-RETRY: leads que falharam há mais de 10 minutos (max 2 retries automáticos)
-    const dezMinutosAtras = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-    const { data: leadsFalhados } = await supabase
-      .from('customers')
-      .select('id, name, updated_at')
-      .in('status', ['automation_failed', 'worker_offline'])
-      .lt('updated_at', dezMinutosAtras)
-      .order('updated_at', { ascending: true })
-      .limit(2);
+    if (err1 || err2) {
+      console.error('❌ Erro ao buscar leads pendentes:', err1?.message || err2?.message);
+      return;
+    }
+    const leads = [...(leadsComplete || []), ...(leadsStuck || [])];
+    if (leadsStuck?.length > 0) {
+      console.log(`🔧 Recuperando ${leadsStuck.length} lead(s) travados em portal_submitting (>2 min)`);
+    }
+    if (!leads || leads.length === 0) return;
 
-    // Reset status dos leads falhados para portal_submitting antes de re-enfileirar
-    for (const lead of (leadsFalhados || [])) {
-      if ((retryTracker.get(lead.id) || 0) < 3) {
-        await supabase.from('customers').update({ status: 'portal_submitting', error_message: null }).eq('id', lead.id);
-        console.log(`♻️ Auto-retry: resetando status de ${lead.name} (${lead.id})`);
+    console.log(`\n🔍 Encontrados ${leads.length} lead(s) pendente(s) no banco:`);
+    let adicionados = 0;
+    for (const lead of leads) {
+      // SOLUÇÃO 1: addToQueue agora é async, usar await
+      const result = await addToQueue(lead.id, { headless: process.env.HEADLESS === '1' });
+      if (!result.duplicate) {
+        console.log(`   📋 ${lead.name || 'Sem nome'} (${lead.id}) [${lead.status}] → posição ${result.position}`);
+        adicionados++;
       }
     }
-
-    const todosLeads = [...(leadsCompletos || []), ...(leadsTravados || []), ...(leadsFalhados || [])];
-
-    for (const lead of todosLeads) {
-      const customerId = lead.id;
-
-      if (queue.some(j => j.customer_id === customerId)) continue;
-      if (currentJob?.customer_id === customerId) continue;
-      if (recentlyProcessed.has(customerId)) continue;
-      if ((retryTracker.get(customerId) || 0) >= 3) continue;
-
-      queue.push({ customer_id: customerId, addedAt: new Date().toISOString() });
-      console.log(`📥 Lead recuperado: ${lead.name} (${customerId})`);
-      logActivity('lead_recovered', customerId, `Lead pendente adicionado na fila`);
-
-      processNextInQueue();
+    if (adicionados > 0) {
+      console.log(`✅ ${adicionados} lead(s) adicionado(s) na fila automaticamente`);
     }
-  } catch (error) {
-    console.error('⚠️ Erro ao recuperar leads pendentes:', error.message);
+  } catch (e) {
+    console.error('❌ Erro na recuperação de leads:', e.message);
   }
 }
 
+// Polling: verificar leads pendentes a cada 5 segundos (fallback se webhook não chamar)
 setInterval(recuperarLeadsPendentes, 5 * 1000);
 
-// ═══════════════════════════════════════════════════════════════════
-// SERVIDOR HTTP
-// ═══════════════════════════════════════════════════════════════════
+// Iniciar servidor
+app.listen(PORT, () => {
+  console.log('\n' + '='.repeat(70));
+  console.log('🚀 WORKER VPS - PORTAL IGREEN v5.1 (1 BROWSER GARANTIDO)');
+  console.log('='.repeat(70));
+  console.log(`📡 Servidor rodando na porta: ${PORT}`);
+  console.log(`🔐 Autenticação: Bearer ${SECRET.substring(0, 10)}...`);
+  console.log(`🗄️  Supabase: ${SUPABASE_URL ? '✅' : '❌ NÃO CONFIGURADO'}`);
+  console.log(`📋 Sistema de FILA ativo: processa 1 lead por vez`);
+  console.log(`🔒 Proteções: mutex + recentlyProcessed + await update`);
+  console.log(`📋 Auto-recuperação: busca leads pendentes a cada 5s`);
+  console.log(`\n📋 Endpoints disponíveis:`);
+  console.log(`   POST /submit-lead     - Adicionar lead na fila`);
+  console.log(`   POST /clear-queue     - Zerar fila (parar fluxo)`);
+  console.log(`   POST /confirm-otp     - Confirmar código OTP (manual)`);
+  console.log(`   POST /webhook/whapi   - Webhook do Whapi (WhatsApp)`);
+  console.log(`   GET  /otp/:id         - Buscar código OTP`);
+  console.log(`   GET  /queue           - Ver status da fila`);
+  console.log(`   GET  /status          - Fila + últimas atividades (JSON)`);
+  console.log(`   GET  /dashboard       - Página com o que está acontecendo`);
+  console.log(`   GET  /health          - Health check`);
+  console.log('\n' + '='.repeat(70));
+  console.log(`✅ Pronto para receber requisições!\n`);
 
-const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url, `http://${req.headers.host}`);
-  const path = url.pathname;
+  // Limpar processos Chromium órfãos na inicialização
+  try {
+    import('child_process').then(({ execSync }) => {
+      execSync('pkill -9 -f "Google Chrome for Testing" 2>/dev/null || true', { stdio: 'ignore' });
+      console.log('🧹 Processos Chromium órfãos limpos na inicialização');
+    }).catch(() => {});
+  } catch (_) {}
 
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  };
-
-  const sendJSON = (data, status = 200) => {
-    res.writeHead(status, { ...corsHeaders, 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(data));
-  };
-
-  const readBody = () => new Promise((resolve) => {
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', () => resolve(body ? JSON.parse(body) : {}));
-  });
-
-  if (req.method === 'OPTIONS') {
-    res.writeHead(200, corsHeaders);
-    res.end();
-    return;
-  }
-
-  // ─── POST /submit-lead ───────────────────────────────────────
-  if (path === '/submit-lead' && req.method === 'POST') {
-    const authHeader = req.headers.authorization;
-    if (authHeader !== `Bearer ${WORKER_SECRET}`) {
-      return sendJSON({ error: 'Unauthorized' }, 401);
-    }
-
-    const body = await readBody();
-    const customerId = body.customer_id;
-
-    if (!customerId) {
-      return sendJSON({ error: 'customer_id required' }, 400);
-    }
-
-    if (queue.some(j => j.customer_id === customerId)) {
-      return sendJSON({ success: false, message: 'Lead já está na fila', duplicate: true });
-    }
-
-    if (currentJob?.customer_id === customerId) {
-      return sendJSON({ success: false, message: 'Lead está sendo processado agora', duplicate: true });
-    }
-
-    if (recentlyProcessed.has(customerId)) {
-      return sendJSON({ success: false, message: 'Lead foi processado recentemente (cooldown 5 min)', duplicate: true });
-    }
-
-    if ((retryTracker.get(customerId) || 0) >= 3) {
-      return sendJSON({ success: false, message: 'Lead já falhou 3 vezes', duplicate: true });
-    }
-
-    queue.push({ customer_id: customerId, addedAt: new Date().toISOString() });
-    logActivity('lead_received', customerId, 'Lead adicionado à fila (WhatsApp finalizou cadastro)');
-
-    if (supabase) {
-      await supabase
-        .from('customers')
-        .update({ status: 'portal_submitting', updated_at: new Date().toISOString() })
-        .eq('id', customerId);
-    }
-
-    processNextInQueue();
-
-    return sendJSON({
-      success: true,
-      message: `Lead adicionado na fila (posição ${queue.length})`,
-      customer_id: customerId,
-      position: queue.length,
-      duplicate: false,
-      queue: {
-        processing: currentJob?.customer_id || null,
-        waiting: queue.length,
-        totalProcessed: activities.filter(a => a.event === 'job_finished').length,
-      },
-      timestamp: new Date().toISOString(),
-    });
-  }
-
-  // ─── GET /health ─────────────────────────────────────────────
-  if (path === '/health') {
-    return sendJSON({
-      status: 'ok',
-      service: 'worker-portal',
-      version: '5.1.0',
-      timestamp: new Date().toISOString(),
-      uptime: process.uptime(),
-      supabaseConfigured: !!supabase,
-      queue: {
-        processed: activities.filter(a => a.event === 'job_finished').length,
-        failed: activities.filter(a => a.event === 'job_failed').length,
-        processing: currentJob ? 1 : 0,
-        waiting: queue.length,
-      },
-      currentJob: currentJob ? {
-        customer_id: currentJob.customer_id,
-        startedAt: currentJob.addedAt,
-      } : null,
-    });
-  }
-
-  // ─── GET /queue ──────────────────────────────────────────────
-  if (path === '/queue') {
-    return sendJSON({
-      currentJob: currentJob ? {
-        customer_id: currentJob.customer_id,
-        startedAt: currentJob.addedAt,
-      } : null,
-      queueLength: queue.length,
-      waiting: queue.map((j, i) => ({
-        position: i + 1,
-        customer_id: j.customer_id,
-        addedAt: j.addedAt,
-      })),
-      stats: {
-        processed: activities.filter(a => a.event === 'job_finished').length,
-        failed: activities.filter(a => a.event === 'job_failed').length,
-        processing: currentJob ? 1 : 0,
-        waiting: queue.length,
-      },
-    });
-  }
-
-  // ─── GET /status ─────────────────────────────────────────────
-  if (path === '/status') {
-    return sendJSON({
-      timestamp: new Date().toISOString(),
-      queue: {
-        currentJob: currentJob ? {
-          customer_id: currentJob.customer_id,
-          startedAt: currentJob.addedAt,
-        } : null,
-        queueLength: queue.length,
-        waiting: queue.map((j, i) => ({
-          position: i + 1,
-          customer_id: j.customer_id,
-          addedAt: j.addedAt,
-        })),
-      },
-      activities: activities.slice(0, 30),
-    });
-  }
-
-  // ─── GET /dashboard ──────────────────────────────────────────
-  if (path === '/dashboard') {
-    const html = `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Portal Worker - Dashboard</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; padding: 20px; }
-    .container { max-width: 1200px; margin: 0 auto; }
-    .header { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-    .header h1 { font-size: 24px; color: #333; margin-bottom: 10px; }
-    .status { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 14px; font-weight: 500; }
-    .status.ok { background: #d4edda; color: #155724; }
-    .card { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-    .card h2 { font-size: 18px; color: #333; margin-bottom: 15px; }
-    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
-    .stat { padding: 15px; background: #f8f9fa; border-radius: 6px; }
-    .stat-label { font-size: 12px; color: #666; text-transform: uppercase; margin-bottom: 5px; }
-    .stat-value { font-size: 24px; font-weight: bold; color: #333; }
-    .activity { padding: 12px; border-left: 3px solid #007bff; background: #f8f9fa; margin-bottom: 10px; border-radius: 4px; }
-    .activity-time { font-size: 12px; color: #666; }
-    .activity-message { font-size: 14px; color: #333; margin-top: 4px; }
-    .queue-item { padding: 12px; background: #fff3cd; border-left: 3px solid #ffc107; margin-bottom: 10px; border-radius: 4px; }
-    .current-job { padding: 12px; background: #d1ecf1; border-left: 3px solid #17a2b8; margin-bottom: 10px; border-radius: 4px; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1>🚀 Portal Worker - Dashboard</h1>
-      <span class="status ok">● Online</span>
-    </div>
-    <div class="card">
-      <h2>📊 Estatísticas</h2>
-      <div class="stats">
-        <div class="stat"><div class="stat-label">Processados</div><div class="stat-value" id="processed">0</div></div>
-        <div class="stat"><div class="stat-label">Falhas</div><div class="stat-value" id="failed">0</div></div>
-        <div class="stat"><div class="stat-label">Processando</div><div class="stat-value" id="processing">0</div></div>
-        <div class="stat"><div class="stat-label">Na Fila</div><div class="stat-value" id="waiting">0</div></div>
-      </div>
-    </div>
-    <div class="card">
-      <h2>⏳ Fila de Processamento</h2>
-      <div id="queue-container"></div>
-    </div>
-    <div class="card">
-      <h2>📋 Últimas Atividades</h2>
-      <div id="activities-container"></div>
-    </div>
-  </div>
-  <script>
-    async function updateDashboard() {
-      try {
-        const res = await fetch('/status');
-        const data = await res.json();
-        const processed = data.activities.filter(a => a.event === 'job_finished').length;
-        const failed = data.activities.filter(a => a.event === 'job_failed').length;
-        const processing = data.queue.currentJob ? 1 : 0;
-        const waiting = data.queue.queueLength;
-        document.getElementById('processed').textContent = processed;
-        document.getElementById('failed').textContent = failed;
-        document.getElementById('processing').textContent = processing;
-        document.getElementById('waiting').textContent = waiting;
-        const queueContainer = document.getElementById('queue-container');
-        if (data.queue.currentJob) {
-          queueContainer.innerHTML = '<div class="current-job"><strong>🎯 Processando agora:</strong> ' + data.queue.currentJob.customer_id + '</div>';
-        } else {
-          queueContainer.innerHTML = '<p style="color: #666;">Nenhum job processando</p>';
-        }
-        if (data.queue.waiting && data.queue.waiting.length > 0) {
-          queueContainer.innerHTML += data.queue.waiting.map(j => '<div class="queue-item"><strong>Posição ' + j.position + ':</strong> ' + j.customer_id + '</div>').join('');
-        }
-        const activitiesContainer = document.getElementById('activities-container');
-        if (data.activities && data.activities.length > 0) {
-          activitiesContainer.innerHTML = data.activities.slice(0, 25).map(a => '<div class="activity"><div class="activity-time">' + new Date(a.at).toLocaleString('pt-BR') + '</div><div class="activity-message"><strong>[' + a.event + ']</strong> ' + a.message + '</div></div>').join('');
-        } else {
-          activitiesContainer.innerHTML = '<p style="color: #666;">Nenhuma atividade recente</p>';
-        }
-      } catch (error) {
-        console.error('Erro ao atualizar dashboard:', error);
-      }
-    }
-    updateDashboard();
-    setInterval(updateDashboard, 3000);
-  </script>
-</body>
-</html>`;
-
-    res.writeHead(200, { ...corsHeaders, 'Content-Type': 'text/html; charset=utf-8' });
-    res.end(html);
-    return;
-  }
-
-  // ─── 404 ─────────────────────────────────────────────────────
-  res.writeHead(404, corsHeaders);
-  res.end('Not Found');
+  // Recuperar leads pendentes na inicialização (1.5s - tempo suficiente pra subir)
+  setTimeout(recuperarLeadsPendentes, 1500);
 });
 
-server.listen(PORT, () => {
-  console.log(`🚀 Worker Portal iniciado na porta ${PORT}`);
-  console.log(`📊 Dashboard disponível em http://localhost:${PORT}/dashboard`);
-  console.log(`🔄 Polling de leads pendentes ativado (5s)`);
+// Tratamento de erros não capturados
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('\n⏸️  SIGTERM recebido. Encerrando servidor...');
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  console.log('\n⏸️  SIGINT recebido. Encerrando servidor...');
+  process.exit(0);
 });
