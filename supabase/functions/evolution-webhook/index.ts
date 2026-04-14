@@ -14,6 +14,29 @@ const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") || Deno.env.get("GOOGLE_AI
 const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL") || "";
 const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY") || "";
 
+// ─── Auto-resolve CEP from address data (avoid asking user) ──────────
+async function autoResolveCepIfNeeded(merged: any, updates: any): Promise<string> {
+  let step = getNextMissingStep(merged);
+  if (step === "ask_cep" && merged.address_city && merged.address_state && merged.address_street) {
+    console.log("🔍 Auto-resolvendo CEP via ViaCEP antes de perguntar ao usuário...");
+    try {
+      const cepAuto = await buscarCepPorEndereco(merged.address_state, merged.address_city, merged.address_street);
+      if (cepAuto && cepAuto.length === 8 && !/000$/.test(cepAuto)) {
+        console.log(`✅ CEP auto-resolvido: ${cepAuto}`);
+        merged.cep = cepAuto;
+        updates.cep = cepAuto;
+        // Recalcular next step agora que CEP foi preenchido
+        step = getNextMissingStep(merged);
+      } else {
+        console.log("⚠️ ViaCEP não retornou CEP específico, perguntando ao usuário.");
+      }
+    } catch (e: any) {
+      console.warn(`⚠️ Erro auto-resolve CEP: ${e?.message}`);
+    }
+  }
+  return step;
+}
+
 // ─── Rate limiter por telefone (anti-flood) ──────────────────────────
 const rateLimitMap = new Map<string, number[]>();
 const RATE_LIMIT_WINDOW_MS = 5_000; // 5 segundos
