@@ -104,13 +104,12 @@ Deno.serve(async (req) => {
       }
 
       // ─── Auto-reconexão: se a instância caiu, tentar reconectar ────────
-      if (connState === "close" && connInstance && EVOLUTION_API_URL && EVOLUTION_API_KEY) {
+      if (connState === "close" && connInstance && EVOLUTION_API_URL && EVOLUTION_API_KEY && canReconnect(connInstance)) {
         const baseUrl = EVOLUTION_API_URL.replace(/\/$/, "");
-        console.log(`🔄 Instância ${connInstance} desconectou (reason=${statusReason}). Tentando reconectar...`);
+        console.log(`🔄 Instância ${connInstance} desconectou (reason=${statusReason}). Tentando reconectar em 5s...`);
         
         try {
-          // Aguardar 3s antes de tentar reconectar (evitar loop rápido)
-          await new Promise(r => setTimeout(r, 3000));
+          await new Promise(r => setTimeout(r, 5000));
           
           const reconnRes = await fetchWithTimeout(`${baseUrl}/instance/connect/${connInstance}`, {
             method: "GET",
@@ -127,6 +126,8 @@ Deno.serve(async (req) => {
         } catch (e: any) {
           console.warn(`⚠️ Erro ao tentar reconectar ${connInstance}: ${e.message}`);
         }
+      } else if (connState === "close" && connInstance) {
+        console.log(`⏳ Reconexão em cooldown para ${connInstance}, aguardando 2 min`);
       }
 
       return new Response(JSON.stringify({ ok: true, event: "connection_update" }), {
