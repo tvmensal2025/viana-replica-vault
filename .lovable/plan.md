@@ -1,59 +1,68 @@
 
 
-# Redesign da Página de Cadastro
+# Auditoria de Robustez - Pontos de Melhoria
 
-## Resumo
-Redesenhar a CadastroPage para ficar visualmente premium com decorações de painéis solares, trocar o logo no centro do QR Code por apenas a letra "G" estilizada, e garantir que o QR Code aponte para a instância WhatsApp conectada do consultor.
+O sistema esta muito bem construido. Identifiquei **6 pontos de risco** que podem ser reforçados sem quebrar nada:
 
-## Mudanças Visuais
+---
 
-### 1. Decoração com painéis solares no background
-- Adicionar SVGs decorativos de painéis solares nos cantos e laterais da hero section
-- Painel solar estilizado no canto superior direito e inferior esquerdo com opacidade baixa
-- Raios de sol sutis irradiando do centro
-- Padrão de grid solar semi-transparente no fundo
+## 1. Worker Portal - Chromium ainda quebrando (CRITICO)
 
-### 2. QR Code com "G" no centro
-- Trocar `imageSettings.src` de `/images/logo-colorida-igreen.png` para um SVG inline com a letra "G" em verde (#00B74F) sobre fundo branco, estilo bold/arredondado
-- Criar um componente SVG simples com a letra "G" para usar como data URI no QR Code
+O erro **persiste em producao**: o Worker VPS esta usando o Chromium do Playwright (`/root/.cache/ms-playwright/chromium-1208/`) em vez do sistema (`/usr/bin/chromium`). O `headless: true` esta configurado no codigo, mas o servidor no VPS **nao esta rodando via Docker** (ou o Docker nao foi rebuilded). Resultado: 1 lead preso em `automation_failed`.
 
-### 3. QR Code dinâmico por instância conectada
-- Buscar a `whatsapp_instance` do consultor no Supabase (tabela `whatsapp_instances` onde `consultant_id = consultant.id`)
-- Se existir instância conectada, gerar o QR URL usando o número da instância
-- Fallback para o telefone do consultor se não houver instância
+**Correcao**: Forçar `executablePath` no codigo para `/usr/bin/chromium` como fallback fixo, e adicionar deteccao automatica do binario disponivel.
 
-### 4. Melhorias visuais gerais
-- Fundo com gradiente mais rico (verde escuro para verde claro com textura)
-- Cards com glassmorphism mais pronunciado
-- Animações sutis nos painéis solares decorativos (float/rotate lento)
-- Border glow no card do QR Code
+---
 
-## Arquivos Modificados
-- `src/pages/CadastroPage.tsx` — redesign completo da hero + decorações solares + QR com "G" + busca de instância WhatsApp
-- `src/components/QRCodeSection.tsx` — mesmas melhorias (este componente é usado em outras páginas)
+## 2. Leads presos sem recuperacao automatica
 
-## Detalhes Técnicos
+Existem leads com `status = automation_failed` ou `worker_offline` que ficam presos para sempre. Nao ha mecanismo de retry automatico.
 
-### SVG "G" para o QR Code
-```typescript
-// Data URI com letra G estilizada
-const gLogoDataUri = `data:image/svg+xml,${encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><circle cx="20" cy="20" r="20" fill="white"/><text x="20" y="28" text-anchor="middle" font-family="Arial Black" font-size="28" font-weight="900" fill="#00B74F">G</text></svg>'
-)}`;
-```
+**Correcao**: Adicionar um cron job (Edge Function `send-scheduled-messages` ou nova) que verifica leads presos ha mais de 10 minutos e reenvia ao Worker.
 
-### Busca da instância WhatsApp
-```typescript
-const { data: instance } = await supabase
-  .from("whatsapp_instances")
-  .select("phone_number, instance_name")
-  .eq("consultant_id", consultant.id)
-  .eq("status", "connected")
-  .maybeSingle();
+---
 
-const phoneNumber = instance?.phone_number || fallbackPhone;
-```
+## 3. Erro de UUID vazio no banco
 
-### Decorações SVG de painéis solares
-Painéis solares como elementos SVG absolutos posicionados nos cantos com `opacity-10` a `opacity-20`, com animação CSS `animate-float` sutil.
+O log do Postgres mostra `invalid input syntax for type uuid: ""`. Algum codigo esta passando string vazia em vez de `null` para um campo UUID.
+
+**Correcao**: Adicionar validacao nos pontos de insert/update para converter `""` em `null` antes de enviar ao Supabase.
+
+---
+
+## 4. Edge Function sem rate limiting
+
+O webhook Evolution aceita qualquer volume de requests sem throttling. Um usuario mal-intencionado ou um loop na Evolution API poderia sobrecarregar a Edge Function e esgotar a cota Gemini.
+
+**Correcao**: Adicionar um rate limiter simples por `remoteJid` (ex: max 3 msgs/segundo) usando cache em memoria.
+
+---
+
+## 5. OCR sem timeout global
+
+Se o Gemini demorar muito (>50s), a Edge Function pode atingir o timeout do Supabase (60s) e morrer sem responder ao usuario.
+
+**Correcao**: Adicionar um timeout wrapper de 45s no bloco OCR que retorna uma mensagem amigavel ("Tente enviar novamente") em vez de morrer silenciosamente.
+
+---
+
+## 6. Instancias WhatsApp zeradas
+
+A tabela `whatsapp_instances` esta **vazia** (query retornou `[]`). Isso significa que nenhum consultor tem instancia ativa. Apos o reset anterior, ninguem reconectou.
+
+**Correcao**: Isso nao e um bug de codigo, mas vale alertar que **nenhuma automacao funciona ate que os consultores reconectem seus QR codes**.
+
+---
+
+## Plano de Implementacao
+
+| # | Acao | Arquivo | Risco |
+|---|------|---------|-------|
+| 1 | Fixar executablePath do Chromium com fallback | `worker-portal/playwright-automation.mjs` | Nenhum |
+| 2 | Criar retry automatico para leads presos | `supabase/functions/evolution-webhook/index.ts` (ou nova function) | Nenhum |
+| 3 | Sanitizar UUIDs vazios antes de insert | `supabase/functions/evolution-webhook/index.ts` | Nenhum |
+| 4 | Rate limiter por remoteJid no webhook | `supabase/functions/evolution-webhook/index.ts` | Nenhum |
+| 5 | Timeout wrapper no bloco OCR | `supabase/functions/_shared/ocr.ts` | Nenhum |
+
+Nenhuma destas mudancas altera o fluxo existente - todas sao camadas de protecao adicionais.
 
