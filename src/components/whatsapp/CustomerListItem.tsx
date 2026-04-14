@@ -1,10 +1,13 @@
+import { useState } from "react";
 import {
   Trash2, Phone, Mail, MapPin, Zap, ChevronDown, ChevronUp, Pencil,
   CreditCard, User, MessageCircle, Building2, AlertTriangle, FileText, ClipboardCopy, Users,
+  Download, FileDown, Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { supabase } from "@/integrations/supabase/client";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -34,6 +37,79 @@ function DetailItem({ icon: Icon, label, value, sensitiveClass }: { icon: React.
         <p className="text-[9px] text-muted-foreground uppercase tracking-wider">{label}</p>
         <p className={`text-xs text-foreground ${sensitiveClass || ""}`}>{value}</p>
       </div>
+    </div>
+  );
+}
+
+function DocumentDownloadSection({ customerId, customerName }: { customerId: string; customerName: string | null }) {
+  const [loading, setLoading] = useState(false);
+  const [docs, setDocs] = useState<Array<{ type: string; url: string }> | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleFetchDocs = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke("upload-documents-minio", {
+        body: { customer_id: customerId },
+      });
+      if (fnError) throw fnError;
+      if (data?.uploads?.length > 0) {
+        setDocs(data.uploads.filter((u: any) => u.success));
+      } else {
+        setError("Nenhum documento encontrado");
+      }
+    } catch (e: any) {
+      setError(e.message || "Erro ao buscar documentos");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const docLabel: Record<string, string> = {
+    conta: "Conta de Energia",
+    doc_frente: "Doc Frente",
+    doc_verso: "Doc Verso",
+  };
+
+  return (
+    <div className="mt-3 pt-3 border-t border-border/20">
+      <div className="flex items-center gap-2 mb-2">
+        <div className="h-6 w-6 rounded-md bg-blue-500/10 flex items-center justify-center">
+          <FileDown className="h-3 w-3 text-blue-400" />
+        </div>
+        <span className="text-[11px] font-semibold text-foreground uppercase tracking-wider">Documentos</span>
+        <div className="flex-1 h-px bg-border" />
+      </div>
+
+      {!docs && !error && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 text-[10px] gap-1 text-blue-400 border-blue-500/20 hover:bg-blue-500/10"
+          onClick={handleFetchDocs}
+          disabled={loading}
+        >
+          {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+          {loading ? "Preparando..." : "Baixar Documentos"}
+        </Button>
+      )}
+
+      {error && (
+        <p className="text-[10px] text-muted-foreground">{error}</p>
+      )}
+
+      {docs && docs.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {docs.map((doc) => (
+            <a key={doc.type} href={doc.url} target="_blank" rel="noopener noreferrer" className="inline-flex">
+              <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 text-green-400 border-green-500/20 hover:bg-green-500/10">
+                <Download className="w-3 h-3" /> {docLabel[doc.type] || doc.type}
+              </Button>
+            </a>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -212,6 +288,9 @@ export function CustomerListItem({
               )}
             </div>
           )}
+
+          {/* ── Documentos para download via MinIO ── */}
+          <DocumentDownloadSection customerId={c.id} customerName={c.name} />
 
           <div className="flex justify-between gap-2 mt-3 pt-3 border-t border-border/20">
             <div className="flex gap-2">
