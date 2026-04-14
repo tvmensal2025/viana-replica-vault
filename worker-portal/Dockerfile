@@ -26,11 +26,11 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copiar package.json
+# Copiar package.json e package-lock.json
 COPY package*.json ./
 
-# Instalar dependências (usar npm install se não houver package-lock.json)
-RUN npm install --omit=dev
+# Instalar dependências
+RUN npm ci --only=production
 
 # Copiar código
 COPY . .
