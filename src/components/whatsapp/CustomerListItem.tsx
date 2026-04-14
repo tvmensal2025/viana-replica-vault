@@ -1,11 +1,13 @@
+import { useState } from "react";
 import {
   Trash2, Phone, Mail, MapPin, Zap, ChevronDown, ChevronUp, Pencil,
   CreditCard, User, MessageCircle, Building2, AlertTriangle, FileText, ClipboardCopy, Users,
-  Download, Image, FileDown,
+  Download, FileDown, Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { supabase } from "@/integrations/supabase/client";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
