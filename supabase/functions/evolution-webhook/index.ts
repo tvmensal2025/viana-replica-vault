@@ -266,15 +266,53 @@ Deno.serve(async (req) => {
 
         await sendText(remoteJid, "✅ Conta recebida! ⏳ Analisando seus dados...\n\nAguarde alguns instantes...");
 
+        // Logs detalhados para debug
+        console.log("📥 Arquivo recebido:");
+        console.log("  - isFile:", isFile);
+        console.log("  - hasImage:", hasImage);
+        console.log("  - hasDocument:", hasDocument);
+        console.log("  - imageMessage:", !!imageMessage);
+        console.log("  - documentMessage:", !!documentMessage);
+        console.log("  - fileUrl:", fileUrl?.substring(0, 100));
+        console.log("  - fileBase64 length:", fileBase64?.length || 0);
+        console.log("  - mimetype:", imageMessage?.mimetype || documentMessage?.mimetype);
+
+        // Validar base64
+        if (fileBase64) {
+          if (fileBase64.length < 100) {
+            console.error("❌ Base64 muito pequeno:", fileBase64.length);
+            updates.conversation_step = "aguardando_conta";
+            reply = "⚠️ Erro ao processar imagem. Tente enviar uma foto mais nítida.";
+            break;
+          }
+          
+          // Verificar se é base64 válido
+          try {
+            atob(fileBase64.substring(0, 100));
+          } catch (e) {
+            console.error("❌ Base64 inválido");
+            updates.conversation_step = "aguardando_conta";
+            reply = "⚠️ Erro ao processar imagem. Tente enviar novamente.";
+            break;
+          }
+        }
+
+        // Garantir que mediaMessage sempre tem valor
+        const mediaMsg = documentMessage || imageMessage || { 
+          mimetype: imageMessage?.mimetype || documentMessage?.mimetype || "image/jpeg" 
+        };
+
         try {
           console.log("📡 Chamando OCR Gemini para conta:", fileUrl?.substring(0, 100));
+          console.log("📡 Media message:", JSON.stringify(mediaMsg).substring(0, 200));
+          console.log("📡 Base64 length:", fileBase64?.length || 0);
 
           // Passar base64 e mediaMessage para OCR (importante para PDFs)
           const ocrData = await ocrContaEnergia(
             fileUrl, 
             GEMINI_API_KEY, 
             fileBase64 || undefined, 
-            documentMessage || imageMessage
+            mediaMsg
           );
           console.log("📊 OCR Conta resultado:", JSON.stringify(ocrData).substring(0, 400));
 
@@ -461,6 +499,24 @@ Deno.serve(async (req) => {
         updates.document_back_url = fileUrl || "evolution-media:pending";
 
         await sendText(remoteJid, "✅ Documento recebido! ⏳ Analisando...\n\nAguarde...");
+
+        // Logs detalhados
+        console.log("📥 Documento verso recebido:");
+        console.log("  - fileBase64 length:", fileBase64?.length || 0);
+        console.log("  - mimetype:", imageMessage?.mimetype || documentMessage?.mimetype);
+
+        // Validar base64
+        if (fileBase64 && fileBase64.length < 100) {
+          console.error("❌ Base64 muito pequeno:", fileBase64.length);
+          updates.conversation_step = "aguardando_doc_verso";
+          reply = "⚠️ Erro ao processar documento. Tente enviar uma foto mais nítida.";
+          break;
+        }
+
+        // Garantir mediaMessage
+        const mediaMsg = documentMessage || imageMessage || { 
+          mimetype: imageMessage?.mimetype || documentMessage?.mimetype || "image/jpeg" 
+        };
 
         try {
           const docFrenteUrl = customer.document_front_url || updates.document_front_url;
