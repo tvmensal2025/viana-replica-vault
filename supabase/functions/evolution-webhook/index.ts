@@ -34,6 +34,26 @@ function isRateLimited(phone: string): boolean {
   return recent.length > RATE_LIMIT_MAX;
 }
 
+// ─── Deduplicação de mensagens (anti-duplicata) ──────────────────────
+const processedMessages = new Map<string, number>();
+const DEDUP_WINDOW_MS = 10_000; // 10 segundos
+
+function isDuplicate(messageId: string): boolean {
+  if (!messageId) return false;
+  const now = Date.now();
+  // Limpar entries antigas
+  if (processedMessages.size > 200) {
+    for (const [key, ts] of processedMessages) {
+      if (now - ts > 60_000) processedMessages.delete(key);
+    }
+  }
+  if (processedMessages.has(messageId) && now - processedMessages.get(messageId)! < DEDUP_WINDOW_MS) {
+    return true;
+  }
+  processedMessages.set(messageId, now);
+  return false;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -136,6 +156,14 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ─── Deduplicação por messageId ────────────────────────────────
+    const messageId = body.data?.key?.id || "";
+    if (isDuplicate(messageId)) {
+      console.log(`⏭️ Mensagem duplicada ignorada: ${messageId}`);
+      return new Response(JSON.stringify({ ok: true, msg: "duplicate" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     const {
       remoteJid,
       messageText,
@@ -409,7 +437,13 @@ Deno.serve(async (req) => {
 
         if (resp === "sim_conta" || resp === "sim" || resp === "s" || resp === "1" || resp === "ok" || resp === "correto" || resp === "✅") {
           updates.conversation_step = "ask_tipo_documento";
-          reply = "✅ Dados da conta confirmados!\n\n📋 Qual documento de identidade você vai enviar?\n\nToque em uma opção:";
+          const tipoMsg = "✅ Dados da conta confirmados!\n\n📋 Qual documento de identidade você vai enviar?\n\nToque em uma opção:";
+          await sendButtons(remoteJid, tipoMsg, [
+            { id: "tipo_rg_novo", title: "📄 RG Novo" },
+            { id: "tipo_rg_antigo", title: "📄 RG Antigo" },
+            { id: "tipo_cnh", title: "🪪 CNH" },
+          ]);
+          reply = "";
 
         } else if (resp === "nao_conta" || resp === "nao" || resp === "não" || resp === "n" || resp === "2" || resp === "errado" || resp === "❌") {
           updates.conversation_step = "aguardando_conta";
@@ -509,7 +543,13 @@ Deno.serve(async (req) => {
           const cpf = updates.cpf || customer.cpf || "—";
           const rg = updates.rg || customer.rg || "—";
           const nasc = updates.data_nascimento || customer.data_nascimento || "—";
-          reply = `📋 *Dados extraídos da CNH:*\n\n👤 Nome: *${nome}*\n🆔 CPF: *${cpf}*\n🪪 RG: *${rg}*\n🎂 Nascimento: *${nasc}*\n\n✅ Dados corretos?\n\n1️⃣ *SIM* - Continuar\n2️⃣ *NÃO* - Reenviar CNH\n3️⃣ *EDITAR* - Corrigir dados`;
+          const chnConfirmMsg = `📋 *Dados extraídos da CNH:*\n\n👤 Nome: *${nome}*\n🆔 CPF: *${cpf}*\n🪪 RG: *${rg}*\n🎂 Nascimento: *${nasc}*\n\nEstá tudo correto?`;
+          const sent = await sendButtons(remoteJid, chnConfirmMsg, [
+            { id: "sim_doc", title: "✅ SIM" },
+            { id: "nao_doc", title: "❌ NÃO" },
+            { id: "editar_doc", title: "✏️ EDITAR" }
+          ]);
+          reply = "";
           break;
         }
 
