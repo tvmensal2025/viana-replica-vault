@@ -14,6 +14,26 @@ const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") || Deno.env.get("GOOGLE_AI
 const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL") || "";
 const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY") || "";
 
+// ─── Rate limiter por telefone (anti-flood) ──────────────────────────
+const rateLimitMap = new Map<string, number[]>();
+const RATE_LIMIT_WINDOW_MS = 5_000; // 5 segundos
+const RATE_LIMIT_MAX = 4; // máximo 4 msgs por janela
+
+function isRateLimited(phone: string): boolean {
+  const now = Date.now();
+  const timestamps = rateLimitMap.get(phone) || [];
+  const recent = timestamps.filter(t => now - t < RATE_LIMIT_WINDOW_MS);
+  recent.push(now);
+  rateLimitMap.set(phone, recent);
+  // Limpar phones antigos periodicamente (a cada 100 entries)
+  if (rateLimitMap.size > 100) {
+    for (const [key, ts] of rateLimitMap) {
+      if (ts.every(t => now - t > 60_000)) rateLimitMap.delete(key);
+    }
+  }
+  return recent.length > RATE_LIMIT_MAX;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -138,7 +158,15 @@ Deno.serve(async (req) => {
     }
 
     const phone = normalizePhone(remoteJid.replace("@s.whatsapp.net", ""));
-    console.log(`📱 Mensagem de: ${phone} | Texto: "${messageText}" | Botão: ${buttonId} | Arquivo: ${isFile}`);
+
+    // ─── Rate limit check ─────────────────────────────────────────
+    if (isRateLimited(phone)) {
+      console.warn(`🚫 Rate limited: ${phone} (>${RATE_LIMIT_MAX} msgs em ${RATE_LIMIT_WINDOW_MS}ms)`);
+      return new Response(JSON.stringify({ ok: true, msg: "rate_limited" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
 
     // ─── Buscar ou criar cliente ──────────────────────────────────────
     const statusFinalizados = [

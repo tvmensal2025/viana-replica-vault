@@ -83,24 +83,47 @@ export async function executarAutomacao(customerId, supabase) {
     // ─── 3. ABRIR NAVEGADOR ───────────────────────────────────────
     console.log('🌐 Abrindo navegador...');
 
-    const isHeadless = process.env.HEADLESS !== '0'; // headless por padrão
+    // SEMPRE headless em produção — evita erro de X Server
+    const isHeadless = process.env.HEADLESS !== '0';
     console.log(`🖥️ Modo headless: ${isHeadless}`);
+
+    // Auto-detectar Chromium do sistema (prioridade sobre Playwright bundled)
+    const systemChromiumPaths = [
+      process.env.PUPPETEER_EXECUTABLE_PATH,
+      '/usr/bin/chromium',
+      '/usr/bin/chromium-browser',
+      '/usr/bin/google-chrome-stable',
+      '/usr/bin/google-chrome',
+    ].filter(Boolean);
+
+    let executablePath = undefined;
+    for (const p of systemChromiumPaths) {
+      try {
+        const { accessSync } = await import('fs');
+        accessSync(p);
+        executablePath = p;
+        console.log(`✅ Usando Chromium do sistema: ${p}`);
+        break;
+      } catch { /* não existe, tentar próximo */ }
+    }
+
+    if (!executablePath) {
+      console.log('⚠️ Nenhum Chromium do sistema encontrado — usando Playwright bundled');
+    }
 
     const launchOptions = {
       headless: isHeadless,
+      executablePath,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
         '--disable-blink-features=AutomationControlled',
         '--start-maximized',
+        '--disable-gpu',
+        '--disable-software-rasterizer',
       ],
     };
-
-    // Usar Chromium do sistema se disponível
-    if (process.env.PUPPETEER_EXECUTABLE_PATH) {
-      launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
-    }
 
     browser = await chromium.launch(launchOptions);
 
