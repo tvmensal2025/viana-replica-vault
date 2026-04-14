@@ -156,6 +156,14 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ─── Deduplicação por messageId ────────────────────────────────
+    const messageId = body.data?.key?.id || "";
+    if (isDuplicate(messageId)) {
+      console.log(`⏭️ Mensagem duplicada ignorada: ${messageId}`);
+      return new Response(JSON.stringify({ ok: true, msg: "duplicate" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     const {
       remoteJid,
       messageText,
