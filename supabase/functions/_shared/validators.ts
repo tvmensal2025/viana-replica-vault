@@ -55,7 +55,8 @@ export function validateCustomerForPortal(customer: any): ValidationResult {
   if (isNaN(billValue) || billValue <= 0) errors.push("Valor da conta inválido");
   if (!customer.electricity_bill_photo_url || customer.electricity_bill_photo_url.trim().length === 0) errors.push("Foto da conta de luz é obrigatória");
   if (!customer.document_front_url || customer.document_front_url.trim().length === 0) errors.push("Documento (frente) é obrigatório");
-  if (!customer.document_back_url || customer.document_back_url.trim().length === 0) errors.push("Documento (verso) é obrigatório");
+  // CNH não tem verso — só exigir para RG
+  if (customer.document_type !== "CNH" && (!customer.document_back_url || customer.document_back_url.trim().length === 0)) errors.push("Documento (verso) é obrigatório");
   if (customer.name && customer.name.trim().split(/\s+/).length < 2) warnings.push("Nome parece incompleto (sem sobrenome)");
   if (billValue < 50) warnings.push("Valor da conta parece muito baixo");
 

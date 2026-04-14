@@ -1026,34 +1026,21 @@ Deno.serve(async (req) => {
         break;
       }
 
+      // ─── 11b. PORTAL SUBMITTING (Worker está processando) ─────────
+      case "portal_submitting": {
+        reply = "⏳ Estamos processando seu cadastro no portal...\n\n📱 Em breve você receberá um *código de verificação por SMS*. Quando receber, *digite aqui*!\n\nAguarde alguns instantes...";
+        break;
+      }
+
       // ─── 12. OTP ──────────────────────────────────────────────────────
       case "aguardando_otp": {
         const otpCode = messageText.replace(/\D/g, "");
         if (otpCode.length >= 4 && otpCode.length <= 8) {
           updates.otp_code = otpCode;
           updates.otp_received_at = new Date().toISOString();
-          updates.conversation_step = "validando_otp";
-          updates.status = "validating_otp";
-
+          // NÃO mudar conversation_step — o Worker faz polling no otp_code
+          // e ele mesmo mudará para aguardando_assinatura após preencher
           reply = `✅ Código *${otpCode}* recebido! ⏳ Validando no portal...\n\nAguarde alguns instantes...`;
-
-          try {
-            const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-            const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-            const otpRes = await fetchWithTimeout(`${supabaseUrl}/functions/v1/submit-otp`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${serviceKey}`,
-              },
-              body: JSON.stringify({ customer_id: customer.id, otp_code: otpCode }),
-              timeout: 50_000,
-            });
-            const otpData = await otpRes.text();
-            console.log(`📡 submit-otp resposta (${otpRes.status}): ${otpData.substring(0, 200)}`);
-          } catch (e: any) {
-            console.error("⚠️ Erro ao chamar submit-otp:", e.message);
-          }
         } else {
           reply = "📱 Por favor, digite o *código numérico* que você recebeu por SMS.\n\n(Geralmente são 4 a 6 dígitos)";
         }

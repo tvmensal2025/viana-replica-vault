@@ -219,61 +219,178 @@ export async function executarAutomacao(customerId, supabase) {
 
     console.log('✅ Formulário preenchido');
 
-    // ─── 6. VERIFICAR SE PRECISA OTP ──────────────────────────────
+    // ─── 6. SUBMETER FORMULÁRIO ──────────────────────────────────
+    console.log('🎉 Clicando em Calcular/Garantir/Enviar...');
+
+    // Tentar clicar no botão de envio do formulário
+    const submitButton = page.locator('button:has-text("Enviar"), button:has-text("Finalizar"), button:has-text("Cadastrar")').first();
+    if (await submitButton.count() > 0) {
+      await submitButton.click();
+      await page.waitForTimeout(4000);
+    }
+
+    // ─── 7. VERIFICAR SE PRECISA OTP ──────────────────────────────
     await page.waitForTimeout(2000);
 
-    const otpInput = page.locator('input[placeholder*="digo"], input[name="otp"]').first();
+    const otpInput = page.locator('input[placeholder*="digo"], input[name="otp"], input[placeholder*="SMS"], input[placeholder*="código"]').first();
     const needsOTP = await otpInput.count() > 0;
 
     if (needsOTP) {
-      console.log('📱 Campo OTP detectado - aguardando código...');
+      console.log('📱 Campo OTP detectado - aguardando código do cliente...');
 
-      // Atualizar status
+      // Atualizar status E conversation_step para que o webhook saiba aceitar OTP
       await supabase
         .from('customers')
-        .update({ status: 'awaiting_otp' })
+        .update({
+          status: 'awaiting_otp',
+          conversation_step: 'aguardando_otp',
+        })
         .eq('id', customerId);
 
-      // Aguardar OTP (polling)
+      // Aguardar OTP (polling no banco - o cliente digita no WhatsApp)
       const otpCode = await aguardarOTP(customerId, supabase);
 
       if (otpCode) {
         console.log(`✅ OTP recebido: ${otpCode}`);
         await otpInput.fill(otpCode);
         await page.waitForTimeout(1000);
+
+        // Clicar no botão de validar/confirmar OTP
+        const confirmButton = page.locator('button:has-text("Validar"), button:has-text("Confirmar"), button:has-text("Enviar"), button[type="submit"]').first();
+        if (await confirmButton.count() > 0) {
+          await confirmButton.click();
+          await page.waitForTimeout(5000);
+        }
       } else {
         throw new Error('Timeout aguardando OTP');
       }
     }
 
-    // ─── 7. FINALIZAR ─────────────────────────────────────────────
-    console.log('🎉 Clicando em Finalizar...');
+    // ─── 8. CAPTURAR LINK DE ASSINATURA (CERTOSIGN) ───────────────
+    await page.waitForTimeout(3000);
 
-    await page.click('button:has-text("Enviar"), button:has-text("Finalizar")');
-    await page.waitForTimeout(4000);
+    // Tentar capturar o link de assinatura da página final
+    let linkAssinatura = page.url();
 
-    // Capturar URL final
-    const finalUrl = page.url();
-    console.log(`📄 URL final: ${finalUrl}`);
+    // Procurar por links de assinatura na página (CertoSign, D4Sign, etc.)
+    const signatureLinks = await page.locator('a[href*="certosign"], a[href*="d4sign"], a[href*="assinatura"], a[href*="sign"]').all();
+    for (const link of signatureLinks) {
+      const href = await link.getAttribute('href');
+      if (href) {
+        linkAssinatura = href;
+        console.log(`🔗 Link de assinatura encontrado: ${href}`);
+        break;
+      }
+    }
 
-    // Atualizar status
+    // Se não encontrou link explícito, verificar texto da página
+    if (linkAssinatura === page.url()) {
+      const pageText = await page.textContent('body');
+      const linkMatch = pageText?.match(/(https?:\/\/[^\s]*(?:certosign|d4sign|assinatura|sign)[^\s]*)/i);
+      if (linkMatch) {
+        linkAssinatura = linkMatch[1];
+        console.log(`🔗 Link de assinatura extraído do texto: ${linkAssinatura}`);
+      }
+    }
+
+    console.log(`📄 URL final / Link assinatura: ${linkAssinatura}`);
+
+    // ─── 9. ATUALIZAR BANCO E ENVIAR LINK VIA WHATSAPP ────────────
     await supabase
       .from('customers')
       .update({
-        status: 'registered_igreen',
-        link_assinatura: finalUrl,
+        status: 'awaiting_signature',
+        conversation_step: 'aguardando_assinatura',
+        link_assinatura: linkAssinatura,
       })
       .eq('id', customerId);
 
-    console.log('✅ Automação concluída!');
+    // Enviar link de assinatura via WhatsApp
+    try {
+      await enviarLinkAssinaturaWhatsApp(customerId, linkAssinatura, supabase);
+      console.log('✅ Link de assinatura enviado via WhatsApp!');
+    } catch (whatsErr) {
+      console.error('⚠️ Erro ao enviar link via WhatsApp (não-bloqueante):', whatsErr.message);
+    }
 
-    // IMPORTANTE: NÃO fechar o navegador
-    // O navegador permanece aberto para conferência manual
+    console.log('✅ Automação concluída!');
 
   } catch (error) {
     console.error('❌ Erro na automação:', error.message);
     throw error;
   }
+}
+
+/**
+ * Enviar link de assinatura via WhatsApp (Evolution API)
+ */
+async function enviarLinkAssinaturaWhatsApp(customerId, linkAssinatura, supabase) {
+  // Buscar dados do cliente + instância do consultor
+  const { data: customer } = await supabase
+    .from('customers')
+    .select('phone_whatsapp, consultant_id')
+    .eq('id', customerId)
+    .single();
+
+  if (!customer) {
+    console.warn('⚠️ Cliente não encontrado para envio WhatsApp');
+    return;
+  }
+
+  // Buscar instância WhatsApp do consultor
+  const { data: instance } = await supabase
+    .from('whatsapp_instances')
+    .select('instance_name')
+    .eq('consultant_id', customer.consultant_id)
+    .limit(1)
+    .single();
+
+  if (!instance) {
+    console.warn('⚠️ Instância WhatsApp não encontrada para o consultor');
+    return;
+  }
+
+  const EVOLUTION_API_URL = (process.env.EVOLUTION_API_URL || '').replace(/\/$/, '');
+  const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '';
+
+  if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
+    console.warn('⚠️ EVOLUTION_API_URL ou EVOLUTION_API_KEY não configurados');
+    return;
+  }
+
+  // Normalizar telefone para JID
+  let phone = (customer.phone_whatsapp || '').replace(/\D/g, '');
+  if (!phone.startsWith('55')) phone = '55' + phone;
+  const remoteJid = `${phone}@s.whatsapp.net`;
+
+  const mensagem =
+    '🎉 *Parabéns! Seu cadastro foi realizado com sucesso!*\n\n' +
+    '📝 Agora falta apenas a *assinatura digital* para finalizar.\n\n' +
+    `🔗 Acesse o link abaixo para assinar:\n${linkAssinatura}\n\n` +
+    '⚠️ *Importante:*\n' +
+    '• Abra o link pelo celular\n' +
+    '• Siga as instruções de validação facial\n' +
+    '• O link expira em 48 horas\n\n' +
+    'Qualquer dúvida, responda aqui! ☀️🌱';
+
+  const res = await fetch(`${EVOLUTION_API_URL}/message/sendText/${instance.instance_name}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': EVOLUTION_API_KEY,
+    },
+    body: JSON.stringify({
+      number: remoteJid,
+      text: mensagem,
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Evolution API ${res.status}: ${body.substring(0, 200)}`);
+  }
+
+  console.log(`✅ Mensagem enviada para ${remoteJid} via instância ${instance.instance_name}`);
 }
 
 /**
