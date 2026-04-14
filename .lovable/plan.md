@@ -1,85 +1,64 @@
 
 
-# Análise Profunda: Bugs Críticos no Fluxo Finalização → OTP → Assinatura
+# Fix: Bot "Travado" — Resend Buttons on Invalid Input
 
-## Resumo dos Problemas Encontrados
+## Root Cause
 
-Existem **5 bugs críticos** que impedem o fluxo de funcionar após o clique em "Finalizar". O fluxo atual quebra no momento em que o portal pede o código OTP.
+The customer JOSEFA sent "1" at `confirmando_dados_conta` which correctly transitioned to `ask_tipo_documento`. The bot sent document type buttons. Then she sent "Sim" and "Oi" — neither matches a document type option ("1"/"2"/"3"/"rg novo"/"rg antigo"/"cnh"). The else branch at line 486 only sends plain text `"Escolha o tipo de documento (toque em um botão):"` — **without actually resending the buttons**. The customer has no way to proceed.
 
----
+The DB confirms she's at `ask_tipo_documento` and waiting.
 
-## Bug 1: CRÍTICO — `portal_submitting` não está no switch (causa reset total)
+## Fix
 
-Quando o Worker começa a automação, o `conversation_step` do cliente fica como `portal_submitting`. Quando o Worker detecta o campo OTP no portal e muda o `status` para `awaiting_otp`, ele **não muda o `conversation_step`**. Resultado: quando o cliente digita o código OTP no WhatsApp, o webhook vê `conversation_step = "portal_submitting"`, que **não existe no switch-case**. Cai no `default` e **reseta tudo para `welcome`**, perdendo todos os dados.
+**File: `supabase/functions/evolution-webhook/index.ts`**
 
-**Correção**: O Worker precisa atualizar `conversation_step` para `aguardando_otp` junto com o `status`.
+1. **`ask_tipo_documento` else branch (line 485-487)**: Replace plain text reply with `sendButtons` call that resends the 3 document type options (RG Novo, RG Antigo, CNH), with text fallback if buttons fail.
 
-## Bug 2: CRÍTICO — Edge Function `submit-otp` não existe
+2. **`ask_finalizar` else branch (line 1023-1025)**: Similarly ensure `getReplyForStep` includes the finalizar button, or add explicit `sendButtons` call.
 
-O webhook no passo `aguardando_otp` (linha 1043) tenta chamar `submit-otp`, mas essa edge function **nunca foi criada**. O erro é silenciosamente engolido pelo `catch`. O OTP é salvo no banco, mas o Worker já está fazendo polling — então a intenção original era que o Worker pegasse o OTP via polling, não via edge function. A chamada `submit-otp` é desnecessária e confusa.
+3. **Global safety net — `default` case**: Currently, if `conversation_step` has an unrecognized value, the bot should respond with a helpful message instead of silently doing nothing. Add a default case that tells the user their status and offers help.
 
-**Correção**: Remover a chamada `submit-otp` (o Worker já faz polling e pega o `otp_code` do banco).
+## Changes
 
-## Bug 3: CRÍTICO — Worker não envia o link de assinatura ao cliente
-
-Após preencher o OTP e clicar em "Finalizar" no portal, o Worker salva `link_assinatura` e `status: registered_igreen` no banco, mas **não envia nenhuma mensagem no WhatsApp**. O cliente fica esperando sem receber o link do CertoSign.
-
-**Correção**: O Worker precisa chamar a Evolution API para enviar o link de assinatura via WhatsApp.
-
-## Bug 4: CRÍTICO — Worker não atualiza `conversation_step` para `aguardando_assinatura`
-
-Mesmo se corrigirmos o envio da mensagem, o `conversation_step` nunca é atualizado para `aguardando_assinatura`. Se o cliente responder qualquer coisa depois, o passo continua como `portal_submitting` ou `aguardando_otp` e o bot não sabe o que fazer.
-
-**Correção**: Worker deve atualizar `conversation_step` para `aguardando_assinatura` após sucesso.
-
-## Bug 5: Validação `document_back_url` para CNH
-
-O `validateCustomerForPortal` exige `document_back_url` (verso do documento), mas a CNH não tem verso. O `getNextMissingStep` corretamente pula este campo para CNH, mas o validador final na etapa `finalizando` vai bloquear o envio com erro "Documento (verso) é obrigatório".
-
-**Correção**: Validar `document_back_url` apenas quando `document_type !== "CNH"`.
-
----
-
-## Plano de Implementação
-
-### Passo 1: Corrigir o Worker (`playwright-automation.mjs`)
-- Na função `aguardarOTP`: após atualizar `status: 'awaiting_otp'`, também atualizar `conversation_step: 'aguardando_otp'`
-- Após clicar Finalizar e capturar a URL: atualizar `conversation_step: 'aguardando_assinatura'`
-- Enviar mensagem WhatsApp com o link de assinatura via Evolution API
-
-### Passo 2: Corrigir o Worker (`server.mjs`)
-- Adicionar função `enviarMensagemWhatsApp` que busca a instância do consultor e envia via Evolution API
-- Chamar essa função após automação concluída com sucesso
-
-### Passo 3: Corrigir o Webhook (`evolution-webhook/index.ts`)
-- Adicionar case `portal_submitting` no switch que responde "Estamos processando seu cadastro..."
-- Remover chamada ao `submit-otp` inexistente do case `aguardando_otp`
-
-### Passo 4: Corrigir o Validador (`_shared/validators.ts`)
-- Tornar `document_back_url` condicional: só exigir se `document_type !== "CNH"`
-
----
-
-## Fluxo Correto Após Correções
-
-```text
-ask_finalizar (botão "Finalizar")
-  → finalizando (validação final)
-    → portal_submitting (Worker abre portal, preenche dados)
-      → aguardando_otp (Worker detecta campo OTP, atualiza conversation_step)
-        → Cliente recebe SMS, digita código no WhatsApp
-          → Webhook salva otp_code no banco
-            → Worker pega via polling, preenche no portal
-              → Worker clica "Enviar/Finalizar"
-                → Captura URL final (link CertoSign)
-                  → Envia link via WhatsApp ao cliente
-                    → conversation_step = "aguardando_assinatura"
-                      → complete (após assinatura)
+### Step 1: `ask_tipo_documento` — resend buttons on invalid input
+```typescript
+// Line 485-487: replace plain text with buttons
+} else {
+  const sent = await sendButtons(remoteJid, "📋 Qual documento de identidade você vai enviar?\n\nToque em uma opção:", [
+    { id: "tipo_rg_novo", title: "📄 RG Novo" },
+    { id: "tipo_rg_antigo", title: "📄 RG Antigo" },
+    { id: "tipo_cnh", title: "🪪 CNH" },
+  ]);
+  if (!sent) reply = "Escolha: *1* = RG Novo, *2* = RG Antigo, *3* = CNH";
+}
 ```
 
-### Arquivos Modificados
-1. `worker-portal/playwright-automation.mjs` — OTP step + envio link WhatsApp
-2. `worker-portal/server.mjs` — Função envio WhatsApp via Evolution API
-3. `supabase/functions/evolution-webhook/index.ts` — Case `portal_submitting` + remover `submit-otp`
-4. `supabase/functions/_shared/validators.ts` — CNH sem verso
+### Step 2: `ask_finalizar` — resend buttons on invalid input
+```typescript
+// Line 1023-1025: replace getReplyForStep with explicit buttons
+} else {
+  const sent = await sendButtons(remoteJid, "📋 Deseja finalizar o cadastro?", [
+    { id: "btn_finalizar", title: "✅ Finalizar" },
+    { id: "btn_cancelar", title: "❌ Cancelar" },
+  ]);
+  if (!sent) reply = "Digite *FINALIZAR* ou *1* para confirmar:";
+}
+```
+
+### Step 3: Add robust `default` case in switch
+Ensure unrecognized steps get a helpful response instead of silence:
+```typescript
+default: {
+  console.warn(`⚠️ Step desconhecido: ${currentStep}`);
+  reply = "🤖 Desculpe, algo deu errado. Vou retomar de onde paramos...\n\nDigite *oi* para recomeçar ou aguarde um momento.";
+}
+```
+
+### Step 4: Deploy edge function
+Deploy `evolution-webhook` after changes.
+
+## Impact
+- Zero risk to existing flow
+- Customers will always see actionable buttons/text at every step
+- No more "stuck" conversations
 
