@@ -311,24 +311,34 @@ export async function ocrDocumento(imagemUrl: string | null, geminiApiKey: strin
   }
 }
 
-/** Sempre usa frente e verso quando disponíveis: OCR nas duas e mescla (frente tem prioridade). */
+/**
+ * OCR frente e verso do documento.
+ * Parâmetros renomeados para clareza:
+ *   frenteBase64 = base64 da frente (obtido via Evolution downloadMedia)
+ *   frenteMediaMsg = mediaMessage da frente (para mime type)
+ *   versoBase64 = base64 do verso
+ */
 export async function ocrDocumentoFrenteVerso(
   frenteUrl: string | null, versoUrl: string | null, tipo: string,
-  geminiApiKey: string, whapiToken?: string, frenteMediaId?: string, versoMediaId?: string
+  geminiApiKey: string, frenteBase64?: string, frenteMediaMsg?: any, versoBase64?: string
 ): Promise<{ sucesso: boolean; dados?: any; erro?: string }> {
-  const ocrFrente = await ocrDocumento(frenteUrl, geminiApiKey, tipo, whapiToken, frenteMediaId);
+  console.log(`🔍 ocrDocumentoFrenteVerso: frenteB64=${!!frenteBase64}, versoB64=${!!versoBase64}, frenteUrl=${frenteUrl?.substring(0,60)}, versoUrl=${versoUrl?.substring(0,60)}`);
+
+  // OCR da frente — passa frenteBase64 e frenteMediaMsg
+  const ocrFrente = await ocrDocumento(frenteUrl, geminiApiKey, tipo, frenteBase64, frenteMediaMsg);
   if (!ocrFrente.sucesso || !ocrFrente.dados) return ocrFrente;
 
   const d = ocrFrente.dados;
-  const temVerso = !!(versoUrl || versoMediaId);
+  const temVerso = !!(versoUrl || versoBase64);
 
   if (!temVerso) {
     console.log("✅ OCR Doc (só frente) OK:", JSON.stringify(d).substring(0, 400));
     return { sucesso: true, dados: d };
   }
 
-  console.log("🔍 OCR Doc - frente OK, extraindo VERSO sempre (prompt específico verso)...");
-  const ocrVerso = await ocrDocumento(versoUrl, geminiApiKey, tipo, whapiToken, versoMediaId, true);
+  // OCR do verso — usa versoBase64 (NÃO frenteBase64!)
+  console.log("🔍 OCR Doc - frente OK, extraindo VERSO com base64 do verso...");
+  const ocrVerso = await ocrDocumento(versoUrl, geminiApiKey, tipo, versoBase64, undefined, true);
   if (!ocrVerso.sucesso || !ocrVerso.dados) {
     console.log("⚠️ OCR verso falhou ou sem dados, usando só frente");
     return { sucesso: true, dados: d };
@@ -349,6 +359,6 @@ export async function ocrDocumentoFrenteVerso(
   if (d.rg) d.rg = normalizarRG(d.rg) || (d.rg.replace(/\D/g, "").length >= 7 && d.rg.replace(/\D/g, "").length <= 12 ? d.rg.replace(/\D/g, "") : "");
   if (d.dataNascimento) d.dataNascimento = validarDataNascimento(d.dataNascimento);
 
-  console.log("✅ OCR Doc (frente+verso sempre) OK:", JSON.stringify(d).substring(0, 400));
+  console.log("✅ OCR Doc (frente+verso) OK:", JSON.stringify(d).substring(0, 400));
   return { sucesso: true, dados: d };
 }
