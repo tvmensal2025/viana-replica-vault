@@ -225,12 +225,22 @@ export async function connectInstance(instanceName: string) {
 }
 
 export async function getConnectionState(instanceName: string) {
-  const response = await request<{ instance?: { state: string }; state?: string }>(
-    `instance/connectionState/${instanceName}`,
-    "GET"
-  );
-  const state = response?.instance?.state || response?.state;
-  return { state: (state as "open" | "close" | "connecting") || "close" };
+  try {
+    const response = await request<{ instance?: { state: string }; state?: string }>(
+      `instance/connectionState/${instanceName}`,
+      "GET"
+    );
+    const state = response?.instance?.state || response?.state;
+    return { state: (state as "open" | "close" | "connecting") || "close" };
+  } catch (err) {
+    if (err instanceof EvolutionAuthError) throw err;
+    const msg = err instanceof Error ? err.message : "";
+    // "not connected" / "not found" → return close instead of crashing
+    if (/not connected|not found|does not exist|instance.*not/i.test(msg)) {
+      return { state: "close" as const };
+    }
+    throw err;
+  }
 }
 
 export async function deleteInstance(instanceName: string) {
