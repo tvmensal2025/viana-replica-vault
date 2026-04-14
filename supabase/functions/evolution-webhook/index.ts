@@ -34,6 +34,26 @@ function isRateLimited(phone: string): boolean {
   return recent.length > RATE_LIMIT_MAX;
 }
 
+// ─── Deduplicação de mensagens (anti-duplicata) ──────────────────────
+const processedMessages = new Map<string, number>();
+const DEDUP_WINDOW_MS = 10_000; // 10 segundos
+
+function isDuplicate(messageId: string): boolean {
+  if (!messageId) return false;
+  const now = Date.now();
+  // Limpar entries antigas
+  if (processedMessages.size > 200) {
+    for (const [key, ts] of processedMessages) {
+      if (now - ts > 60_000) processedMessages.delete(key);
+    }
+  }
+  if (processedMessages.has(messageId) && now - processedMessages.get(messageId)! < DEDUP_WINDOW_MS) {
+    return true;
+  }
+  processedMessages.set(messageId, now);
+  return false;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
