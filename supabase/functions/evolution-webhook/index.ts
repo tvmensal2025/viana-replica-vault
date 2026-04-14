@@ -14,6 +14,29 @@ const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") || Deno.env.get("GOOGLE_AI
 const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL") || "";
 const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY") || "";
 
+// ─── Auto-resolve CEP from address data (avoid asking user) ──────────
+async function autoResolveCepIfNeeded(merged: any, updates: any): Promise<string> {
+  let step = getNextMissingStep(merged);
+  if (step === "ask_cep" && merged.address_city && merged.address_state && merged.address_street) {
+    console.log("🔍 Auto-resolvendo CEP via ViaCEP antes de perguntar ao usuário...");
+    try {
+      const cepAuto = await buscarCepPorEndereco(merged.address_state, merged.address_city, merged.address_street);
+      if (cepAuto && cepAuto.length === 8 && !/000$/.test(cepAuto)) {
+        console.log(`✅ CEP auto-resolvido: ${cepAuto}`);
+        merged.cep = cepAuto;
+        updates.cep = cepAuto;
+        // Recalcular next step agora que CEP foi preenchido
+        step = getNextMissingStep(merged);
+      } else {
+        console.log("⚠️ ViaCEP não retornou CEP específico, perguntando ao usuário.");
+      }
+    } catch (e: any) {
+      console.warn(`⚠️ Erro auto-resolve CEP: ${e?.message}`);
+    }
+  }
+  return step;
+}
+
 // ─── Rate limiter por telefone (anti-flood) ──────────────────────────
 const rateLimitMap = new Map<string, number[]>();
 const RATE_LIMIT_WINDOW_MS = 5_000; // 5 segundos
@@ -701,7 +724,7 @@ Deno.serve(async (req) => {
           const merged = { ...customer, ...updates };
           if (!merged.document_front_url) merged.document_front_url = customer.document_front_url || "collected";
           if (!merged.document_back_url) merged.document_back_url = customer.document_back_url || "collected";
-          const nextStep = getNextMissingStep(merged);
+          const nextStep = await autoResolveCepIfNeeded(merged, updates);
           updates.conversation_step = nextStep;
           reply = getReplyForStep(nextStep, merged);
 
@@ -866,7 +889,7 @@ Deno.serve(async (req) => {
         if (messageText.length < 3) { reply = "Por favor, digite seu *nome completo*."; break; }
         updates.name = messageText.trim();
         const merged = { ...customer, ...updates };
-        const next = getNextMissingStep(merged);
+        const next = await autoResolveCepIfNeeded(merged, updates);
         updates.conversation_step = next;
         reply = getReplyForStep(next, merged);
         break;
@@ -879,7 +902,7 @@ Deno.serve(async (req) => {
 
         updates.cpf = cpfClean;
         const merged = { ...customer, ...updates };
-        const next = getNextMissingStep(merged);
+        const next = await autoResolveCepIfNeeded(merged, updates);
         updates.conversation_step = next;
         reply = getReplyForStep(next, merged);
         break;
@@ -889,7 +912,7 @@ Deno.serve(async (req) => {
         if (messageText.length < 4) { reply = "Por favor, informe um *RG válido*:"; break; }
         updates.rg = messageText.trim();
         const merged = { ...customer, ...updates };
-        const next = getNextMissingStep(merged);
+        const next = await autoResolveCepIfNeeded(merged, updates);
         updates.conversation_step = next;
         reply = getReplyForStep(next, merged);
         break;
@@ -900,7 +923,7 @@ Deno.serve(async (req) => {
         if (!dateMatch) { reply = "❌ Data inválida. Use *DD/MM/AAAA* (ex: 20/07/1993):"; break; }
         updates.data_nascimento = messageText.trim();
         const merged = { ...customer, ...updates };
-        const next = getNextMissingStep(merged);
+        const next = await autoResolveCepIfNeeded(merged, updates);
         updates.conversation_step = next;
         reply = getReplyForStep(next, merged);
         break;
@@ -920,7 +943,7 @@ Deno.serve(async (req) => {
             : num.replace(/(\d{2})(\d{4})(\d{4})/, "($1) $2-$3");
           updates.phone_whatsapp = normalizePhone(num);
           const merged = { ...customer, ...updates };
-          const next = getNextMissingStep(merged);
+          const next = await autoResolveCepIfNeeded(merged, updates);
           updates.conversation_step = next;
           reply = getReplyForStep(next, merged);
         } else if (editar) {
@@ -951,7 +974,7 @@ Deno.serve(async (req) => {
           : num11.replace(/(\d{2})(\d{4})(\d{4})/, "($1) $2-$3");
         updates.phone_whatsapp = normalizePhone(num11);
         const merged = { ...customer, ...updates };
-        const next = getNextMissingStep(merged);
+        const next = await autoResolveCepIfNeeded(merged, updates);
         updates.conversation_step = next;
         reply = getReplyForStep(next, merged);
         break;
@@ -961,7 +984,7 @@ Deno.serve(async (req) => {
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(messageText)) { reply = "❌ E-mail inválido. Digite um e-mail válido:"; break; }
         updates.email = messageText.trim().toLowerCase();
         const merged = { ...customer, ...updates };
-        const next = getNextMissingStep(merged);
+        const next = await autoResolveCepIfNeeded(merged, updates);
         updates.conversation_step = next;
         reply = getReplyForStep(next, merged);
         break;
@@ -981,7 +1004,7 @@ Deno.serve(async (req) => {
           updates.address_state = viaCep.uf || customer.address_state || "";
         } catch { reply = "⚠️ Erro ao buscar CEP. Tente novamente:"; break; }
         const merged = { ...customer, ...updates };
-        const next = getNextMissingStep(merged);
+        const next = await autoResolveCepIfNeeded(merged, updates);
         updates.conversation_step = next;
         reply = getReplyForStep(next, merged);
         break;
@@ -990,7 +1013,7 @@ Deno.serve(async (req) => {
       case "ask_number": {
         updates.address_number = messageText.trim();
         const merged = { ...customer, ...updates };
-        const next = getNextMissingStep(merged);
+        const next = await autoResolveCepIfNeeded(merged, updates);
         updates.conversation_step = next;
         reply = getReplyForStep(next, merged);
         break;
@@ -1003,7 +1026,7 @@ Deno.serve(async (req) => {
           updates.address_complement = "";
         }
         const merged = { ...customer, ...updates };
-        const next = getNextMissingStep(merged);
+        const next = await autoResolveCepIfNeeded(merged, updates);
         updates.conversation_step = next;
         reply = getReplyForStep(next, merged);
         break;
@@ -1014,7 +1037,7 @@ Deno.serve(async (req) => {
         if (instClean.length < 7) { reply = "❌ Número inválido. Digite pelo menos 7 dígitos:"; break; }
         updates.numero_instalacao = instClean;
         const merged = { ...customer, ...updates };
-        const next = getNextMissingStep(merged);
+        const next = await autoResolveCepIfNeeded(merged, updates);
         updates.conversation_step = next;
         reply = getReplyForStep(next, merged);
         break;
@@ -1025,7 +1048,7 @@ Deno.serve(async (req) => {
         if (isNaN(val) || val <= 0) { reply = "❌ Valor inválido. Digite um número (ex: 350):"; break; }
         updates.electricity_bill_value = val;
         const merged = { ...customer, ...updates };
-        const next = getNextMissingStep(merged);
+        const next = await autoResolveCepIfNeeded(merged, updates);
         updates.conversation_step = next;
         reply = getReplyForStep(next, merged);
         break;
@@ -1039,7 +1062,7 @@ Deno.serve(async (req) => {
         }
         updates.document_front_url = fileUrl || "evolution-media:pending";
         const merged = { ...customer, ...updates };
-        const next = getNextMissingStep(merged);
+        const next = await autoResolveCepIfNeeded(merged, updates);
         updates.conversation_step = next;
         reply = getReplyForStep(next, merged);
         break;
@@ -1052,7 +1075,7 @@ Deno.serve(async (req) => {
         }
         updates.document_back_url = fileUrl || "evolution-media:pending";
         const merged = { ...customer, ...updates };
-        const next = getNextMissingStep(merged);
+        const next = await autoResolveCepIfNeeded(merged, updates);
         updates.conversation_step = next;
         reply = getReplyForStep(next, merged);
         break;
