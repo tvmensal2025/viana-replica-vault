@@ -156,7 +156,25 @@ async function recuperarLeadsPendentes() {
       .order('updated_at', { ascending: true })
       .limit(3);
 
-    const todosLeads = [...(leadsCompletos || []), ...(leadsTravados || [])];
+    // AUTO-RETRY: leads que falharam há mais de 10 minutos (max 2 retries automáticos)
+    const dezMinutosAtras = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    const { data: leadsFalhados } = await supabase
+      .from('customers')
+      .select('id, name, updated_at')
+      .in('status', ['automation_failed', 'worker_offline'])
+      .lt('updated_at', dezMinutosAtras)
+      .order('updated_at', { ascending: true })
+      .limit(2);
+
+    // Reset status dos leads falhados para portal_submitting antes de re-enfileirar
+    for (const lead of (leadsFalhados || [])) {
+      if ((retryTracker.get(lead.id) || 0) < 3) {
+        await supabase.from('customers').update({ status: 'portal_submitting', error_message: null }).eq('id', lead.id);
+        console.log(`♻️ Auto-retry: resetando status de ${lead.name} (${lead.id})`);
+      }
+    }
+
+    const todosLeads = [...(leadsCompletos || []), ...(leadsTravados || []), ...(leadsFalhados || [])];
 
     for (const lead of todosLeads) {
       const customerId = lead.id;
