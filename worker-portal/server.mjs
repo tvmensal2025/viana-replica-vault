@@ -217,10 +217,8 @@ const linkSentRecently = new Set();
 const LINK_SENT_TTL_MS = 15 * 60 * 1000;
 
 /**
- * Envia o link da página iGreen para o cliente via WhatsApp (Whapi).
- * Chamado após clicar em Finalizar para o usuário continuar no celular.
- * Faz até 3 tentativas para não deixar o cliente sem o link.
- * Não envia de novo se já enviou para este cliente nos últimos 15 min (evita mensagem sozinha/duplicada).
+ * Envia o link da página iGreen para o cliente via WhatsApp (Evolution API).
+ * Faz até 3 tentativas. Não reenvia se já enviou nos últimos 15 min.
  */
 async function sendLinkToCustomer(customerId, pageUrl) {
   if (linkSentRecently.has(customerId)) {
@@ -239,9 +237,10 @@ async function sendLinkToCustomer(customerId, pageUrl) {
     return;
   }
   try {
+    // Buscar telefone do cliente e instância do consultor
     const { data: customer, error: errCustomer } = await supabase
       .from('customers')
-      .select('phone_whatsapp')
+      .select('phone_whatsapp, consultant_id')
       .eq('id', customerId)
       .single();
     if (errCustomer || !customer?.phone_whatsapp) {
@@ -249,53 +248,96 @@ async function sendLinkToCustomer(customerId, pageUrl) {
       pushActivity('link_failed', customerId, 'Link não enviado: telefone não encontrado');
       return;
     }
+
+    // Buscar instância Evolution do consultor
+    let instanceName = null;
+    if (customer.consultant_id) {
+      const { data: inst } = await supabase
+        .from('whatsapp_instances')
+        .select('instance_name')
+        .eq('consultant_id', customer.consultant_id)
+        .limit(1)
+        .single();
+      instanceName = inst?.instance_name;
+    }
+
+    // Buscar settings para Evolution API
     const { data: settingsRows } = await supabase.from('settings').select('key, value');
     const settings = {};
     (settingsRows || []).forEach((s) => { settings[s.key] = s.value; });
-    const whapiToken = settings.whapi_token || process.env.WHAPI_TOKEN;
-    const whapiUrl = (settings.whapi_api_url || process.env.WHAPI_API_URL || 'https://gate.whapi.cloud').replace(/\/$/, '') + '/';
-    if (!whapiToken) {
-      console.error('   ❌ sendLinkToCustomer: Whapi token não configurado nas Settings');
-      pushActivity('link_failed', customerId, 'Link não enviado: Whapi token ausente');
-      return;
-    }
+
+    const evolutionUrl = (settings.evolution_api_url || process.env.EVOLUTION_API_URL || '').replace(/\/$/, '');
+    const evolutionKey = settings.evolution_api_key || process.env.EVOLUTION_API_KEY || '';
+
     let phone = String(customer.phone_whatsapp).replace(/\D/g, '');
     if (phone && !phone.startsWith('55')) phone = '55' + phone;
-    const chatId = phone ? `${phone}@s.whatsapp.net` : '';
-    if (!chatId) {
-      console.error('   ❌ sendLinkToCustomer: chatId vazio');
+    const remoteJid = phone ? `${phone}@s.whatsapp.net` : '';
+    if (!remoteJid) {
+      console.error('   ❌ sendLinkToCustomer: remoteJid vazio');
       pushActivity('link_failed', customerId, 'Link não enviado: número inválido');
       return;
     }
+
     const message = `✅ Cadastro finalizado!\n\nAcesse o link abaixo para continuar pelo celular:\n${pageUrl}\n\nQualquer dúvida, estamos à disposição.`;
     const maxAttempts = 3;
     const delayMs = 1500;
     let lastError = null;
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        const res = await fetch(`${whapiUrl}messages/text`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${whapiToken}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ to: chatId, body: message, typing_time: 0 }),
-        });
-        if (res.ok) {
-          linkSentRecently.add(customerId);
-          setTimeout(() => linkSentRecently.delete(customerId), LINK_SENT_TTL_MS);
-          console.log('   📤 Link da página enviado por WhatsApp para o cliente');
-          pushActivity('link_sent', customerId, 'Link da página iGreen enviado por WhatsApp');
-          return;
+    let sent = false;
+
+    // Tentar enviar via Evolution API (preferido)
+    if (evolutionUrl && evolutionKey && instanceName) {
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          const res = await fetch(`${evolutionUrl}/message/sendText/${instanceName}`, {
+            method: 'POST',
+            headers: { apikey: evolutionKey, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ number: remoteJid, text: message }),
+          });
+          if (res.ok) {
+            sent = true;
+            break;
+          }
+          lastError = `Evolution ${res.status}: ${(await res.text()).substring(0, 100)}`;
+        } catch (e) {
+          lastError = e.message || String(e);
         }
-        lastError = `${res.status} ${await res.text()}`;
-      } catch (e) {
-        lastError = e.message || String(e);
-      }
-      if (attempt < maxAttempts) {
-        console.warn(`   ⚠️  Tentativa ${attempt}/${maxAttempts} falhou, nova tentativa em ${delayMs}ms...`);
-        await new Promise((r) => setTimeout(r, delayMs));
+        if (attempt < maxAttempts) {
+          console.warn(`   ⚠️  Tentativa ${attempt}/${maxAttempts} falhou, retry em ${delayMs}ms...`);
+          await new Promise((r) => setTimeout(r, delayMs));
+        }
       }
     }
-    console.error('   ❌ sendLinkToCustomer: falhou após', maxAttempts, 'tentativas:', lastError);
-    pushActivity('link_failed', customerId, `Link NÃO enviado após ${maxAttempts} tentativas: ${String(lastError).slice(0, 80)}`);
+
+    // Fallback: tentar Whapi se Evolution não disponível ou falhou
+    if (!sent) {
+      const whapiToken = settings.whapi_token || process.env.WHAPI_TOKEN;
+      const whapiUrl = (settings.whapi_api_url || process.env.WHAPI_API_URL || 'https://gate.whapi.cloud').replace(/\/$/, '') + '/';
+      if (whapiToken) {
+        const chatId = remoteJid;
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+          try {
+            const res = await fetch(`${whapiUrl}messages/text`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${whapiToken}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ to: chatId, body: message, typing_time: 0 }),
+            });
+            if (res.ok) { sent = true; break; }
+            lastError = `Whapi ${res.status}: ${(await res.text()).substring(0, 100)}`;
+          } catch (e) { lastError = e.message || String(e); }
+          if (attempt < maxAttempts) await new Promise((r) => setTimeout(r, delayMs));
+        }
+      }
+    }
+
+    if (sent) {
+      linkSentRecently.add(customerId);
+      setTimeout(() => linkSentRecently.delete(customerId), LINK_SENT_TTL_MS);
+      console.log('   📤 Link da página enviado por WhatsApp para o cliente');
+      pushActivity('link_sent', customerId, 'Link da página iGreen enviado');
+    } else {
+      console.error('   ❌ sendLinkToCustomer: falhou após todas as tentativas:', lastError);
+      pushActivity('link_failed', customerId, `Link NÃO enviado: ${String(lastError).slice(0, 80)}`);
+    }
   } catch (e) {
     console.error('   ❌ sendLinkToCustomer:', e.message);
     pushActivity('link_failed', customerId, `Link não enviado: ${e.message}`);
@@ -374,20 +416,49 @@ app.post('/submit-lead', async (req, res) => {
 app.post('/clear-queue', (req, res) => {
   const n = queue.length;
   queue.length = 0;
-  pushActivity('queue_cleared', null, `Fila zerada pelo usuário (${n} lead(s) removido(s))`);
-  console.log(`🧹 FILA: zerada pelo usuário (${n} removidos)`);
+  // Limpar retry tracker e recently processed para permitir reprocessamento
+  const retryCount = retryTracker.size;
+  retryTracker.clear();
+  recentlyProcessed.clear();
+  failedCount = 0;
+  pushActivity('queue_cleared', null, `Fila zerada + ${retryCount} retries limpos`);
+  console.log(`🧹 FILA: zerada (${n} removidos, ${retryCount} retries limpos)`);
   res.json({
     success: true,
-    message: n ? `Fila zerada (${n} lead(s) removido(s))` : 'Fila já estava vazia',
+    message: n ? `Fila zerada (${n} lead(s) removido(s), ${retryCount} retries limpos)` : `Fila já vazia (${retryCount} retries limpos)`,
     queueLength: 0,
     removed: n,
+    retriesCleared: retryCount,
     currentJob: currentJob ? currentJob.customer_id : null,
     timestamp: new Date().toISOString(),
   });
 });
 
 /**
- * POST /confirm-otp
+ * POST /force-submit
+ * Força reenvio de lead ignorando retry limits
+ */
+app.post('/force-submit', async (req, res) => {
+  const { customer_id } = req.body;
+  if (!customer_id) return res.status(400).json({ error: 'customer_id required' });
+  
+  // Limpar bloqueios para este lead
+  retryTracker.delete(customer_id);
+  recentlyProcessed.delete(customer_id);
+  
+  const result = await addToQueue(customer_id, { headless: true });
+  pushActivity('force_submit', customer_id, 'Lead forçado na fila (retry limpo)');
+  
+  res.json({
+    success: true,
+    message: `Lead forçado na fila (posição ${result.position})`,
+    customer_id,
+    position: result.position,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+
  * Recebe código OTP do WhatsApp e armazena para o script usar
  */
 app.post('/confirm-otp', async (req, res) => {
