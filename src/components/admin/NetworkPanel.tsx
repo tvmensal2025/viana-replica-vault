@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { Users, UserCheck, TrendingUp, CheckCircle2, RefreshCw, Loader2, Search, MessageCircle, Table2, Network, ZoomIn, ZoomOut, ChevronDown, ChevronRight } from "lucide-react";
+import { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect } from "react";
+import { Users, UserCheck, TrendingUp, CheckCircle2, RefreshCw, Loader2, Search, MessageCircle, Table2, Network, ZoomIn, ZoomOut, MapPin, Calendar, Phone, X, ChevronDown, Zap, Award } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
@@ -47,6 +47,7 @@ interface NetworkPanelProps {
   consultantId: string;
 }
 
+/* ── Helpers ── */
 function buildTree(members: NetworkMember[]): TreeNode[] {
   const byId = new Map<number, TreeNode>();
   members.forEach(m => byId.set(m.igreen_id, { member: m, children: [] }));
@@ -77,21 +78,22 @@ function formatPhone(phone: string | null) {
   return phone;
 }
 
-const NIVEL_COLORS = [
-  { dot: "bg-primary", ring: "ring-primary/30", text: "text-primary" },
-  { dot: "bg-blue-500", ring: "ring-blue-500/30", text: "text-blue-400" },
-  { dot: "bg-emerald-500", ring: "ring-emerald-500/30", text: "text-emerald-400" },
-  { dot: "bg-amber-500", ring: "ring-amber-500/30", text: "text-amber-400" },
-  { dot: "bg-purple-500", ring: "ring-purple-500/30", text: "text-purple-400" },
-  { dot: "bg-rose-500", ring: "ring-rose-500/30", text: "text-rose-400" },
+/* ── Color System ── */
+const NIVEL_PALETTE = [
+  { bg: "from-emerald-400 to-green-600", glow: "shadow-emerald-500/40", ring: "ring-emerald-400/50", text: "text-emerald-400", bar: "bg-emerald-500" },
+  { bg: "from-blue-400 to-indigo-600", glow: "shadow-blue-500/40", ring: "ring-blue-400/50", text: "text-blue-400", bar: "bg-blue-500" },
+  { bg: "from-violet-400 to-purple-600", glow: "shadow-violet-500/40", ring: "ring-violet-400/50", text: "text-violet-400", bar: "bg-violet-500" },
+  { bg: "from-amber-400 to-orange-600", glow: "shadow-amber-500/40", ring: "ring-amber-400/50", text: "text-amber-400", bar: "bg-amber-500" },
+  { bg: "from-rose-400 to-pink-600", glow: "shadow-rose-500/40", ring: "ring-rose-400/50", text: "text-rose-400", bar: "bg-rose-500" },
+  { bg: "from-cyan-400 to-teal-600", glow: "shadow-cyan-500/40", ring: "ring-cyan-400/50", text: "text-cyan-400", bar: "bg-cyan-500" },
 ];
 
-function getColor(nivel: number) {
-  return NIVEL_COLORS[Math.min(nivel, NIVEL_COLORS.length - 1)];
+function getPalette(nivel: number) {
+  return NIVEL_PALETTE[Math.min(nivel, NIVEL_PALETTE.length - 1)];
 }
 
-/* ── Compact Mini Card (default) ── */
-function MiniCard({ member, hasChildren, childCount, isExpanded, onToggle, onOpenDetails }: {
+/* ── Node Card ── */
+function NodeCard({ member, hasChildren, childCount, isExpanded, onToggle, onOpenDetails }: {
   member: NetworkMember;
   hasChildren: boolean;
   childCount: number;
@@ -99,132 +101,179 @@ function MiniCard({ member, hasChildren, childCount, isExpanded, onToggle, onOpe
   onToggle: () => void;
   onOpenDetails: () => void;
 }) {
-  const c = getColor(member.nivel);
+  const p = getPalette(member.nivel);
   const initials = member.name.split(" ").filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
+  const isRoot = member.nivel === 0;
 
   return (
-    <div className="flex flex-col items-center">
+    <div className="flex flex-col items-center" data-node-id={member.igreen_id}>
       <div
-        className="relative rounded-lg border border-border/60 bg-card hover:bg-secondary/30 transition-all
-          w-[90px] p-1.5 cursor-pointer select-none group hover:shadow-md hover:shadow-black/10"
+        className={`relative rounded-2xl border transition-all duration-300 cursor-pointer select-none group
+          ${isRoot
+            ? `w-[120px] border-emerald-500/30 bg-gradient-to-b from-emerald-500/10 to-emerald-900/5 hover:border-emerald-400/60 hover:shadow-lg ${p.glow}`
+            : "w-[100px] border-white/[0.06] bg-white/[0.03] hover:bg-white/[0.07] hover:border-white/[0.15] hover:shadow-lg hover:shadow-black/20"
+          }
+          backdrop-blur-sm p-2`}
         onClick={onOpenDetails}
       >
         {/* Avatar */}
-        <div className="flex justify-center mb-1">
-          <div className={`w-8 h-8 rounded-full ${c.dot} ring-2 ${c.ring} flex items-center justify-center`}>
-            <span className="text-[10px] font-bold text-white">{initials}</span>
+        <div className="flex justify-center mb-1.5">
+          <div className={`${isRoot ? "w-11 h-11" : "w-9 h-9"} rounded-full bg-gradient-to-br ${p.bg}
+            ring-2 ${p.ring} flex items-center justify-center shadow-lg ${p.glow} transition-transform duration-300 group-hover:scale-110`}>
+            <span className={`${isRoot ? "text-xs" : "text-[10px]"} font-bold text-white drop-shadow-sm`}>{initials}</span>
           </div>
         </div>
-        {/* Name */}
-        <p className="text-[10px] font-semibold text-foreground text-center leading-tight truncate sensitive-name">{member.name.split(" ")[0]}</p>
-        <p className="text-[8px] text-muted-foreground text-center">{member.clientes_ativos} cli</p>
 
-        {/* WhatsApp on hover */}
+        {/* Name */}
+        <p className={`${isRoot ? "text-[11px]" : "text-[10px]"} font-semibold text-foreground text-center leading-tight truncate sensitive-name`}>
+          {member.name.split(" ")[0]}
+        </p>
+        
+        {/* Stats pills */}
+        <div className="flex items-center justify-center gap-1 mt-1">
+          <span className={`text-[8px] px-1.5 py-0.5 rounded-full ${member.clientes_ativos > 0 ? "bg-emerald-500/15 text-emerald-400" : "bg-white/5 text-muted-foreground"} font-medium`}>
+            {member.clientes_ativos} cli
+          </span>
+          {member.qtde_diretos > 0 && (
+            <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-400 font-medium">
+              {member.qtde_diretos} dir
+            </span>
+          )}
+        </div>
+
+        {/* WhatsApp hover */}
         {member.phone && (
           <button
             onClick={e => { e.stopPropagation(); openWhatsApp(member.phone); }}
-            className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-green-500 text-white
-              flex items-center justify-center shadow-sm opacity-0 group-hover:opacity-100 transition-opacity
-              hover:bg-green-600 z-10"
+            className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-green-500 text-white
+              flex items-center justify-center shadow-lg shadow-green-500/30 opacity-0 group-hover:opacity-100 
+              transition-all duration-200 hover:bg-green-400 hover:scale-110 z-10"
             title="WhatsApp"
           >
-            <MessageCircle className="w-2.5 h-2.5" />
+            <MessageCircle className="w-3 h-3" />
           </button>
         )}
       </div>
 
-      {/* Expand children toggle */}
+      {/* Expand toggle */}
       {hasChildren && (
         <button
           onClick={onToggle}
-          className={`mt-1 w-5 h-5 rounded-full border border-border bg-card flex items-center justify-center
-            text-[9px] font-bold transition-colors hover:bg-secondary ${isExpanded ? "text-primary" : "text-muted-foreground"}`}
+          className={`mt-2 w-6 h-6 rounded-full flex items-center justify-center
+            text-[9px] font-bold transition-all duration-300
+            ${isExpanded 
+              ? "bg-primary/20 text-primary border border-primary/30 shadow-sm shadow-primary/20" 
+              : "bg-white/5 text-muted-foreground border border-white/10 hover:bg-white/10 hover:border-white/20"
+            }`}
         >
-          {isExpanded ? "−" : childCount}
+          {isExpanded ? <ChevronDown className="w-3 h-3" /> : childCount}
         </button>
       )}
     </div>
   );
 }
 
-/* ── Detail Panel (opens on click) ── */
-function DetailPanel({ member, onClose }: { member: NetworkMember; onClose: () => void }) {
-  const c = getColor(member.nivel);
+/* ── Detail Modal ── */
+function DetailModal({ member, onClose }: { member: NetworkMember; onClose: () => void }) {
+  const p = getPalette(member.nivel);
   const phone = formatPhone(member.phone);
+  const initials = member.name.split(" ").filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md" onClick={onClose}>
       <div
-        className="bg-card border border-border rounded-2xl shadow-2xl w-[380px] max-w-[90vw] max-h-[85vh] overflow-y-auto p-5 animate-in fade-in zoom-in-95 duration-200"
+        className="relative bg-card/95 backdrop-blur-xl border border-white/10 rounded-3xl shadow-2xl shadow-black/50
+          w-[400px] max-w-[92vw] max-h-[88vh] overflow-y-auto
+          animate-in fade-in zoom-in-95 slide-in-from-bottom-4 duration-300"
         onClick={e => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="flex items-center gap-3 mb-4">
-          <div className={`w-12 h-12 rounded-full ${c.dot} ring-2 ${c.ring} flex items-center justify-center shrink-0`}>
-            <span className="text-sm font-bold text-white">
-              {member.name.split(" ").filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase()}
-            </span>
-          </div>
-          <div className="min-w-0">
-            <p className="font-bold text-foreground text-sm leading-tight sensitive-name">{member.name}</p>
-            <p className="text-xs text-muted-foreground">ID: {member.igreen_id} • Nível {member.nivel}</p>
-            {member.graduacao && <p className="text-xs text-primary font-medium">{member.graduacao}</p>}
+        {/* Gradient header */}
+        <div className={`h-24 bg-gradient-to-br ${p.bg} opacity-20 rounded-t-3xl`} />
+        
+        {/* Avatar floating on gradient */}
+        <div className="flex justify-center -mt-10 relative z-10">
+          <div className={`w-20 h-20 rounded-2xl bg-gradient-to-br ${p.bg} ring-4 ring-card
+            flex items-center justify-center shadow-2xl ${p.glow}`}>
+            <span className="text-xl font-bold text-white drop-shadow-md">{initials}</span>
           </div>
         </div>
 
-        {/* Graduação badges */}
-        {(member.graduacao || member.graduacao_expansao || member.pro) && (
-          <div className="flex flex-wrap gap-1.5 mb-3">
-            {member.graduacao && <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/15 text-primary font-medium">{member.graduacao}</span>}
-            {member.graduacao_expansao && <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 font-medium">{member.graduacao_expansao}</span>}
-            {member.pro && <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 font-medium">PRO</span>}
+        {/* Info */}
+        <div className="px-6 pt-3 pb-6">
+          <div className="text-center mb-4">
+            <h3 className="font-bold text-foreground text-lg leading-tight sensitive-name">{member.name}</h3>
+            <p className="text-sm text-muted-foreground mt-0.5">ID {member.igreen_id} • Nível {member.nivel}</p>
           </div>
-        )}
 
-        {/* Pontuação */}
-        <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5 font-semibold">Pontuação</p>
-        <div className="grid grid-cols-3 gap-2 mb-3">
-          <StatBox label="GP" value={Number(member.gp).toLocaleString("pt-BR")} />
-          <StatBox label="GI" value={Number(member.gi).toLocaleString("pt-BR")} />
-          <StatBox label="Total Pontos" value={Number(member.total_pontos).toLocaleString("pt-BR")} />
-        </div>
-
-        {/* Rede */}
-        <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5 font-semibold">Rede</p>
-        <div className="grid grid-cols-3 gap-2 mb-3">
-          <StatBox label="Clientes Ativos" value={String(member.clientes_ativos)} highlight />
-          <StatBox label="Diretos" value={String(member.qtde_diretos)} />
-          <StatBox label="Diretos Mês" value={String(member.diretos_mes)} />
-        </div>
-
-        <div className="grid grid-cols-2 gap-2 mb-4">
-          <StatBox label="Início Rápido" value={member.inicio_rapido || "—"} />
-          <StatBox label="Patrocinador" value={member.sponsor_id ? String(member.sponsor_id) : "—"} />
-        </div>
-
-        {/* Location & Dates */}
-        <div className="space-y-1 mb-3">
-          {member.cidade && (
-            <p className="text-xs text-muted-foreground">📍 {member.cidade}{member.uf ? `/${member.uf}` : ""}</p>
+          {/* Badges */}
+          {(member.graduacao || member.graduacao_expansao || member.pro) && (
+            <div className="flex flex-wrap justify-center gap-2 mb-5">
+              {member.graduacao && (
+                <span className="inline-flex items-center gap-1 text-[11px] px-3 py-1 rounded-full bg-primary/10 text-primary font-medium border border-primary/20">
+                  <Award className="w-3 h-3" /> {member.graduacao}
+                </span>
+              )}
+              {member.graduacao_expansao && (
+                <span className="text-[11px] px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 font-medium border border-emerald-500/20">
+                  {member.graduacao_expansao}
+                </span>
+              )}
+              {member.pro && (
+                <span className="text-[11px] px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 font-medium border border-amber-500/20">
+                  ⚡ PRO
+                </span>
+              )}
+            </div>
           )}
-          {member.data_nascimento && (
-            <p className="text-xs text-muted-foreground">🎂 {member.data_nascimento}</p>
-          )}
-          {member.data_ativo && (
-            <p className="text-xs text-muted-foreground">📅 Ativo desde: {member.data_ativo}</p>
-          )}
-        </div>
 
-        {/* Phone + WhatsApp */}
-        <div className="flex items-center gap-2">
-          {phone && <span className="text-xs text-muted-foreground flex-1">{phone}</span>}
+          {/* Stats Grid */}
+          <div className="grid grid-cols-3 gap-2 mb-4">
+            <MetricCard label="GP" value={Number(member.gp).toLocaleString("pt-BR")} icon={<TrendingUp className="w-3.5 h-3.5" />} color="text-blue-400" />
+            <MetricCard label="GI" value={Number(member.gi).toLocaleString("pt-BR")} icon={<Zap className="w-3.5 h-3.5" />} color="text-violet-400" />
+            <MetricCard label="Pontos" value={Number(member.total_pontos).toLocaleString("pt-BR")} icon={<CheckCircle2 className="w-3.5 h-3.5" />} color="text-emerald-400" />
+          </div>
+
+          {/* Network Stats */}
+          <div className="grid grid-cols-3 gap-2 mb-4">
+            <MetricCard label="Clientes" value={String(member.clientes_ativos)} highlight color="text-green-400" />
+            <MetricCard label="Diretos" value={String(member.qtde_diretos)} color="text-blue-400" />
+            <MetricCard label="Dir. Mês" value={String(member.diretos_mes)} color="text-amber-400" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 mb-5">
+            <MetricCard label="Início Rápido" value={member.inicio_rapido || "—"} color="text-cyan-400" />
+            <MetricCard label="Patrocinador" value={member.sponsor_id ? String(member.sponsor_id) : "—"} color="text-muted-foreground" />
+          </div>
+
+          {/* Info rows */}
+          <div className="space-y-2 mb-5">
+            {member.cidade && (
+              <div className="flex items-center gap-2.5 text-sm text-muted-foreground">
+                <MapPin className="w-4 h-4 text-rose-400/70" />
+                <span>{member.cidade}{member.uf ? ` / ${member.uf}` : ""}</span>
+              </div>
+            )}
+            {member.data_ativo && (
+              <div className="flex items-center gap-2.5 text-sm text-muted-foreground">
+                <Calendar className="w-4 h-4 text-blue-400/70" />
+                <span>Ativo desde {member.data_ativo}</span>
+              </div>
+            )}
+            {phone && (
+              <div className="flex items-center gap-2.5 text-sm text-muted-foreground">
+                <Phone className="w-4 h-4 text-emerald-400/70" />
+                <span>{phone}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Actions */}
           {member.phone && (
             <Button
-              size="sm"
-              className="gap-1.5 rounded-xl bg-green-500 hover:bg-green-600 text-white h-8 px-3 text-xs"
+              className="w-full gap-2 rounded-xl bg-green-500 hover:bg-green-400 text-white h-10 font-semibold shadow-lg shadow-green-500/25"
               onClick={() => openWhatsApp(member.phone)}
             >
-              <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
+              <MessageCircle className="w-4 h-4" /> Abrir WhatsApp
             </Button>
           )}
         </div>
@@ -232,21 +281,38 @@ function DetailPanel({ member, onClose }: { member: NetworkMember; onClose: () =
         {/* Close */}
         <button
           onClick={onClose}
-          className="absolute top-3 right-3 w-7 h-7 rounded-full bg-secondary/80 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+          className="absolute top-4 right-4 w-8 h-8 rounded-full bg-black/30 backdrop-blur-sm border border-white/10
+            flex items-center justify-center text-white/70 hover:text-white hover:bg-black/50 transition-all"
         >
-          ✕
+          <X className="w-4 h-4" />
         </button>
       </div>
     </div>
   );
 }
 
-function StatBox({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+function MetricCard({ label, value, icon, highlight, color = "text-foreground" }: {
+  label: string; value: string; icon?: React.ReactNode; highlight?: boolean; color?: string;
+}) {
   return (
-    <div className="rounded-lg bg-secondary/40 p-2 text-center">
-      <span className="text-[10px] text-muted-foreground block">{label}</span>
-      <span className={`text-sm font-bold ${highlight ? "text-green-500" : "text-foreground"}`}>{value}</span>
+    <div className={`rounded-xl p-2.5 text-center border transition-colors
+      ${highlight 
+        ? "bg-green-500/10 border-green-500/20" 
+        : "bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.06]"
+      }`}>
+      {icon && <div className={`flex justify-center mb-1 ${color} opacity-60`}>{icon}</div>}
+      <span className={`text-base font-bold block ${highlight ? "text-green-400" : color}`}>{value}</span>
+      <span className="text-[10px] text-muted-foreground block mt-0.5">{label}</span>
     </div>
+  );
+}
+
+/* ── SVG Connection Lines ── */
+function ConnectionLine({ x1, y1, x2, y2 }: { x1: number; y1: number; x2: number; y2: number }) {
+  const midY = (y1 + y2) / 2;
+  const d = `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`;
+  return (
+    <path d={d} fill="none" stroke="url(#line-gradient)" strokeWidth="1.5" opacity="0.4" className="transition-opacity duration-300" />
   );
 }
 
@@ -257,7 +323,7 @@ function OrgChartNode({ node, depth = 0, onSelect }: { node: TreeNode; depth?: n
 
   return (
     <div className="flex flex-col items-center">
-      <MiniCard
+      <NodeCard
         member={node.member}
         hasChildren={hasChildren}
         childCount={node.children.length}
@@ -268,15 +334,15 @@ function OrgChartNode({ node, depth = 0, onSelect }: { node: TreeNode; depth?: n
 
       {hasChildren && expanded && (
         <>
-          {/* Vertical line down */}
-          <div className="w-px h-4 bg-border/50" />
+          {/* Vertical connector */}
+          <div className="w-px h-5 bg-gradient-to-b from-white/20 to-white/5" />
 
-          {/* Children */}
-          <div className="flex items-start gap-1.5 relative">
+          {/* Children row */}
+          <div className="flex items-start gap-2 relative">
             {/* Horizontal connector */}
             {node.children.length > 1 && (
               <div
-                className="absolute top-0 h-px bg-border/50"
+                className="absolute top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent"
                 style={{
                   left: `calc(100% / ${node.children.length * 2})`,
                   right: `calc(100% / ${node.children.length * 2})`,
@@ -285,7 +351,7 @@ function OrgChartNode({ node, depth = 0, onSelect }: { node: TreeNode; depth?: n
             )}
             {node.children.map(child => (
               <div key={child.member.id} className="flex flex-col items-center">
-                <div className="w-px h-4 bg-border/50" />
+                <div className="w-px h-5 bg-gradient-to-b from-white/15 to-white/5" />
                 <OrgChartNode node={child} depth={depth + 1} onSelect={onSelect} />
               </div>
             ))}
@@ -303,7 +369,7 @@ export function NetworkPanel({ consultantId }: NetworkPanelProps) {
   const [syncing, setSyncing] = useState(false);
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<"tree" | "table">("tree");
-  const [zoom, setZoom] = useState(0.9);
+  const [zoom, setZoom] = useState(0.85);
   const [selectedMember, setSelectedMember] = useState<NetworkMember | null>(null);
   const { toast } = useToast();
 
@@ -368,55 +434,70 @@ export function NetworkPanel({ consultantId }: NetworkPanelProps) {
   }, [members, search]);
 
   if (loading) {
-    return <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>;
+    return (
+      <div className="flex flex-col items-center justify-center py-24 gap-3">
+        <div className="relative">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
+            <Loader2 className="w-6 h-6 animate-spin text-primary" />
+          </div>
+          <div className="absolute inset-0 rounded-2xl bg-primary/10 animate-ping" />
+        </div>
+        <p className="text-sm text-muted-foreground">Carregando rede...</p>
+      </div>
+    );
   }
 
   return (
     <div className="space-y-5">
       {/* Detail Modal */}
-      {selectedMember && <DetailPanel member={selectedMember} onClose={() => setSelectedMember(null)} />}
+      {selectedMember && <DetailModal member={selectedMember} onClose={() => setSelectedMember(null)} />}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <SummaryCard icon={Users} label="Licenciados" value={networkCount} color="text-primary" />
-        <SummaryCard icon={UserCheck} label="Clientes Ativos" value={totalClientes} color="text-green-500" />
-        <SummaryCard icon={TrendingUp} label="GP" value={rootMember ? Number(rootMember.gp).toLocaleString("pt-BR") : "0"} color="text-blue-500" />
-        <SummaryCard icon={CheckCircle2} label="GI" value={rootMember ? Number(rootMember.gi).toLocaleString("pt-BR") : "0"} color="text-emerald-500" />
+        <GlassCard icon={Users} label="Licenciados" value={networkCount} gradient="from-blue-500 to-indigo-600" />
+        <GlassCard icon={UserCheck} label="Clientes Ativos" value={totalClientes} gradient="from-emerald-500 to-green-600" />
+        <GlassCard icon={TrendingUp} label="GP" value={rootMember ? Number(rootMember.gp).toLocaleString("pt-BR") : "0"} gradient="from-violet-500 to-purple-600" />
+        <GlassCard icon={CheckCircle2} label="GI" value={rootMember ? Number(rootMember.gi).toLocaleString("pt-BR") : "0"} gradient="from-amber-500 to-orange-600" />
       </div>
 
       {/* Content */}
-      <div className="rounded-2xl border border-border bg-card overflow-hidden">
-        <div className="p-4 border-b border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] backdrop-blur-sm overflow-hidden">
+        {/* Toolbar */}
+        <div className="p-4 border-b border-white/[0.06] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center border border-primary/15">
-              <Network className="w-5 h-5 text-primary" />
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-emerald-600 flex items-center justify-center shadow-lg shadow-primary/20">
+              <Network className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h3 className="font-bold text-foreground text-base">Mapa de Rede</h3>
-              <p className="text-xs text-muted-foreground">{members.length} licenciados • clique para ver detalhes</p>
+              <h3 className="font-bold text-foreground text-base tracking-tight">Mapa de Rede</h3>
+              <p className="text-xs text-muted-foreground">{members.length} licenciados • clique para detalhes</p>
             </div>
           </div>
+
           <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex items-center rounded-lg border border-border/50 overflow-hidden">
+            {/* View Toggle */}
+            <div className="flex items-center rounded-xl bg-white/[0.04] border border-white/[0.08] p-0.5">
               <button onClick={() => setViewMode("tree")}
-                className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium transition-colors ${viewMode === "tree" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-secondary/50"}`}>
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200
+                  ${viewMode === "tree" ? "bg-primary/15 text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
                 <Network className="w-3.5 h-3.5" /> Rede
               </button>
               <button onClick={() => setViewMode("table")}
-                className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium transition-colors ${viewMode === "table" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-secondary/50"}`}>
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200
+                  ${viewMode === "table" ? "bg-primary/15 text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
                 <Table2 className="w-3.5 h-3.5" /> Tabela
               </button>
             </div>
 
             {viewMode === "tree" && (
-              <div className="flex items-center rounded-lg border border-border/50 overflow-hidden">
-                <button onClick={() => setZoom(z => Math.max(z - 0.15, 0.3))} className="px-2 py-1.5 text-muted-foreground hover:bg-secondary/50">
+              <div className="flex items-center rounded-xl bg-white/[0.04] border border-white/[0.08] p-0.5">
+                <button onClick={() => setZoom(z => Math.max(z - 0.15, 0.3))} className="px-2 py-1.5 text-muted-foreground hover:text-foreground rounded-lg transition-colors">
                   <ZoomOut className="w-3.5 h-3.5" />
                 </button>
-                <button onClick={() => setZoom(0.9)} className="px-2 py-1.5 text-[10px] text-muted-foreground hover:bg-secondary/50 font-mono">
+                <button onClick={() => setZoom(0.85)} className="px-2 py-1.5 text-[10px] text-muted-foreground hover:text-foreground font-mono rounded-lg transition-colors">
                   {Math.round(zoom * 100)}%
                 </button>
-                <button onClick={() => setZoom(z => Math.min(z + 0.15, 1.5))} className="px-2 py-1.5 text-muted-foreground hover:bg-secondary/50">
+                <button onClick={() => setZoom(z => Math.min(z + 0.15, 1.5))} className="px-2 py-1.5 text-muted-foreground hover:text-foreground rounded-lg transition-colors">
                   <ZoomIn className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -424,14 +505,16 @@ export function NetworkPanel({ consultantId }: NetworkPanelProps) {
 
             {viewMode === "table" && (
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/40" />
                 <Input placeholder="Buscar..." value={search} onChange={e => setSearch(e.target.value)}
-                  className="pl-9 h-9 rounded-xl bg-secondary/30 border-border/50 text-sm w-full sm:w-48" />
+                  className="pl-9 h-9 rounded-xl bg-white/[0.04] border-white/[0.08] text-sm w-full sm:w-52 placeholder:text-muted-foreground/40" />
               </div>
             )}
 
-            <Button onClick={handleSync} size="sm" variant="outline" disabled={syncing}
-              className="gap-1.5 rounded-xl font-semibold h-9 px-4 text-xs border-green-500/20 text-green-600 hover:bg-green-500/10">
+            <Button onClick={handleSync} size="sm" disabled={syncing}
+              className="gap-1.5 rounded-xl font-semibold h-9 px-4 text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 
+                hover:bg-emerald-500/20 hover:border-emerald-500/30 transition-all duration-200 shadow-sm"
+              variant="outline">
               {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
               {syncing ? "Sincronizando..." : "Sincronizar"}
             </Button>
@@ -439,16 +522,24 @@ export function NetworkPanel({ consultantId }: NetworkPanelProps) {
         </div>
 
         {members.length === 0 ? (
-          <div className="text-center py-12">
-            <Network className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
-            <p className="text-sm text-muted-foreground mb-3">Nenhum licenciado encontrado.</p>
+          <div className="text-center py-16">
+            <div className="w-16 h-16 rounded-2xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-center mx-auto mb-4">
+              <Network className="w-8 h-8 text-muted-foreground/30" />
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">Nenhum licenciado encontrado.</p>
             <Button onClick={handleSync} size="sm" disabled={syncing} className="gap-1.5 rounded-xl">
               <RefreshCw className="w-3.5 h-3.5" /> Sincronizar agora
             </Button>
           </div>
         ) : viewMode === "tree" ? (
-          <div className="overflow-auto bg-gradient-to-b from-secondary/10 to-transparent" style={{ maxHeight: "70vh" }}>
-            <div className="flex justify-center py-8 px-6 min-w-max"
+          <div className="overflow-auto relative" style={{ maxHeight: "72vh" }}>
+            {/* Background dots pattern */}
+            <div className="absolute inset-0 opacity-[0.03]" style={{
+              backgroundImage: "radial-gradient(circle, currentColor 1px, transparent 1px)",
+              backgroundSize: "24px 24px"
+            }} />
+            
+            <div className="flex justify-center py-10 px-8 min-w-max relative z-10"
               style={{ transform: `scale(${zoom})`, transformOrigin: "top center" }}>
               {tree.map(root => (
                 <OrgChartNode key={root.member.id} node={root} depth={0} onSelect={setSelectedMember} />
@@ -459,49 +550,66 @@ export function NetworkPanel({ consultantId }: NetworkPanelProps) {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-secondary/30 text-muted-foreground text-xs">
-                  <th className="text-center px-2 py-2.5 font-medium w-12">Nível</th>
-                  <th className="text-center px-2 py-2.5 font-medium w-16">ID</th>
-                  <th className="text-left px-3 py-2.5 font-medium">Nome</th>
-                  <th className="text-center px-2 py-2.5 font-medium hidden md:table-cell">Patrocinador</th>
-                  <th className="text-center px-2 py-2.5 font-medium hidden sm:table-cell">Celular</th>
-                  <th className="text-center px-2 py-2.5 font-medium hidden sm:table-cell">Cidade</th>
-                  <th className="text-center px-2 py-2.5 font-medium hidden lg:table-cell">UF</th>
-                  <th className="text-center px-2 py-2.5 font-medium">Cli.</th>
-                  <th className="text-center px-2 py-2.5 font-medium hidden lg:table-cell">GP</th>
-                  <th className="text-center px-2 py-2.5 font-medium hidden lg:table-cell">GI</th>
-                  <th className="text-center px-2 py-2.5 font-medium hidden xl:table-cell">Graduação</th>
-                  <th className="text-center px-2 py-2.5 font-medium w-10"></th>
+                <tr className="bg-white/[0.03] text-muted-foreground text-xs border-b border-white/[0.06]">
+                  <th className="text-center px-3 py-3 font-medium w-12">Nível</th>
+                  <th className="text-center px-3 py-3 font-medium w-16">ID</th>
+                  <th className="text-left px-3 py-3 font-medium">Nome</th>
+                  <th className="text-center px-3 py-3 font-medium hidden md:table-cell">Patrocinador</th>
+                  <th className="text-center px-3 py-3 font-medium hidden sm:table-cell">Celular</th>
+                  <th className="text-center px-3 py-3 font-medium hidden sm:table-cell">Cidade</th>
+                  <th className="text-center px-3 py-3 font-medium hidden lg:table-cell">UF</th>
+                  <th className="text-center px-3 py-3 font-medium">Cli.</th>
+                  <th className="text-center px-3 py-3 font-medium hidden lg:table-cell">GP</th>
+                  <th className="text-center px-3 py-3 font-medium hidden lg:table-cell">GI</th>
+                  <th className="text-center px-3 py-3 font-medium w-10"></th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(m => (
-                  <tr key={m.id} className="border-t border-border/30 hover:bg-secondary/20 transition-colors cursor-pointer"
-                    onClick={() => setSelectedMember(m)}>
-                    <td className="text-center px-2 py-2.5">
-                      <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${m.nivel === 0 ? "bg-primary/20 text-primary" : "bg-secondary text-muted-foreground"}`}>{m.nivel}</span>
-                    </td>
-                    <td className="text-center px-2 py-2.5 font-mono text-xs text-muted-foreground">{m.igreen_id}</td>
-                    <td className="px-3 py-2.5 font-medium text-foreground">{m.name}</td>
-                    <td className="text-center px-2 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{m.sponsor_id || "—"}</td>
-                    <td className="text-center px-2 py-2.5 text-xs text-muted-foreground hidden sm:table-cell">{formatPhone(m.phone) || "—"}</td>
-                    <td className="text-center px-2 py-2.5 text-xs text-muted-foreground hidden sm:table-cell">{m.cidade || "—"}</td>
-                    <td className="text-center px-2 py-2.5 text-xs text-muted-foreground hidden lg:table-cell">{m.uf || "—"}</td>
-                    <td className="text-center px-2 py-2.5"><span className="font-bold text-green-500">{m.clientes_ativos}</span></td>
-                    <td className="text-center px-2 py-2.5 text-xs hidden lg:table-cell">{Number(m.gp).toLocaleString("pt-BR")}</td>
-                    <td className="text-center px-2 py-2.5 text-xs hidden lg:table-cell">{Number(m.gi).toLocaleString("pt-BR")}</td>
-                    <td className="text-center px-2 py-2.5 text-xs hidden xl:table-cell">
-                      {m.graduacao ? <span className="px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px]">{m.graduacao}</span> : "—"}
-                    </td>
-                    <td className="text-center px-2 py-2.5">
-                      {m.phone && (
-                        <button onClick={e => { e.stopPropagation(); openWhatsApp(m.phone); }} className="p-1 rounded-md hover:bg-green-500/20" title="WhatsApp">
-                          <MessageCircle className="w-4 h-4 text-green-500" />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {filtered.map((m, i) => {
+                  const p = getPalette(m.nivel);
+                  return (
+                    <tr key={m.id}
+                      className="border-b border-white/[0.04] hover:bg-white/[0.04] transition-colors cursor-pointer group"
+                      onClick={() => setSelectedMember(m)}>
+                      <td className="text-center px-3 py-3">
+                        <span className={`inline-flex items-center justify-center w-7 h-7 rounded-lg text-xs font-bold bg-gradient-to-br ${p.bg} text-white shadow-sm`}>
+                          {m.nivel}
+                        </span>
+                      </td>
+                      <td className="text-center px-3 py-3 font-mono text-xs text-muted-foreground">{m.igreen_id}</td>
+                      <td className="px-3 py-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${p.bg} flex items-center justify-center shrink-0`}>
+                            <span className="text-[10px] font-bold text-white">
+                              {m.name.split(" ").filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase()}
+                            </span>
+                          </div>
+                          <span className="font-medium text-foreground truncate sensitive-name">{m.name}</span>
+                        </div>
+                      </td>
+                      <td className="text-center px-3 py-3 text-xs text-muted-foreground hidden md:table-cell">{m.sponsor_id || "—"}</td>
+                      <td className="text-center px-3 py-3 text-xs text-muted-foreground hidden sm:table-cell">{formatPhone(m.phone) || "—"}</td>
+                      <td className="text-center px-3 py-3 text-xs text-muted-foreground hidden sm:table-cell">{m.cidade || "—"}</td>
+                      <td className="text-center px-3 py-3 text-xs text-muted-foreground hidden lg:table-cell">{m.uf || "—"}</td>
+                      <td className="text-center px-3 py-3">
+                        <span className={`inline-flex items-center justify-center min-w-[28px] h-6 rounded-full text-xs font-bold
+                          ${m.clientes_ativos > 0 ? "bg-green-500/15 text-green-400" : "bg-white/5 text-muted-foreground"}`}>
+                          {m.clientes_ativos}
+                        </span>
+                      </td>
+                      <td className="text-center px-3 py-3 text-xs hidden lg:table-cell font-medium">{Number(m.gp).toLocaleString("pt-BR")}</td>
+                      <td className="text-center px-3 py-3 text-xs hidden lg:table-cell font-medium">{Number(m.gi).toLocaleString("pt-BR")}</td>
+                      <td className="text-center px-3 py-3">
+                        {m.phone && (
+                          <button onClick={e => { e.stopPropagation(); openWhatsApp(m.phone); }}
+                            className="p-1.5 rounded-lg hover:bg-green-500/15 opacity-0 group-hover:opacity-100 transition-all" title="WhatsApp">
+                            <MessageCircle className="w-4 h-4 text-green-400" />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -511,14 +619,22 @@ export function NetworkPanel({ consultantId }: NetworkPanelProps) {
   );
 }
 
-function SummaryCard({ icon: Icon, label, value, color }: { icon: any; label: string; value: number | string; color: string }) {
+/* ── Glass Summary Card ── */
+function GlassCard({ icon: Icon, label, value, gradient }: { icon: any; label: string; value: number | string; gradient: string }) {
   return (
-    <div className="rounded-xl border border-border bg-card p-3 sm:p-4">
-      <div className="flex items-center gap-2 mb-1">
-        <Icon className={`w-4 h-4 ${color}`} />
-        <span className="text-xs text-muted-foreground">{label}</span>
+    <div className="relative rounded-2xl border border-white/[0.06] bg-white/[0.02] backdrop-blur-sm p-4 overflow-hidden group hover:border-white/[0.12] transition-all duration-300">
+      {/* Subtle glow */}
+      <div className={`absolute -top-8 -right-8 w-24 h-24 rounded-full bg-gradient-to-br ${gradient} opacity-[0.06] blur-2xl group-hover:opacity-[0.12] transition-opacity duration-500`} />
+      
+      <div className="relative z-10">
+        <div className="flex items-center gap-2 mb-2">
+          <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${gradient} flex items-center justify-center shadow-lg`}>
+            <Icon className="w-4 h-4 text-white" />
+          </div>
+          <span className="text-xs text-muted-foreground font-medium">{label}</span>
+        </div>
+        <p className="text-2xl sm:text-3xl font-bold text-foreground tracking-tight">{value}</p>
       </div>
-      <p className={`text-xl sm:text-2xl font-bold ${color}`}>{value}</p>
     </div>
   );
 }
