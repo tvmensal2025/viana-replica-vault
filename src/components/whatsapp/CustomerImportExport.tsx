@@ -175,7 +175,7 @@ export function CustomerImportExport({ customers, filtered, consultantId, onCust
       // Dados Pessoais
       "Nome": c.name || "",
       "CPF": c.cpf || "",
-      "RG": (c as any).rg || "",
+      "RG": c.rg || "",
       "Email": c.email || "",
       "Telefone": c.phone_whatsapp,
       "Data Nascimento": c.data_nascimento || "",
@@ -189,7 +189,7 @@ export function CustomerImportExport({ customers, filtered, consultantId, onCust
       "CEP": c.cep || "",
       // Energia
       "Distribuidora": c.distribuidora || "",
-      "Nº Instalação": (c as any).numero_instalacao || "",
+      "Nº Instalação": c.numero_instalacao || "",
       "Consumo Médio (kW)": c.media_consumo ?? "",
       "Valor Conta (R$)": c.electricity_bill_value ?? "",
       "Desconto Cliente (%)": c.desconto_cliente ?? "",
