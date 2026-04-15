@@ -247,14 +247,56 @@ async function syncOneConsultant(
   if (mode === "explore_network" || mode === "sync_network") {
     console.log("=== SYNC NETWORK MODE ===");
     try {
-      const netRes = await fetch(`${API_BASE}/network-map`, { headers: authHeaders });
-      if (!netRes.ok) {
-        return { success: false, email: portalEmail, error: "Não foi possível buscar o mapa de rede." };
-      }
+      // Fetch all pages of network map
+      let allNetData: Record<string, unknown>[] = [];
+      let page = 1;
+      const perPage = 100;
+      while (true) {
+        const url = `${API_BASE}/network-map?page=${page}&per_page=${perPage}&limit=${perPage}`;
+        console.log(`Fetching network page ${page}: ${url}`);
+        const netRes = await fetch(url, { headers: authHeaders });
+        if (!netRes.ok) {
+          console.error(`Network fetch failed page ${page}: ${netRes.status}`);
+          if (page === 1) return { success: false, email: portalEmail, error: "Não foi possível buscar o mapa de rede." };
+          break;
+        }
 
-      const rawNet = await netRes.json();
-      const netData = Array.isArray(rawNet) ? rawNet : (rawNet.data || []);
-      console.log(`Network map: ${netData.length} members found`);
+        const rawNet = await netRes.json();
+        console.log(`Page ${page} raw keys:`, Object.keys(rawNet));
+        
+        let pageData: Record<string, unknown>[];
+        if (Array.isArray(rawNet)) {
+          pageData = rawNet;
+        } else if (rawNet.data && Array.isArray(rawNet.data)) {
+          pageData = rawNet.data;
+        } else if (rawNet.results && Array.isArray(rawNet.results)) {
+          pageData = rawNet.results;
+        } else if (rawNet.items && Array.isArray(rawNet.items)) {
+          pageData = rawNet.items;
+        } else {
+          // Log full structure to understand API response
+          console.log(`Page ${page} full response (truncated):`, JSON.stringify(rawNet).slice(0, 2000));
+          pageData = [];
+        }
+        
+        console.log(`Page ${page}: ${pageData.length} members`);
+        if (pageData.length === 0) break;
+        
+        allNetData = allNetData.concat(pageData);
+        
+        // Check pagination metadata
+        const totalPages = rawNet.last_page || rawNet.totalPages || rawNet.total_pages;
+        if (totalPages && page >= totalPages) break;
+        if (pageData.length < perPage && !totalPages) break;
+        
+        page++;
+        // Safety: max 20 pages
+        if (page > 20) break;
+        await new Promise(r => setTimeout(r, 500));
+      }
+      
+      const netData = allNetData;
+      console.log(`Network map total: ${netData.length} members found`);
 
       const netRecords = netData.map((m: Record<string, unknown>) => ({
         consultant_id: consultantId,
