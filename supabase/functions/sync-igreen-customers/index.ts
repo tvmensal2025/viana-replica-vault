@@ -280,10 +280,6 @@ async function syncOneConsultant(
         }
         
         console.log(`Page ${page}: ${pageData.length} members`);
-        if (page === 1 && pageData.length > 0) {
-          console.log("SAMPLE MEMBER KEYS:", JSON.stringify(Object.keys(pageData[0])));
-          console.log("SAMPLE MEMBER DATA:", JSON.stringify(pageData[0]));
-        }
         if (pageData.length === 0) break;
         
         allNetData = allNetData.concat(pageData);
