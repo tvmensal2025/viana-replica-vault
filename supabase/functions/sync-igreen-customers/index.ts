@@ -295,8 +295,14 @@ async function syncOneConsultant(
         await new Promise(r => setTimeout(r, 500));
       }
       
-      const netData = allNetData;
-      console.log(`Network map total: ${netData.length} members found`);
+      // Deduplicate by igreen_id (API may return same member across pages)
+      const deduped = new Map<number, Record<string, unknown>>();
+      for (const m of allNetData) {
+        const id = Number(m.idconsultor || m.id);
+        if (id) deduped.set(id, m);
+      }
+      const netData = Array.from(deduped.values());
+      console.log(`Network map total: ${netData.length} unique members (${allNetData.length} raw)`);
 
       const netRecords = netData.map((m: Record<string, unknown>) => ({
         consultant_id: consultantId,
@@ -331,9 +337,17 @@ async function syncOneConsultant(
         updated_at: new Date().toISOString(),
       }));
 
+      // Final dedup on mapped records by igreen_id
+      const uniqueRecords = new Map<number, typeof netRecords[0]>();
+      for (const r of netRecords) {
+        uniqueRecords.set(Number(r.igreen_id), r);
+      }
+      const finalRecords = Array.from(uniqueRecords.values());
+      console.log(`After final dedup: ${finalRecords.length} records`);
+
       let netUpdated = 0;
-      for (let i = 0; i < netRecords.length; i += 50) {
-        const batch = netRecords.slice(i, i + 50);
+      for (let i = 0; i < finalRecords.length; i += 25) {
+        const batch = finalRecords.slice(i, i + 25);
         const { data, error } = await supabase
           .from("network_members")
           .upsert(batch, { onConflict: "consultant_id,igreen_id", ignoreDuplicates: false })
