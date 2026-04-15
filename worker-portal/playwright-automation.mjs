@@ -853,96 +853,74 @@ export async function executarAutomacao(customerId, options = {}) {
     await delay(1500);
 
     // ─── 11. Distribuidora ──────────────────────────────────────────────
+    // NÃO existe campo distribuidora no portal atual - é detectada automaticamente pelo CEP
     currentPhase = 'fase8-distribuidora';
-    console.log('\n📋 [8/16] Distribuidora...');
-    
-    if (data.distribuidora) {
-      // Tentar select nativo e dropdown customizado
-      const selectField = page.locator('select:visible').first();
-      let distribOk = false;
-      if (await selectField.count() > 0) {
-        try {
-          await selectField.selectOption({ label: new RegExp(data.distribuidora.split(' ')[0], 'i') });
-          console.log(`   ✅ Distribuidora: ${data.distribuidora}`);
-          distribOk = true;
-        } catch (_) {}
-      }
-      
-      // Dropdown customizado: procurar por texto "Distribuidora" e clicar
-      if (!distribOk) {
-        const distDropdown = page.locator('div:has-text("Distribuidora")').first();
-        if (await distDropdown.count() > 0) {
-          try {
-            await distDropdown.click();
-            await delay(500);
-            const opt = page.getByText(data.distribuidora.split(' ')[0], { exact: false }).first();
-            if (await opt.count() > 0) { await opt.click(); distribOk = true; }
-            else await page.keyboard.press('Escape');
-          } catch (_) {}
-        }
-      }
-      
-      if (!distribOk) console.log('   ℹ️  Distribuidora: preenchida automaticamente pelo CEP');
-    }
+    console.log('\n📋 [8/16] Distribuidora: automática pelo CEP ✅');
     
     await page.evaluate(() => window.scrollBy(0, 400));
     await delay(2500);
     await screenshot(page, customerId, '05-formulario-preenchido');
     
-    // ─── 12. Tipo de Documento ──────────────────────────────────────────
+    // ─── 12. Tipo de Documento (MUI Dropdown) ───────────────────────────
     currentPhase = 'tipo-documento';
     console.log('\n📋 [9/16] Tipo de documento...');
     
     const tipoDoc = (data.documentType || 'RG').toUpperCase();
-    let opcaoTexto = tipoDoc.includes('CNH') ? 'CNH' : tipoDoc.includes('NOVO') ? 'RG (Novo)' : 'RG';
+    // Mapear para os textos exatos do dropdown MUI do portal
+    let opcaoTexto;
+    if (tipoDoc.includes('CNH')) {
+      opcaoTexto = 'CNH';
+    } else if (tipoDoc.includes('NOVO')) {
+      opcaoTexto = 'RG (Novo)';
+    } else {
+      opcaoTexto = 'RG (Antigo)';
+    }
     console.log(`   📋 Tipo desejado: ${opcaoTexto}`);
     
     let tipoDocOk = false;
     
-    // Estratégia 1: select nativo
-    const allSelects = await page.locator('select:visible').all();
-    for (const sel of allSelects) {
-      try {
-        const html = await sel.innerHTML();
-        if (html.includes('RG') || html.includes('CNH')) {
-          await sel.selectOption({ label: new RegExp(opcaoTexto, 'i') });
-          console.log(`   ✅ Tipo documento: ${opcaoTexto}`);
-          tipoDocOk = true;
-          break;
-        }
-      } catch (_) {}
-    }
+    // Portal usa MUI Select (dropdown customizado com div, não <select>)
+    // O trigger é um div com role="combobox" ou aria-haspopup="listbox"
+    const muiTriggers = [
+      '[role="combobox"]',
+      '[aria-haspopup="listbox"]',
+      // MUI Select renderiza com classe MuiSelect
+      '.MuiSelect-select',
+      // Fallback: div que mostra "Tipo documento"
+      'div:has-text("Tipo documento"):not(:has(div:has-text("Tipo documento")))',
+    ];
     
-    // Estratégia 2: dropdown customizado (clicável)
-    if (!tipoDocOk) {
-      const dropdownTriggers = [
-        'div:has-text("Tipo"):has-text("documento")',
-        'div:has-text("Tipo de documento")',
-        '[aria-haspopup="listbox"]',
-        '[role="combobox"]',
-      ];
-      for (const sel of dropdownTriggers) {
-        if (tipoDocOk) break;
-        try {
-          const el = page.locator(sel).first();
-          if (await el.count() > 0 && await el.isVisible().catch(() => false)) {
-            await el.click({ timeout: 5000 });
-            await delay(500);
-            const opt = page.getByText(opcaoTexto, { exact: false }).first();
-            if (await opt.count() > 0 && await opt.isVisible().catch(() => false)) {
-              await opt.click({ timeout: 5000 });
-              console.log(`   ✅ Tipo documento: ${opcaoTexto}`);
+    for (const sel of muiTriggers) {
+      if (tipoDocOk) break;
+      try {
+        const el = page.locator(sel).first();
+        if (await el.count() > 0 && await el.isVisible().catch(() => false)) {
+          await el.click({ timeout: 5000 });
+          await delay(800);
+          
+          // MUI abre um popover/menu com role="listbox" ou ul com li items
+          const opt = page.locator(`li:has-text("${opcaoTexto}"), [role="option"]:has-text("${opcaoTexto}")`).first();
+          if (await opt.count() > 0 && await opt.isVisible().catch(() => false)) {
+            await opt.click({ timeout: 5000 });
+            console.log(`   ✅ Tipo documento: ${opcaoTexto}`);
+            tipoDocOk = true;
+          } else {
+            // Tentar texto parcial
+            const optAlt = page.getByText(opcaoTexto, { exact: false }).first();
+            if (await optAlt.count() > 0 && await optAlt.isVisible().catch(() => false)) {
+              await optAlt.click({ timeout: 5000 });
+              console.log(`   ✅ Tipo documento (alt): ${opcaoTexto}`);
               tipoDocOk = true;
             } else {
               await page.keyboard.press('Escape').catch(() => {});
             }
           }
-        } catch (_) {}
-      }
+        }
+      } catch (_) {}
     }
     
     if (!tipoDocOk) {
-      console.warn('   ⚠️  Tipo documento não selecionado (pode não existir nesta versão do portal)');
+      console.warn('   ⚠️  Tipo documento não selecionado - usando default do portal');
       await screenshot(page, customerId, '05b-tipo-doc-FALHOU');
     }
     await delay(1500);
@@ -952,47 +930,51 @@ export async function executarAutomacao(customerId, options = {}) {
     console.log('\n📋 [10/16] Upload documentos pessoais...');
     await delay(2000);
     
-    // O portal pode usar input[type="file"] hidden/visible ou drag-drop zones
-    // Aguardar até inputs file aparecerem
-    let fileInputs = [];
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      fileInputs = await page.locator('input[type="file"]').all();
-      console.log(`   📊 Tentativa ${attempt}: ${fileInputs.length} input(s) file encontrado(s)`);
-      if (fileInputs.length >= 2) break;
-      await page.evaluate(() => window.scrollBy(0, 300));
-      await delay(2000);
-    }
+    // Portal usa inputs hidden: #file-frente e #file-verso
+    // Primeiro tentar pelos IDs exatos conhecidos
+    const fileFrente = page.locator('#file-frente, input[type="file"]').first();
+    const fileVerso = page.locator('#file-verso, input[type="file"]').last();
+    
+    // Verificar se existem pelo menos 2 inputs file
+    const allFileInputsCount = await page.locator('input[type="file"]').count();
+    console.log(`   📊 ${allFileInputsCount} input(s) file encontrado(s)`);
     
     // Upload frente
-    if (fileInputs.length >= 1) {
+    if (allFileInputsCount >= 1) {
       try {
-        await fileInputs[0].setInputFiles(docFrentePath);
+        await fileFrente.setInputFiles(docFrentePath);
         console.log('   ✅ Documento FRENTE enviado');
-        await delay(1500);
+        await delay(2000);
       } catch (e) {
         console.warn(`   ⚠️  Doc frente: ${e.message}`);
       }
     }
     
-    // Upload verso (se não for CNH com apenas 1 lado)
-    if (fileInputs.length >= 2) {
+    // Upload verso
+    if (allFileInputsCount >= 2 && docVersoPath) {
       try {
-        await fileInputs[1].setInputFiles(docVersoPath);
+        await fileVerso.setInputFiles(docVersoPath);
         console.log('   ✅ Documento VERSO enviado');
-        await delay(1500);
+        await delay(2000);
       } catch (e) {
         console.warn(`   ⚠️  Doc verso: ${e.message}`);
       }
     }
     
-    // Se não encontrou inputs file, tentar zona de drop
-    if (fileInputs.length === 0) {
-      console.warn('   ⚠️  Nenhum input file encontrado - portal pode usar drag-drop ou ter mudado');
-      // Tentar clicar em botão de upload
-      const uploadBtns = page.locator('button:has-text("Upload"), button:has-text("Anexar"), button:has-text("Enviar documento"), label:has-text("Selecionar arquivo")');
-      if (await uploadBtns.count() > 0) {
-        console.log('   📂 Encontrado botão de upload, tentando...');
-        // O clique pode abrir file dialog que não funciona headless
+    if (allFileInputsCount === 0) {
+      console.warn('   ⚠️  Nenhum input file encontrado');
+      // Scroll para tentar revelar
+      await page.evaluate(() => window.scrollBy(0, 300));
+      await delay(2000);
+      // Re-tentar
+      const retryCount = await page.locator('input[type="file"]').count();
+      if (retryCount >= 1) {
+        await page.locator('input[type="file"]').first().setInputFiles(docFrentePath).catch(() => {});
+        console.log('   ✅ Documento FRENTE enviado (retry)');
+      }
+      if (retryCount >= 2 && docVersoPath) {
+        await page.locator('input[type="file"]').last().setInputFiles(docVersoPath).catch(() => {});
+        console.log('   ✅ Documento VERSO enviado (retry)');
       }
     }
     
