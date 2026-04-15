@@ -470,11 +470,11 @@ app.post('/confirm-otp', async (req, res) => {
     });
   }
   
-  // Validar formato do código (6 dígitos)
+  // Validar formato do código (4-8 dígitos)
   const codeClean = otp_code.replace(/\D/g, '');
-  if (codeClean.length !== 6) {
+  if (codeClean.length < 4 || codeClean.length > 8) {
     return res.status(400).json({ 
-      error: 'OTP code must be 6 digits' 
+      error: 'OTP code must be 4-8 digits' 
     });
   }
   
