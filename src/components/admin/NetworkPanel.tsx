@@ -158,25 +158,37 @@ function NodeCard({ member, hasChildren, childCount, isExpanded, onToggle, onOpe
   onOpenDetails: () => void;
   isOrphan?: boolean;
 }) {
-  const p = getPalette(member.nivel);
-  const initials = member.name.split(" ").filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
-  const isRoot = member.nivel === 0;
+  const isVirtual = member.id.startsWith("virtual-");
+  const p = isVirtual
+    ? { bg: "from-gray-500 to-gray-700", glow: "shadow-gray-500/20", ring: "ring-gray-400/30", text: "text-gray-400", bar: "bg-gray-500" }
+    : getPalette(member.nivel);
+  const initials = isVirtual ? "?" : member.name.split(" ").filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
+  const isRoot = member.nivel === 0 && !isVirtual;
 
   return (
     <div className="flex flex-col items-center" data-node-id={member.igreen_id}>
       <div
         className={`relative rounded-2xl border transition-all duration-300 cursor-pointer select-none group
-          ${isRoot
-            ? `w-[120px] border-emerald-500/30 bg-gradient-to-b from-emerald-500/10 to-emerald-900/5 hover:border-emerald-400/60 hover:shadow-lg ${p.glow}`
-            : "w-[100px] border-white/[0.06] bg-white/[0.03] hover:bg-white/[0.07] hover:border-white/[0.15] hover:shadow-lg hover:shadow-black/20"
+          ${isVirtual
+            ? "w-[100px] border-dashed border-gray-500/40 bg-gray-500/5 hover:bg-gray-500/10"
+            : isRoot
+              ? `w-[120px] border-emerald-500/30 bg-gradient-to-b from-emerald-500/10 to-emerald-900/5 hover:border-emerald-400/60 hover:shadow-lg ${p.glow}`
+              : `w-[100px] border-white/[0.06] bg-white/[0.03] hover:bg-white/[0.07] hover:border-white/[0.15] hover:shadow-lg hover:shadow-black/20${isOrphan ? " ring-1 ring-amber-500/20" : ""}`
           }
           backdrop-blur-sm p-2`}
-        onClick={onOpenDetails}
+        onClick={isVirtual ? undefined : onOpenDetails}
       >
+        {/* Orphan badge */}
+        {isVirtual && (
+          <div className="absolute -top-2 left-1/2 -translate-x-1/2 text-[7px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-bold whitespace-nowrap">
+            Externo
+          </div>
+        )}
         {/* Avatar */}
         <div className="flex justify-center mb-1.5">
           <div className={`${isRoot ? "w-11 h-11" : "w-9 h-9"} rounded-full bg-gradient-to-br ${p.bg}
-            ring-2 ${p.ring} flex items-center justify-center shadow-lg ${p.glow} transition-transform duration-300 group-hover:scale-110`}>
+            ring-2 ${p.ring} flex items-center justify-center shadow-lg ${p.glow} transition-transform duration-300 group-hover:scale-110
+            ${isVirtual ? "border-dashed border border-gray-400/40" : ""}`}>
             <span className={`${isRoot ? "text-xs" : "text-[10px]"} font-bold text-white drop-shadow-sm`}>{initials}</span>
           </div>
         </div>
