@@ -60,14 +60,49 @@ function buildTree(members: NetworkMember[]): TreeNode[] {
     } else if (m.nivel === 0 || !m.sponsor_id) {
       roots.push(node);
     } else {
-      // Orphan: sponsor not in dataset — attach to nearest ancestor in tree
       orphans.push(node);
     }
   });
-  // Attach orphans to the main root (nivel 0) so they don't float disconnected
+
+  // Attach orphans intelligently: find the closest ancestor by nivel
   if (orphans.length > 0 && roots.length > 0) {
-    const mainRoot = roots[0];
-    orphans.forEach(o => mainRoot.children.push(o));
+    // Sort orphans by nivel so we process shallower ones first
+    orphans.sort((a, b) => a.member.nivel - b.member.nivel);
+
+    // Build a nivel-indexed list of all placed nodes for fast lookup
+    const nodesByNivel = new Map<number, TreeNode[]>();
+    function indexNode(node: TreeNode) {
+      const n = node.member.nivel;
+      if (!nodesByNivel.has(n)) nodesByNivel.set(n, []);
+      nodesByNivel.get(n)!.push(node);
+      node.children.forEach(indexNode);
+    }
+    roots.forEach(indexNode);
+
+    for (const orphan of orphans) {
+      const targetNivel = orphan.member.nivel - 1;
+      let placed = false;
+
+      // Try to find a node at exactly one nivel above
+      for (let n = targetNivel; n >= 0; n--) {
+        const candidates = nodesByNivel.get(n);
+        if (candidates && candidates.length > 0) {
+          // Attach to the last candidate at that nivel (most recent)
+          candidates[candidates.length - 1].children.push(orphan);
+          placed = true;
+          break;
+        }
+      }
+
+      if (!placed) {
+        roots[0].children.push(orphan);
+      }
+
+      // Index the newly placed orphan so deeper orphans can attach to it
+      const n = orphan.member.nivel;
+      if (!nodesByNivel.has(n)) nodesByNivel.set(n, []);
+      nodesByNivel.get(n)!.push(orphan);
+    }
   } else if (orphans.length > 0) {
     roots.push(...orphans);
   }
