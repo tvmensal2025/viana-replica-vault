@@ -21,6 +21,18 @@ interface NetworkMember {
   qtde_diretos: number;
   total_pontos: number;
   updated_at: string;
+  graduacao: string | null;
+  graduacao_expansao: string | null;
+  data_nascimento: string | null;
+  gp_total: number;
+  gi_total: number;
+  bonificavel: number;
+  green_points: number;
+  gp_mes: number;
+  gi_mes: number;
+  green_points_mes: number;
+  diretos_ativos: number;
+  pro: string | null;
 }
 
 interface TreeNode {
