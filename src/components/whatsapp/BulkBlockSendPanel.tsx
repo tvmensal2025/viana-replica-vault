@@ -390,6 +390,7 @@ export function BulkBlockSendPanel({ instanceName, customers, templates, applyTe
                 customers={customers}
                 contacts={contacts}
                 onContactsChange={setContacts}
+                instanceName={instanceName}
               />
             </div>
 
