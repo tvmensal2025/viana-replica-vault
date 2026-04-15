@@ -52,14 +52,25 @@ function buildTree(members: NetworkMember[]): TreeNode[] {
   const byId = new Map<number, TreeNode>();
   members.forEach(m => byId.set(m.igreen_id, { member: m, children: [] }));
   const roots: TreeNode[] = [];
+  const orphans: TreeNode[] = [];
   members.forEach(m => {
     const node = byId.get(m.igreen_id)!;
     if (m.sponsor_id && byId.has(m.sponsor_id)) {
       byId.get(m.sponsor_id)!.children.push(node);
-    } else {
+    } else if (m.nivel === 0 || !m.sponsor_id) {
       roots.push(node);
+    } else {
+      // Orphan: sponsor not in dataset — attach to nearest ancestor in tree
+      orphans.push(node);
     }
   });
+  // Attach orphans to the main root (nivel 0) so they don't float disconnected
+  if (orphans.length > 0 && roots.length > 0) {
+    const mainRoot = roots[0];
+    orphans.forEach(o => mainRoot.children.push(o));
+  } else if (orphans.length > 0) {
+    roots.push(...orphans);
+  }
   return roots;
 }
 
