@@ -33,6 +33,9 @@ interface NetworkMember {
   green_points_mes: number;
   diretos_ativos: number;
   pro: string | null;
+  inicio_rapido: string | null;
+  diretos_inicio_rapido: number;
+  diretos_mes: number;
 }
 
 interface TreeNode {
@@ -169,8 +172,8 @@ function DetailPanel({ member, onClose }: { member: NetworkMember; onClose: () =
           </div>
         </div>
 
-        {/* Graduação */}
-        {(member.graduacao || member.graduacao_expansao) && (
+        {/* Graduação badges */}
+        {(member.graduacao || member.graduacao_expansao || member.pro) && (
           <div className="flex flex-wrap gap-1.5 mb-3">
             {member.graduacao && <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/15 text-primary font-medium">{member.graduacao}</span>}
             {member.graduacao_expansao && <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 font-medium">{member.graduacao_expansao}</span>}
@@ -178,32 +181,24 @@ function DetailPanel({ member, onClose }: { member: NetworkMember; onClose: () =
           </div>
         )}
 
-        {/* Stats - Totais */}
-        <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5 font-semibold">Acumulado</p>
+        {/* Pontuação */}
+        <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5 font-semibold">Pontuação</p>
         <div className="grid grid-cols-3 gap-2 mb-3">
-          <StatBox label="GP Total" value={Number(member.gp_total).toLocaleString("pt-BR")} />
-          <StatBox label="GI Total" value={Number(member.gi_total).toLocaleString("pt-BR")} />
-          <StatBox label="Bonificável" value={Number(member.bonificavel).toLocaleString("pt-BR")} />
+          <StatBox label="GP" value={Number(member.gp).toLocaleString("pt-BR")} />
+          <StatBox label="GI" value={Number(member.gi).toLocaleString("pt-BR")} />
+          <StatBox label="Total Pontos" value={Number(member.total_pontos).toLocaleString("pt-BR")} />
         </div>
 
-        {/* Stats - Mês */}
-        <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5 font-semibold">Mês Atual</p>
-        <div className="grid grid-cols-3 gap-2 mb-3">
-          <StatBox label="GP" value={Number(member.gp_mes || member.gp).toLocaleString("pt-BR")} />
-          <StatBox label="GI" value={Number(member.gi_mes || member.gi).toLocaleString("pt-BR")} />
-          <StatBox label="Green Points" value={Number(member.green_points_mes).toLocaleString("pt-BR")} />
-        </div>
-
-        {/* Stats - Rede */}
+        {/* Rede */}
         <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5 font-semibold">Rede</p>
         <div className="grid grid-cols-3 gap-2 mb-3">
           <StatBox label="Clientes Ativos" value={String(member.clientes_ativos)} highlight />
           <StatBox label="Diretos" value={String(member.qtde_diretos)} />
-          <StatBox label="Diretos Ativos" value={String(member.diretos_ativos)} />
+          <StatBox label="Diretos Mês" value={String(member.diretos_mes)} />
         </div>
 
         <div className="grid grid-cols-2 gap-2 mb-4">
-          <StatBox label="Green Points Total" value={Number(member.green_points).toLocaleString("pt-BR")} />
+          <StatBox label="Início Rápido" value={member.inicio_rapido || "—"} />
           <StatBox label="Patrocinador" value={member.sponsor_id ? String(member.sponsor_id) : "—"} />
         </div>
 
