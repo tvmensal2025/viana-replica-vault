@@ -387,6 +387,7 @@ function OrgChartNode({ node, depth = 0, onSelect }: { node: TreeNode; depth?: n
         isExpanded={expanded}
         onToggle={() => setExpanded(!expanded)}
         onOpenDetails={() => onSelect(node.member)}
+        isOrphan={node.isOrphan}
       />
 
       {hasChildren && expanded && (
