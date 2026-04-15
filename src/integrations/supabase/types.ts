@@ -590,20 +590,32 @@ export type Database = {
       }
       network_members: {
         Row: {
+          bonificavel: number | null
           cidade: string | null
           clientes_ativos: number | null
           consultant_id: string
           data_ativo: string | null
+          data_nascimento: string | null
+          diretos_ativos: number | null
           diretos_inicio_rapido: number | null
           diretos_mes: number | null
           gi: number | null
+          gi_mes: number | null
+          gi_total: number | null
           gp: number | null
+          gp_mes: number | null
+          gp_total: number | null
+          graduacao: string | null
+          graduacao_expansao: string | null
+          green_points: number | null
+          green_points_mes: number | null
           id: string
           igreen_id: number
           inicio_rapido: string | null
           name: string
           nivel: number | null
           phone: string | null
+          pro: string | null
           qtde_diretos: number | null
           sponsor_id: number | null
           total_pontos: number | null
@@ -611,20 +623,32 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          bonificavel?: number | null
           cidade?: string | null
           clientes_ativos?: number | null
           consultant_id: string
           data_ativo?: string | null
+          data_nascimento?: string | null
+          diretos_ativos?: number | null
           diretos_inicio_rapido?: number | null
           diretos_mes?: number | null
           gi?: number | null
+          gi_mes?: number | null
+          gi_total?: number | null
           gp?: number | null
+          gp_mes?: number | null
+          gp_total?: number | null
+          graduacao?: string | null
+          graduacao_expansao?: string | null
+          green_points?: number | null
+          green_points_mes?: number | null
           id?: string
           igreen_id: number
           inicio_rapido?: string | null
           name: string
           nivel?: number | null
           phone?: string | null
+          pro?: string | null
           qtde_diretos?: number | null
           sponsor_id?: number | null
           total_pontos?: number | null
@@ -632,20 +656,32 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          bonificavel?: number | null
           cidade?: string | null
           clientes_ativos?: number | null
           consultant_id?: string
           data_ativo?: string | null
+          data_nascimento?: string | null
+          diretos_ativos?: number | null
           diretos_inicio_rapido?: number | null
           diretos_mes?: number | null
           gi?: number | null
+          gi_mes?: number | null
+          gi_total?: number | null
           gp?: number | null
+          gp_mes?: number | null
+          gp_total?: number | null
+          graduacao?: string | null
+          graduacao_expansao?: string | null
+          green_points?: number | null
+          green_points_mes?: number | null
           id?: string
           igreen_id?: number
           inicio_rapido?: string | null
           name?: string
           nivel?: number | null
           phone?: string | null
+          pro?: string | null
           qtde_diretos?: number | null
           sponsor_id?: number | null
           total_pontos?: number | null
