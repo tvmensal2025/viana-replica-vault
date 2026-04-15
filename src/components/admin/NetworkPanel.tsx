@@ -152,7 +152,7 @@ function DetailPanel({ member, onClose }: { member: NetworkMember; onClose: () =
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="bg-card border border-border rounded-2xl shadow-2xl w-[320px] max-w-[90vw] p-5 animate-in fade-in zoom-in-95 duration-200"
+        className="bg-card border border-border rounded-2xl shadow-2xl w-[380px] max-w-[90vw] max-h-[85vh] overflow-y-auto p-5 animate-in fade-in zoom-in-95 duration-200"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -165,25 +165,60 @@ function DetailPanel({ member, onClose }: { member: NetworkMember; onClose: () =
           <div className="min-w-0">
             <p className="font-bold text-foreground text-sm leading-tight sensitive-name">{member.name}</p>
             <p className="text-xs text-muted-foreground">ID: {member.igreen_id} • Nível {member.nivel}</p>
+            {member.graduacao && <p className="text-xs text-primary font-medium">{member.graduacao}</p>}
           </div>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 gap-2 mb-4">
-          <StatBox label="GP" value={Number(member.gp).toLocaleString("pt-BR")} />
-          <StatBox label="GI" value={Number(member.gi).toLocaleString("pt-BR")} />
+        {/* Graduação */}
+        {(member.graduacao || member.graduacao_expansao) && (
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            {member.graduacao && <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/15 text-primary font-medium">{member.graduacao}</span>}
+            {member.graduacao_expansao && <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 font-medium">{member.graduacao_expansao}</span>}
+            {member.pro && <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 font-medium">PRO</span>}
+          </div>
+        )}
+
+        {/* Stats - Totais */}
+        <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5 font-semibold">Acumulado</p>
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          <StatBox label="GP Total" value={Number(member.gp_total).toLocaleString("pt-BR")} />
+          <StatBox label="GI Total" value={Number(member.gi_total).toLocaleString("pt-BR")} />
+          <StatBox label="Bonificável" value={Number(member.bonificavel).toLocaleString("pt-BR")} />
+        </div>
+
+        {/* Stats - Mês */}
+        <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5 font-semibold">Mês Atual</p>
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          <StatBox label="GP" value={Number(member.gp_mes || member.gp).toLocaleString("pt-BR")} />
+          <StatBox label="GI" value={Number(member.gi_mes || member.gi).toLocaleString("pt-BR")} />
+          <StatBox label="Green Points" value={Number(member.green_points_mes).toLocaleString("pt-BR")} />
+        </div>
+
+        {/* Stats - Rede */}
+        <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5 font-semibold">Rede</p>
+        <div className="grid grid-cols-3 gap-2 mb-3">
           <StatBox label="Clientes Ativos" value={String(member.clientes_ativos)} highlight />
           <StatBox label="Diretos" value={String(member.qtde_diretos)} />
-          <StatBox label="Pontos" value={Number(member.total_pontos).toLocaleString("pt-BR")} />
+          <StatBox label="Diretos Ativos" value={String(member.diretos_ativos)} />
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 mb-4">
+          <StatBox label="Green Points Total" value={Number(member.green_points).toLocaleString("pt-BR")} />
           <StatBox label="Patrocinador" value={member.sponsor_id ? String(member.sponsor_id) : "—"} />
         </div>
 
-        {/* Location */}
-        {member.cidade && (
-          <p className="text-xs text-muted-foreground mb-3">
-            📍 {member.cidade}{member.uf ? `/${member.uf}` : ""}
-          </p>
-        )}
+        {/* Location & Dates */}
+        <div className="space-y-1 mb-3">
+          {member.cidade && (
+            <p className="text-xs text-muted-foreground">📍 {member.cidade}{member.uf ? `/${member.uf}` : ""}</p>
+          )}
+          {member.data_nascimento && (
+            <p className="text-xs text-muted-foreground">🎂 {member.data_nascimento}</p>
+          )}
+          {member.data_ativo && (
+            <p className="text-xs text-muted-foreground">📅 Ativo desde: {member.data_ativo}</p>
+          )}
+        </div>
 
         {/* Phone + WhatsApp */}
         <div className="flex items-center gap-2">
