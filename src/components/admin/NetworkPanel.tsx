@@ -77,7 +77,7 @@ function buildTree(members: NetworkMember[]): TreeNode[] {
     }
 
     // Create virtual group nodes for each external sponsor
-    for (const [sponsorId, children] of bySponsor) {
+    for (const [sponsorId, children] of Array.from(bySponsor.entries())) {
       const virtualMember: NetworkMember = {
         id: `virtual-${sponsorId}`,
         igreen_id: sponsorId,
