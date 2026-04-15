@@ -50,12 +50,50 @@ interface NetworkPanelProps {
 
 /* ── Helpers ── */
 
+const nameCollator = new Intl.Collator("pt-BR", { sensitivity: "base", numeric: true });
+
+function sortNodes(nodes: TreeNode[]) {
+  nodes.sort((a, b) => {
+    const orphanDiff = Number(a.isOrphan) - Number(b.isOrphan);
+    if (orphanDiff !== 0) return orphanDiff;
+
+    const directsDiff = (b.member.qtde_diretos || 0) - (a.member.qtde_diretos || 0);
+    if (directsDiff !== 0) return directsDiff;
+
+    const nameDiff = nameCollator.compare(a.member.name, b.member.name);
+    if (nameDiff !== 0) return nameDiff;
+
+    return a.member.igreen_id - b.member.igreen_id;
+  });
+
+  nodes.forEach((node) => sortNodes(node.children));
+}
+
+function getRemainingDirectSlots(node: TreeNode) {
+  if (node.member.id.startsWith("virtual-")) return Number.POSITIVE_INFINITY;
+  return (node.member.qtde_diretos || 0) - node.children.length;
+}
+
 function buildTree(members: NetworkMember[]): TreeNode[] {
   const byId = new Map<number, TreeNode>();
-  members.forEach(m => byId.set(m.igreen_id, { member: m, children: [], isOrphan: false }));
+  const nodesByLevel = new Map<number, TreeNode[]>();
+  const membersSorted = [...members].sort((a, b) => a.nivel - b.nivel || a.igreen_id - b.igreen_id);
+  const registerByLevel = (node: TreeNode) => {
+    const levelNodes = nodesByLevel.get(node.member.nivel) || [];
+    levelNodes.push(node);
+    nodesByLevel.set(node.member.nivel, levelNodes);
+  };
+
+  membersSorted.forEach((m) => {
+    const node = { member: m, children: [], isOrphan: false };
+    byId.set(m.igreen_id, node);
+    registerByLevel(node);
+  });
+
   const roots: TreeNode[] = [];
-  const orphans: TreeNode[] = [];
-  members.forEach(m => {
+  const orphanGroups = new Map<number, TreeNode[]>();
+
+  membersSorted.forEach((m) => {
     const node = byId.get(m.igreen_id)!;
     if (m.sponsor_id && byId.has(m.sponsor_id)) {
       byId.get(m.sponsor_id)!.children.push(node);
@@ -63,28 +101,55 @@ function buildTree(members: NetworkMember[]): TreeNode[] {
       roots.push(node);
     } else {
       node.isOrphan = true;
-      orphans.push(node);
+      const sponsorKey = m.sponsor_id || 0;
+      const grouped = orphanGroups.get(sponsorKey) || [];
+      grouped.push(node);
+      orphanGroups.set(sponsorKey, grouped);
     }
   });
 
-  // Group orphans by their missing sponsor_id for proper display
-  if (orphans.length > 0 && roots.length > 0) {
-    const bySponsor = new Map<number, TreeNode[]>();
-    for (const o of orphans) {
-      const sid = o.member.sponsor_id || 0;
-      if (!bySponsor.has(sid)) bySponsor.set(sid, []);
-      bySponsor.get(sid)!.push(o);
+  const pickBestParent = (virtualLevel: number, sponsorId: number) => {
+    for (let candidateLevel = virtualLevel - 1; candidateLevel >= 0; candidateLevel -= 1) {
+      const candidates = (nodesByLevel.get(candidateLevel) || []).filter((candidate) => candidate.member.id !== `virtual-${sponsorId}`);
+      if (!candidates.length) continue;
+
+      const ranked = [...candidates].sort((a, b) => {
+        const aRemaining = getRemainingDirectSlots(a);
+        const bRemaining = getRemainingDirectSlots(b);
+
+        const aCapacityPenalty = aRemaining > 0 ? 0 : Math.abs(aRemaining) * 10000 + 5000;
+        const bCapacityPenalty = bRemaining > 0 ? 0 : Math.abs(bRemaining) * 10000 + 5000;
+        if (aCapacityPenalty !== bCapacityPenalty) return aCapacityPenalty - bCapacityPenalty;
+
+        const aDistance = Math.abs(a.member.igreen_id - sponsorId);
+        const bDistance = Math.abs(b.member.igreen_id - sponsorId);
+        if (aDistance !== bDistance) return aDistance - bDistance;
+
+        return b.member.nivel - a.member.nivel;
+      });
+
+      if (ranked[0]) return ranked[0];
     }
 
-    // Create virtual group nodes for each external sponsor
-    for (const [sponsorId, children] of Array.from(bySponsor.entries())) {
+    return roots[0] || null;
+  };
+
+  if (orphanGroups.size > 0) {
+    const orderedGroups = Array.from(orphanGroups.entries()).sort((a, b) => {
+      const aLevel = (a[1][0]?.member.nivel || 1) - 1;
+      const bLevel = (b[1][0]?.member.nivel || 1) - 1;
+      return aLevel - bLevel || a[0] - b[0];
+    });
+
+    for (const [sponsorId, children] of orderedGroups) {
+      const virtualLevel = Math.max(0, (children[0]?.member.nivel || 1) - 1);
       const virtualMember: NetworkMember = {
         id: `virtual-${sponsorId}`,
         igreen_id: sponsorId,
         name: `Patrocinador Externo #${sponsorId}`,
         phone: null,
         sponsor_id: null,
-        nivel: (children[0]?.member.nivel ?? 1) - 1,
+        nivel: virtualLevel,
         data_ativo: null,
         cidade: null,
         uf: null,
@@ -110,12 +175,21 @@ function buildTree(members: NetworkMember[]): TreeNode[] {
         diretos_inicio_rapido: 0,
         diretos_mes: 0,
       };
+
       const virtualNode: TreeNode = { member: virtualMember, children, isOrphan: true };
-      roots[0].children.push(virtualNode);
+      const parent = pickBestParent(virtualLevel, sponsorId);
+
+      if (parent) {
+        parent.children.push(virtualNode);
+      } else {
+        roots.push(virtualNode);
+      }
+
+      registerByLevel(virtualNode);
     }
-  } else if (orphans.length > 0) {
-    roots.push(...orphans);
   }
+
+  sortNodes(roots);
   return roots;
 }
 
@@ -450,7 +524,8 @@ export function NetworkPanel({ consultantId }: NetworkPanelProps) {
         .from("network_members" as any)
         .select("*")
         .eq("consultant_id", consultantId)
-        .order("nivel", { ascending: true });
+        .order("nivel", { ascending: true })
+        .order("igreen_id", { ascending: true });
       if (error) throw error;
       setMembers((data as unknown as NetworkMember[]) || []);
     } catch { /* silently handle */ } finally { setLoading(false); }
