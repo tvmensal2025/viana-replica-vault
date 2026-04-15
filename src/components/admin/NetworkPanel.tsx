@@ -467,10 +467,14 @@ export function NetworkPanel({ consultantId }: NetworkPanelProps) {
                   <th className="text-center px-2 py-2.5 font-medium w-12">Nível</th>
                   <th className="text-center px-2 py-2.5 font-medium w-16">ID</th>
                   <th className="text-left px-3 py-2.5 font-medium">Nome</th>
+                  <th className="text-center px-2 py-2.5 font-medium hidden md:table-cell">Patrocinador</th>
+                  <th className="text-center px-2 py-2.5 font-medium hidden sm:table-cell">Celular</th>
                   <th className="text-center px-2 py-2.5 font-medium hidden sm:table-cell">Cidade</th>
+                  <th className="text-center px-2 py-2.5 font-medium hidden lg:table-cell">UF</th>
                   <th className="text-center px-2 py-2.5 font-medium">Cli.</th>
                   <th className="text-center px-2 py-2.5 font-medium hidden lg:table-cell">GP</th>
                   <th className="text-center px-2 py-2.5 font-medium hidden lg:table-cell">GI</th>
+                  <th className="text-center px-2 py-2.5 font-medium hidden xl:table-cell">Graduação</th>
                   <th className="text-center px-2 py-2.5 font-medium w-10"></th>
                 </tr>
               </thead>
@@ -483,10 +487,16 @@ export function NetworkPanel({ consultantId }: NetworkPanelProps) {
                     </td>
                     <td className="text-center px-2 py-2.5 font-mono text-xs text-muted-foreground">{m.igreen_id}</td>
                     <td className="px-3 py-2.5 font-medium text-foreground">{m.name}</td>
+                    <td className="text-center px-2 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{m.sponsor_id || "—"}</td>
+                    <td className="text-center px-2 py-2.5 text-xs text-muted-foreground hidden sm:table-cell">{formatPhone(m.phone) || "—"}</td>
                     <td className="text-center px-2 py-2.5 text-xs text-muted-foreground hidden sm:table-cell">{m.cidade || "—"}</td>
+                    <td className="text-center px-2 py-2.5 text-xs text-muted-foreground hidden lg:table-cell">{m.uf || "—"}</td>
                     <td className="text-center px-2 py-2.5"><span className="font-bold text-green-500">{m.clientes_ativos}</span></td>
                     <td className="text-center px-2 py-2.5 text-xs hidden lg:table-cell">{Number(m.gp).toLocaleString("pt-BR")}</td>
                     <td className="text-center px-2 py-2.5 text-xs hidden lg:table-cell">{Number(m.gi).toLocaleString("pt-BR")}</td>
+                    <td className="text-center px-2 py-2.5 text-xs hidden xl:table-cell">
+                      {m.graduacao ? <span className="px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px]">{m.graduacao}</span> : "—"}
+                    </td>
                     <td className="text-center px-2 py-2.5">
                       {m.phone && (
                         <button onClick={e => { e.stopPropagation(); openWhatsApp(m.phone); }} className="p-1 rounded-md hover:bg-green-500/20" title="WhatsApp">
