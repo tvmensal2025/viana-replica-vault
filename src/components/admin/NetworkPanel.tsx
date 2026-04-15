@@ -367,7 +367,8 @@ export function NetworkPanel({ consultantId }: NetworkPanelProps) {
     const q = search.toLowerCase();
     return members.filter(m =>
       m.name.toLowerCase().includes(q) || String(m.igreen_id).includes(q) ||
-      (m.cidade || "").toLowerCase().includes(q) || (m.phone || "").includes(q)
+      (m.cidade || "").toLowerCase().includes(q) || (m.phone || "").includes(q) ||
+      (m.uf || "").toLowerCase().includes(q) || (m.graduacao || "").toLowerCase().includes(q)
     );
   }, [members, search]);
 
