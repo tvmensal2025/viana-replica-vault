@@ -374,13 +374,19 @@ app.post('/submit-lead', async (req, res) => {
 app.post('/clear-queue', (req, res) => {
   const n = queue.length;
   queue.length = 0;
-  pushActivity('queue_cleared', null, `Fila zerada pelo usuário (${n} lead(s) removido(s))`);
-  console.log(`🧹 FILA: zerada pelo usuário (${n} removidos)`);
+  // Limpar retry tracker e recently processed para permitir reprocessamento
+  const retryCount = retryTracker.size;
+  retryTracker.clear();
+  recentlyProcessed.clear();
+  failedCount = 0;
+  pushActivity('queue_cleared', null, `Fila zerada + ${retryCount} retries limpos`);
+  console.log(`🧹 FILA: zerada (${n} removidos, ${retryCount} retries limpos)`);
   res.json({
     success: true,
-    message: n ? `Fila zerada (${n} lead(s) removido(s))` : 'Fila já estava vazia',
+    message: n ? `Fila zerada (${n} lead(s) removido(s), ${retryCount} retries limpos)` : `Fila já vazia (${retryCount} retries limpos)`,
     queueLength: 0,
     removed: n,
+    retriesCleared: retryCount,
     currentJob: currentJob ? currentJob.customer_id : null,
     timestamp: new Date().toISOString(),
   });
