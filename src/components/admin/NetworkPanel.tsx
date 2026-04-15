@@ -41,6 +41,7 @@ interface NetworkMember {
 interface TreeNode {
   member: NetworkMember;
   children: TreeNode[];
+  isOrphan?: boolean;
 }
 
 interface NetworkPanelProps {
@@ -48,9 +49,10 @@ interface NetworkPanelProps {
 }
 
 /* ── Helpers ── */
+
 function buildTree(members: NetworkMember[]): TreeNode[] {
   const byId = new Map<number, TreeNode>();
-  members.forEach(m => byId.set(m.igreen_id, { member: m, children: [] }));
+  members.forEach(m => byId.set(m.igreen_id, { member: m, children: [], isOrphan: false }));
   const roots: TreeNode[] = [];
   const orphans: TreeNode[] = [];
   members.forEach(m => {
@@ -60,48 +62,56 @@ function buildTree(members: NetworkMember[]): TreeNode[] {
     } else if (m.nivel === 0 || !m.sponsor_id) {
       roots.push(node);
     } else {
+      node.isOrphan = true;
       orphans.push(node);
     }
   });
 
-  // Attach orphans intelligently: find the closest ancestor by nivel
+  // Group orphans by their missing sponsor_id for proper display
   if (orphans.length > 0 && roots.length > 0) {
-    // Sort orphans by nivel so we process shallower ones first
-    orphans.sort((a, b) => a.member.nivel - b.member.nivel);
-
-    // Build a nivel-indexed list of all placed nodes for fast lookup
-    const nodesByNivel = new Map<number, TreeNode[]>();
-    function indexNode(node: TreeNode) {
-      const n = node.member.nivel;
-      if (!nodesByNivel.has(n)) nodesByNivel.set(n, []);
-      nodesByNivel.get(n)!.push(node);
-      node.children.forEach(indexNode);
+    const bySponsor = new Map<number, TreeNode[]>();
+    for (const o of orphans) {
+      const sid = o.member.sponsor_id || 0;
+      if (!bySponsor.has(sid)) bySponsor.set(sid, []);
+      bySponsor.get(sid)!.push(o);
     }
-    roots.forEach(indexNode);
 
-    for (const orphan of orphans) {
-      const targetNivel = orphan.member.nivel - 1;
-      let placed = false;
-
-      // Try to find a node at exactly one nivel above
-      for (let n = targetNivel; n >= 0; n--) {
-        const candidates = nodesByNivel.get(n);
-        if (candidates && candidates.length > 0) {
-          // Attach to the last candidate at that nivel (most recent)
-          candidates[candidates.length - 1].children.push(orphan);
-          placed = true;
-          break;
-        }
-      }
-
-      if (!placed) {
-        roots[0].children.push(orphan);
-      }
-
-      // Index the newly placed orphan so deeper orphans can attach to it
-      const n = orphan.member.nivel;
-      if (!nodesByNivel.has(n)) nodesByNivel.set(n, []);
-      nodesByNivel.get(n)!.push(orphan);
+    // Create virtual group nodes for each external sponsor
+    for (const [sponsorId, children] of Array.from(bySponsor.entries())) {
+      const virtualMember: NetworkMember = {
+        id: `virtual-${sponsorId}`,
+        igreen_id: sponsorId,
+        name: `Patrocinador Externo #${sponsorId}`,
+        phone: null,
+        sponsor_id: null,
+        nivel: (children[0]?.member.nivel ?? 1) - 1,
+        data_ativo: null,
+        cidade: null,
+        uf: null,
+        clientes_ativos: 0,
+        gp: 0,
+        gi: 0,
+        qtde_diretos: children.length,
+        total_pontos: 0,
+        updated_at: "",
+        graduacao: null,
+        graduacao_expansao: null,
+        data_nascimento: null,
+        gp_total: 0,
+        gi_total: 0,
+        bonificavel: 0,
+        green_points: 0,
+        gp_mes: 0,
+        gi_mes: 0,
+        green_points_mes: 0,
+        diretos_ativos: 0,
+        pro: null,
+        inicio_rapido: null,
+        diretos_inicio_rapido: 0,
+        diretos_mes: 0,
+      };
+      const virtualNode: TreeNode = { member: virtualMember, children, isOrphan: true };
+      roots[0].children.push(virtualNode);
     }
   } else if (orphans.length > 0) {
     roots.push(...orphans);
@@ -139,40 +149,53 @@ function getPalette(nivel: number) {
 }
 
 /* ── Node Card ── */
-function NodeCard({ member, hasChildren, childCount, isExpanded, onToggle, onOpenDetails }: {
+function NodeCard({ member, hasChildren, childCount, isExpanded, onToggle, onOpenDetails, isOrphan }: {
   member: NetworkMember;
   hasChildren: boolean;
   childCount: number;
   isExpanded: boolean;
   onToggle: () => void;
   onOpenDetails: () => void;
+  isOrphan?: boolean;
 }) {
-  const p = getPalette(member.nivel);
-  const initials = member.name.split(" ").filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
-  const isRoot = member.nivel === 0;
+  const isVirtual = member.id.startsWith("virtual-");
+  const p = isVirtual
+    ? { bg: "from-gray-500 to-gray-700", glow: "shadow-gray-500/20", ring: "ring-gray-400/30", text: "text-gray-400", bar: "bg-gray-500" }
+    : getPalette(member.nivel);
+  const initials = isVirtual ? "?" : member.name.split(" ").filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
+  const isRoot = member.nivel === 0 && !isVirtual;
 
   return (
     <div className="flex flex-col items-center" data-node-id={member.igreen_id}>
       <div
         className={`relative rounded-2xl border transition-all duration-300 cursor-pointer select-none group
-          ${isRoot
-            ? `w-[120px] border-emerald-500/30 bg-gradient-to-b from-emerald-500/10 to-emerald-900/5 hover:border-emerald-400/60 hover:shadow-lg ${p.glow}`
-            : "w-[100px] border-white/[0.06] bg-white/[0.03] hover:bg-white/[0.07] hover:border-white/[0.15] hover:shadow-lg hover:shadow-black/20"
+          ${isVirtual
+            ? "w-[100px] border-dashed border-gray-500/40 bg-gray-500/5 hover:bg-gray-500/10"
+            : isRoot
+              ? `w-[120px] border-emerald-500/30 bg-gradient-to-b from-emerald-500/10 to-emerald-900/5 hover:border-emerald-400/60 hover:shadow-lg ${p.glow}`
+              : `w-[100px] border-white/[0.06] bg-white/[0.03] hover:bg-white/[0.07] hover:border-white/[0.15] hover:shadow-lg hover:shadow-black/20${isOrphan ? " ring-1 ring-amber-500/20" : ""}`
           }
           backdrop-blur-sm p-2`}
-        onClick={onOpenDetails}
+        onClick={isVirtual ? undefined : onOpenDetails}
       >
+        {/* Orphan badge */}
+        {isVirtual && (
+          <div className="absolute -top-2 left-1/2 -translate-x-1/2 text-[7px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-bold whitespace-nowrap">
+            Externo
+          </div>
+        )}
         {/* Avatar */}
         <div className="flex justify-center mb-1.5">
           <div className={`${isRoot ? "w-11 h-11" : "w-9 h-9"} rounded-full bg-gradient-to-br ${p.bg}
-            ring-2 ${p.ring} flex items-center justify-center shadow-lg ${p.glow} transition-transform duration-300 group-hover:scale-110`}>
+            ring-2 ${p.ring} flex items-center justify-center shadow-lg ${p.glow} transition-transform duration-300 group-hover:scale-110
+            ${isVirtual ? "border-dashed border border-gray-400/40" : ""}`}>
             <span className={`${isRoot ? "text-xs" : "text-[10px]"} font-bold text-white drop-shadow-sm`}>{initials}</span>
           </div>
         </div>
 
         {/* Name */}
-        <p className={`${isRoot ? "text-[11px]" : "text-[10px]"} font-semibold text-foreground text-center leading-tight truncate sensitive-name`}>
-          {member.name.split(" ")[0]}
+        <p className={`${isRoot ? "text-[11px]" : "text-[10px]"} font-semibold ${isVirtual ? "text-gray-400" : "text-foreground"} text-center leading-tight truncate sensitive-name`}>
+          {isVirtual ? `#${member.igreen_id}` : member.name.split(" ")[0]}
         </p>
         
         {/* Stats pills */}
@@ -376,6 +399,7 @@ function OrgChartNode({ node, depth = 0, onSelect }: { node: TreeNode; depth?: n
         isExpanded={expanded}
         onToggle={() => setExpanded(!expanded)}
         onOpenDetails={() => onSelect(node.member)}
+        isOrphan={node.isOrphan}
       />
 
       {hasChildren && expanded && (
