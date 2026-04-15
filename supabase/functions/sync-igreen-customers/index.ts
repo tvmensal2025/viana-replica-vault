@@ -295,8 +295,14 @@ async function syncOneConsultant(
         await new Promise(r => setTimeout(r, 500));
       }
       
-      const netData = allNetData;
-      console.log(`Network map total: ${netData.length} members found`);
+      // Deduplicate by igreen_id (API may return same member across pages)
+      const deduped = new Map<number, Record<string, unknown>>();
+      for (const m of allNetData) {
+        const id = Number(m.idconsultor || m.id);
+        if (id) deduped.set(id, m);
+      }
+      const netData = Array.from(deduped.values());
+      console.log(`Network map total: ${netData.length} unique members (${allNetData.length} raw)`);
 
       const netRecords = netData.map((m: Record<string, unknown>) => ({
         consultant_id: consultantId,
