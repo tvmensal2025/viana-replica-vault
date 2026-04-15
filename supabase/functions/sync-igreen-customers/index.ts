@@ -432,6 +432,40 @@ async function syncOneConsultant(
   let errorCount = 0;
   const BATCH_SIZE = 100;
 
+  // First, fetch existing customers that are mid-conversation (have a conversation_step set)
+  // to avoid overwriting their status/step during sync
+  const allPhones = records.map(r => String(r.phone_whatsapp));
+  const midConvoPhones = new Set<string>();
+  
+  // Batch fetch in chunks of 200
+  for (let i = 0; i < allPhones.length; i += 200) {
+    const chunk = allPhones.slice(i, i + 200);
+    const { data: existing } = await supabase
+      .from("customers")
+      .select("phone_whatsapp, conversation_step")
+      .in("phone_whatsapp", chunk)
+      .not("conversation_step", "is", null);
+    if (existing) {
+      for (const e of existing) {
+        // If a customer has an active conversation_step (not 'complete'), protect them
+        if (e.conversation_step && e.conversation_step !== "complete") {
+          midConvoPhones.add(e.phone_whatsapp);
+        }
+      }
+    }
+  }
+  
+  if (midConvoPhones.size > 0) {
+    console.log(`⚠️ Protecting ${midConvoPhones.size} leads mid-conversation from status overwrite`);
+  }
+
+  // For mid-conversation leads, remove status from the upsert record so it won't overwrite
+  for (const rec of records) {
+    if (midConvoPhones.has(String(rec.phone_whatsapp))) {
+      delete rec.status;
+    }
+  }
+
   for (let i = 0; i < records.length; i += BATCH_SIZE) {
     const batch = records.slice(i, i + BATCH_SIZE);
     const { data, error } = await supabase
