@@ -458,7 +458,7 @@ app.post('/force-submit', async (req, res) => {
   });
 });
 
-
+/**
  * Recebe código OTP do WhatsApp e armazena para o script usar
  */
 app.post('/confirm-otp', async (req, res) => {
