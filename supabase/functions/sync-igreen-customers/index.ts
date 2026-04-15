@@ -304,36 +304,28 @@ async function syncOneConsultant(
       const netData = Array.from(deduped.values());
       console.log(`Network map total: ${netData.length} unique members (${allNetData.length} raw)`);
 
+      // API returns exactly 16 fields — map them correctly
       const netRecords = netData.map((m: Record<string, unknown>) => ({
         consultant_id: consultantId,
-        igreen_id: m.idconsultor || m.id,
-        name: m.nome || "Sem nome",
+        igreen_id: Number(m.idconsultor || m.id),
+        name: String(m.nome || "Sem nome"),
         phone: normalizePhone(String(m.celular || "")),
-        sponsor_id: m.idpatrocinador || null,
-        nivel: m.nivel ?? 0,
+        sponsor_id: m.idpatrocinador ? Number(m.idpatrocinador) : null,
+        nivel: Number(m.nivel ?? 0),
         data_ativo: safeStr(m.data_ativo) || null,
         cidade: safeStr(m.cidade) || null,
         uf: safeStr(m.uf) || null,
-        clientes_ativos: m.cliativo ?? 0,
+        clientes_ativos: Number(m.cliativo ?? 0),
         gp: safeNum(m.gp) ?? 0,
         gi: safeNum(m.gi) ?? 0,
-        qtde_diretos: m.qtde_diretos ?? 0,
+        qtde_diretos: Number(m.qtde_diretos ?? 0),
         inicio_rapido: safeStr(m.inicio_rapido) || null,
-        diretos_inicio_rapido: m.diretos_inicio_rapido ?? 0,
-        diretos_mes: m.diretos_mes ?? 0,
+        diretos_inicio_rapido: Number(m.diretos_inicio_rapido ?? 0),
+        diretos_mes: Number(m.diretos_mes ?? 0),
         total_pontos: safeNum(m.total_pontos) ?? 0,
-        graduacao: safeStr(m.graduacao) || null,
-        graduacao_expansao: safeStr(m.graduacao_expansao) || null,
-        data_nascimento: safeStr(m.data_nascimento) || null,
-        gp_total: safeNum(m.gp_total) ?? 0,
-        gi_total: safeNum(m.gi_total) ?? 0,
-        bonificavel: safeNum(m.bonificavel) ?? 0,
-        green_points: safeNum(m.green_points) ?? safeNum(m.greenpoints) ?? 0,
-        gp_mes: safeNum(m.gp_mes) ?? safeNum(m.gp) ?? 0,
-        gi_mes: safeNum(m.gi_mes) ?? safeNum(m.gi) ?? 0,
-        green_points_mes: safeNum(m.green_points_mes) ?? safeNum(m.greenpoints_mes) ?? 0,
-        diretos_ativos: m.diretos_ativos ?? m.qtde_diretos_ativos ?? 0,
-        pro: safeStr(m.pro) || null,
+        // These fields map to accumulated totals from API
+        gp_total: safeNum(m.gp) ?? 0,
+        gi_total: safeNum(m.gi) ?? 0,
         updated_at: new Date().toISOString(),
       }));
 
