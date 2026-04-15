@@ -33,6 +33,9 @@ interface NetworkMember {
   green_points_mes: number;
   diretos_ativos: number;
   pro: string | null;
+  inicio_rapido: string | null;
+  diretos_inicio_rapido: number;
+  diretos_mes: number;
 }
 
 interface TreeNode {
