@@ -1190,25 +1190,91 @@ export async function executarAutomacao(customerId, options = {}) {
         }
       }
       
-      // Verificar link de assinatura
+      // ─── Capturar link de reconhecimento facial / assinatura ─────────
+      await delay(3000);
       const finalPageText = await page.textContent('body').catch(() => '');
-      if (/assinatura|contrato|sucesso|cadastro realizado/i.test(finalPageText)) {
-        console.log('   🎉 Cadastro finalizado com sucesso!');
-        
-        // Capturar link de assinatura se existir
-        const links = await page.locator('a[href*="certisign"], a[href*="assinatura"], a[href*="sign"]').all();
-        if (links.length > 0) {
-          const signLink = await links[0].getAttribute('href');
-          if (signLink) {
-            console.log(`   🔗 Link de assinatura: ${signLink}`);
-            await getSupabase().from('customers').update({ link_assinatura: signLink }).eq('id', customerId);
+      const currentUrl = page.url();
+      let facialLink = null;
+
+      // Estratégia 1: Buscar links na página (certisign, assinatura, sign, facial, biometria)
+      const linkSelectors = [
+        'a[href*="certisign"]', 'a[href*="assinatura"]', 'a[href*="sign"]',
+        'a[href*="facial"]', 'a[href*="biometria"]', 'a[href*="validacao"]',
+        'a[href*="reconhecimento"]', 'a[href*="selfie"]',
+      ];
+      for (const sel of linkSelectors) {
+        const links = await page.locator(sel).all();
+        for (const link of links) {
+          const href = await link.getAttribute('href').catch(() => null);
+          if (href && href.startsWith('http')) {
+            facialLink = href;
+            console.log(`   🔗 Link facial encontrado (seletor ${sel}): ${facialLink}`);
+            break;
+          }
+        }
+        if (facialLink) break;
+      }
+
+      // Estratégia 2: Buscar qualquer link externo visível na página pós-OTP
+      if (!facialLink) {
+        const allLinks = await page.locator('a[href^="http"]').all();
+        for (const link of allLinks) {
+          const href = await link.getAttribute('href').catch(() => null);
+          const text = await link.textContent().catch(() => '');
+          if (href && /facial|assinatura|sign|biometria|validar|reconhecimento|selfie|contrato/i.test(text + ' ' + href)) {
+            facialLink = href;
+            console.log(`   🔗 Link facial encontrado (texto): ${facialLink}`);
+            break;
           }
         }
       }
+
+      // Estratégia 3: Se a URL atual mudou para uma página de assinatura/facial
+      if (!facialLink && currentUrl && /facial|assinatura|sign|biometria|certisign/i.test(currentUrl)) {
+        facialLink = currentUrl;
+        console.log(`   🔗 URL atual é o link facial: ${facialLink}`);
+      }
+
+      // Estratégia 4: Buscar em iframes
+      if (!facialLink) {
+        const iframes = await page.locator('iframe[src*="certisign"], iframe[src*="sign"], iframe[src*="facial"]').all();
+        for (const iframe of iframes) {
+          const src = await iframe.getAttribute('src').catch(() => null);
+          if (src && src.startsWith('http')) {
+            facialLink = src;
+            console.log(`   🔗 Link facial encontrado (iframe): ${facialLink}`);
+            break;
+          }
+        }
+      }
+
+      await screenshot(page, customerId, '12-pos-otp-facial');
+
+      // Salvar link e enviar ao cliente via WhatsApp
+      if (facialLink) {
+        console.log(`   📲 Enviando link de reconhecimento facial ao cliente...`);
+        const supabase = getSupabase();
+        if (supabase) {
+          await supabase.from('customers').update({
+            link_assinatura: facialLink,
+            conversation_step: 'aguardando_assinatura',
+            status: 'awaiting_signature',
+            updated_at: new Date().toISOString(),
+          }).eq('id', customerId);
+        }
+        // Enviar link via WhatsApp
+        await sendFacialLinkToCustomer(customerId, facialLink);
+        await atualizarStatus(customerId, 'awaiting_signature');
+      } else if (/assinatura|contrato|sucesso|cadastro realizado/i.test(finalPageText)) {
+        console.log('   🎉 Cadastro finalizado com sucesso (sem link facial detectado)');
+        await atualizarStatus(customerId, 'portal_submitted');
+      } else {
+        console.log('   ⚠️  Nenhum link facial encontrado - marcando como enviado');
+        await atualizarStatus(customerId, 'portal_submitted');
+      }
       
       const pageUrl = page.url();
-      await atualizarStatus(customerId, 'portal_submitted');
-      console.log('   ✅ Formulário enviado com sucesso');
+      console.log('   ✅ Formulário processado com sucesso');
       if (pageUrl) console.log(`   📎 URL: ${pageUrl}`);
       activeBrowser = null;
       
