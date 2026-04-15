@@ -378,6 +378,40 @@ export async function sendDocument(instanceName: string, phone: string, docUrl: 
   }, { gracefulTimeout });
 }
 
+// ─── Groups ───
+
+export interface EvolutionGroup {
+  id: string;
+  subject: string;
+  subjectOwner?: string;
+  subjectTime?: number;
+  size?: number;
+  creation?: number;
+  owner?: string;
+  desc?: string;
+  participants?: EvolutionGroupParticipant[];
+}
+
+export interface EvolutionGroupParticipant {
+  id: string;
+  admin?: string | null;
+}
+
+export async function fetchAllGroups(instanceName: string): Promise<EvolutionGroup[]> {
+  try {
+    return await request<EvolutionGroup[]>(`group/fetchAllGroups/${instanceName}`, "GET");
+  } catch { return []; }
+}
+
+export async function getGroupParticipants(instanceName: string, groupJid: string): Promise<EvolutionGroupParticipant[]> {
+  try {
+    const result = await request<{ participants?: EvolutionGroupParticipant[] }>(
+      `group/participants/${instanceName}?groupJid=${encodeURIComponent(groupJid)}`, "GET"
+    );
+    return result?.participants || [];
+  } catch { return []; }
+}
+
 // ─── Presence / Read ───
 
 export async function markAsRead(instanceName: string, remoteJid: string, messageId: string, fromMe: boolean) {
