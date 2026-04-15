@@ -145,7 +145,7 @@ const AdminContent = () => {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur-xl">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img src="/images/logo-colorida-igreen.png" alt="iGreen" className="w-20 sm:w-24" />
             <div className="hidden sm:block">
@@ -153,18 +153,19 @@ const AdminContent = () => {
               <p className="text-xs text-muted-foreground sensitive-name">{form.name || "Bem-vindo"}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <button
               onClick={togglePrivacy}
-              className={`relative p-2 rounded-lg transition-colors ${privacyMode ? 'text-primary bg-primary/20' : 'text-muted-foreground hover:text-primary hover:bg-primary/10'}`}
+              className={`relative p-2 rounded-xl transition-all duration-200 ${privacyMode ? 'text-primary bg-primary/15' : 'text-muted-foreground hover:text-foreground hover:bg-secondary'}`}
               aria-label={privacyMode ? "Mostrar dados sensíveis" : "Ocultar dados sensíveis"}
               title={privacyMode ? "Modo privacidade ATIVO — clique para desativar" : "Ocultar dados sensíveis para gravação"}
             >
               {privacyMode ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
             </button>
+            <ThemeToggle />
             <button
               onClick={() => setAiChatOpen(true)}
-              className="relative p-2 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+              className="relative p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-secondary transition-all duration-200"
               aria-label="Assistente iGreen IA"
               title="Assistente iGreen IA"
             >
@@ -181,7 +182,7 @@ const AdminContent = () => {
                 else if (n.type === "devolutiva" || n.type === "status_change" || n.type === "new_customer") setActiveTab("clientes");
               }}
             />
-            <Button variant="ghost" size="sm" onClick={handleLogout} className="text-muted-foreground hover:text-foreground gap-2">
+            <Button variant="ghost" size="sm" onClick={handleLogout} className="text-muted-foreground hover:text-foreground gap-2 rounded-xl">
               <LogOut className="w-4 h-4" />
               <span className="hidden sm:inline">Sair</span>
             </Button>
@@ -190,8 +191,8 @@ const AdminContent = () => {
       </header>
 
       {/* Tab Navigation */}
-      <nav className="border-b border-border bg-card/50">
-        <div className="max-w-6xl mx-auto px-2 sm:px-6">
+      <nav className="border-b border-border bg-card/50 backdrop-blur-sm">
+        <div className="max-w-7xl mx-auto px-2 sm:px-6">
           <div className="flex overflow-x-auto no-scrollbar -mx-2 sm:mx-0" style={{ WebkitOverflowScrolling: 'touch' }}>
             {tabs.map((tab) => {
               const Icon = tab.icon;
@@ -204,10 +205,12 @@ const AdminContent = () => {
                   }
                   setActiveTab(tab.id);
                 }}
-                  className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-3 text-xs sm:text-sm font-medium whitespace-nowrap border-b-2 transition-all shrink-0 ${
-                    isActive ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
+                  className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-3 text-xs sm:text-sm font-medium whitespace-nowrap border-b-2 transition-all duration-200 shrink-0 ${
+                    isActive 
+                      ? "border-primary text-primary" 
+                      : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
                   }`}>
-                  <Icon className="w-4 h-4" />
+                  <Icon className={`w-4 h-4 ${isActive ? "text-primary" : ""}`} />
                   <span className="hidden sm:inline">{tab.label}</span>
                   <span className="sm:hidden">{tab.label.length > 8 ? tab.label.slice(0, 6) + '…' : tab.label}</span>
                 </button>
