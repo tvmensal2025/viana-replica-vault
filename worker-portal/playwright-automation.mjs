@@ -612,752 +612,624 @@ export async function executarAutomacao(customerId, options = {}) {
     await screenshot(page, customerId, '01-portal-carregado');
     console.log('✅ Portal carregado');
     
+    // ═══════════════════════════════════════════════════════════════════
+    // HELPER: buscar input por placeholder (portal não usa name attrs)
+    // ═══════════════════════════════════════════════════════════════════
+    const byPH = (ph) => page.locator(`input[placeholder="${ph}"]`).first();
+    const byPHPartial = (ph) => page.locator(`input[placeholder*="${ph}" i]`).first();
+    const clickText = async (text, tag = 'button') => {
+      const el = page.locator(`${tag}:has-text("${text}")`).first();
+      if (await el.count() > 0 && await el.isVisible().catch(() => false)) {
+        await el.click({ timeout: 10000 });
+        return true;
+      }
+      return false;
+    };
+
     // ─── 4. FASE 1: CEP + Valor ──────────────────────────────────────────
     currentPhase = 'fase1-cep';
     console.log('\n📋 [1/16] FASE 1: CEP e valor da conta...');
     
-    const cepInput = page.locator('input[name="cep"]');
+    // Portal usa placeholder="CEP" e placeholder="Valor da conta"
+    const cepInput = byPH('CEP');
     if (await cepInput.count() > 0) {
-      await reactFill(page, 'input[name="cep"]', data.cepFormatted);
+      await cepInput.click();
+      await cepInput.fill('');
+      await cepInput.type(data.cepFormatted, { delay: 80 });
       console.log(`   ✅ CEP: ${data.cepFormatted}`);
+    } else {
+      // Fallback: tentar name-based (versão antiga do portal)
+      const cepFallback = page.locator('input[name="cep"], input[name="CEP"]').first();
+      if (await cepFallback.count() > 0) {
+        await reactFill(page, cepFallback, data.cepFormatted);
+        console.log(`   ✅ CEP (fallback): ${data.cepFormatted}`);
+      }
     }
     
-    const consumptionInput = page.locator('input[name="consumption"]');
-    if (await consumptionInput.count() > 0) {
-      await reactFill(page, 'input[name="consumption"]', String(data.electricity_bill_value));
+    const valorInput = byPH('Valor da conta');
+    if (await valorInput.count() > 0) {
+      await valorInput.click();
+      await valorInput.fill('');
+      await valorInput.type(String(data.electricity_bill_value), { delay: 80 });
       console.log(`   ✅ Valor: ${data.electricity_bill_value}`);
+    } else {
+      const valorFallback = page.locator('input[name="consumption"]').first();
+      if (await valorFallback.count() > 0) {
+        await reactFill(page, valorFallback, String(data.electricity_bill_value));
+        console.log(`   ✅ Valor (fallback): ${data.electricity_bill_value}`);
+      }
     }
     
     await delay(500);
-    const calcBtn = page.locator('button[type="submit"]').first();
-    if (await calcBtn.count() > 0) {
-      await calcBtn.click();
+    // Botão Calcular (type="button" no portal atual)
+    const calcClicked = await clickText('Calcular');
+    if (calcClicked) {
       console.log('   ✅ Calcular clicado');
-      await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
-      await delay(2500);
+    } else {
+      // Fallback
+      const calcBtn = page.locator('button[type="submit"]').first();
+      if (await calcBtn.count() > 0) { await calcBtn.click(); console.log('   ✅ Calcular clicado (fallback)'); }
     }
+    await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+    await delay(2500);
     await screenshot(page, customerId, '02-apos-calcular');
 
     // ─── 5. FASE 2: Garantir Desconto ─────────────────────────────────────
     currentPhase = 'fase2-garantir';
     console.log('\n📋 [2/16] FASE 2: Garantir desconto...');
     
-    const garantirBtn = page.locator('button:has-text("Garantir meu desconto"), button:has-text("Garantir desconto")');
-    if (await garantirBtn.count() > 0) {
-      await garantirBtn.first().click({ timeout: 15000 });
+    const garantirClicked = await clickText('Garantir meu desconto') || await clickText('Garantir desconto');
+    if (garantirClicked) {
       console.log('   ✅ Garantir clicado');
       await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
-      await delay(1500);
+      await delay(3000);
     }
     await screenshot(page, customerId, '03-apos-garantir');
     
-    // ─── 6. FASE 3: CPF (com .type() para validação automática) ──────────
+    // ─── 6. FASE 3: CPF ──────────────────────────────────────────────────
     currentPhase = 'fase3-cpf';
-    console.log('\n📋 [3/16] CPF (digitação simulada para validação)...');
+    console.log('\n📋 [3/16] CPF...');
     
-    const cpfInput = page.locator('input[name="documentNumber"]');
+    // Portal usa placeholder="CPF ou CNPJ"
+    const cpfInput = byPH('CPF ou CNPJ');
     if (await cpfInput.count() > 0) {
+      await cpfInput.click();
       await cpfInput.type(data.cpfDigits, { delay: 100 });
       console.log(`   ✅ CPF digitado: ${data.cpfFormatted}`);
-      await delay(2500); // Aguardar validação automática do portal
     } else {
-      // Fallback: tentar outros seletores
-      const cpfAlt = page.locator('input[name="cpf"], input[placeholder*="CPF"]').first();
+      const cpfAlt = page.locator('input[name="documentNumber"], input[placeholder*="CPF"]').first();
       if (await cpfAlt.count() > 0) {
         await cpfAlt.type(data.cpfDigits, { delay: 100 });
-        console.log(`   ✅ CPF digitado (alt): ${data.cpfFormatted}`);
-        await delay(2500);
+        console.log(`   ✅ CPF digitado (fallback): ${data.cpfFormatted}`);
       }
     }
+    // Aguardar auto-preenchimento do portal (Nome + Data de Nascimento vêm da Receita)
+    await delay(5000);
     await screenshot(page, customerId, '04-apos-cpf');
     
     // ─── 6b. TRATAR CADASTRO EXISTENTE ────────────────────────────────────
-    // Se o CPF já tem cadastro no portal, aparece:
-    // "Continuar com um novo cadastro" / "Assinar contrato em aberto"
-    // Precisamos clicar em "Continuar com um novo cadastro"
     currentPhase = 'cadastro-existente';
-    const novoCadastroBtn = page.locator('button:has-text("Continuar com um novo cadastro")');
+    const novoCadastroBtn = page.locator('button:has-text("Continuar com um novo cadastro"), button:has-text("novo cadastro")');
     if (await novoCadastroBtn.count() > 0) {
-      console.log('   ⚠️  CPF já cadastrado no portal - clicando "Continuar com um novo cadastro"');
+      console.log('   ⚠️  CPF já cadastrado - clicando "novo cadastro"');
       await novoCadastroBtn.first().click({ timeout: 10000 });
       await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
-      await delay(2500);
+      await delay(3000);
       await screenshot(page, customerId, '04b-apos-novo-cadastro');
-      console.log('   ✅ Novo cadastro iniciado');
     }
     
     // ─── 7. WhatsApp ─────────────────────────────────────────────────────
-    currentPhase = 'fase4-formulario';
+    currentPhase = 'fase4-whatsapp';
     console.log('\n📋 [4/16] WhatsApp...');
     
-    // Aguardar campo phone aparecer (pode demorar após CPF/novo cadastro)
-    const phoneInput = page.locator('input[name="phone"]');
+    // Portal usa placeholder="Número do seu WhatsApp"
+    let phoneField = byPHPartial('WhatsApp');
     try {
-      await phoneInput.waitFor({ state: 'visible', timeout: 15000 });
+      await phoneField.waitFor({ state: 'visible', timeout: 15000 });
     } catch (_) {
-      console.log('   ⏳ Campo phone não visível, fazendo scroll...');
       await page.evaluate(() => window.scrollBy(0, 300));
       await delay(1500);
     }
     
-    if (await phoneInput.count() > 0 && await phoneInput.isVisible().catch(() => false)) {
-      await phoneInput.type(data.whatsapp, { delay: 100 });
+    if (await phoneField.count() > 0 && await phoneField.isVisible().catch(() => false)) {
+      await phoneField.click();
+      await phoneField.type(data.whatsapp, { delay: 100 });
       console.log(`   ✅ WhatsApp: ${data.whatsapp}`);
     } else {
-      console.warn('   ⚠️  Campo WhatsApp não encontrado/visível');
+      // Fallback name-based
+      const phoneFallback = page.locator('input[name="phone"]').first();
+      if (await phoneFallback.count() > 0) {
+        await phoneFallback.type(data.whatsapp, { delay: 100 });
+        console.log(`   ✅ WhatsApp (fallback): ${data.whatsapp}`);
+      } else {
+        console.warn('   ⚠️  Campo WhatsApp não encontrado');
+      }
     }
     await delay(500);
     
-    const phoneConfirm = page.locator('input[name="phoneConfirm"]');
-    if (await phoneConfirm.count() > 0 && await phoneConfirm.isVisible().catch(() => false)) {
-      await phoneConfirm.type(data.whatsapp, { delay: 100 });
+    // Confirmar celular
+    let confirmPhone = byPHPartial('Confirme seu celular');
+    if (await confirmPhone.count() === 0) confirmPhone = byPHPartial('phoneConfirm');
+    if (await confirmPhone.count() > 0 && await confirmPhone.isVisible().catch(() => false)) {
+      await confirmPhone.click();
+      await confirmPhone.type(data.whatsapp, { delay: 100 });
       console.log('   ✅ Confirmar WhatsApp');
     }
     await delay(2500);
     
     // ─── 8. Email ────────────────────────────────────────────────────────
+    currentPhase = 'fase5-email';
     console.log('\n📋 [5/16] Email...');
     
-    const emailInput = page.locator('input[name="email"]');
-    if (await emailInput.count() > 0) {
-      await reactFill(page, 'input[name="email"]', data.email);
+    // Portal usa placeholder="E-mail"
+    const emailField = byPH('E-mail');
+    if (await emailField.count() > 0) {
+      await emailField.click();
+      await emailField.type(data.email, { delay: 50 });
       console.log(`   ✅ Email: ${data.email}`);
+    } else {
+      const emailFallback = page.locator('input[name="email"], input[placeholder*="email" i]').first();
+      if (await emailFallback.count() > 0) {
+        await reactFill(page, emailFallback, data.email);
+        console.log(`   ✅ Email (fallback): ${data.email}`);
+      }
     }
     await delay(500);
     
-    const emailConfirm = page.locator('input[name="emailConfirm"]');
-    if (await emailConfirm.count() > 0) {
-      await reactFill(page, 'input[name="emailConfirm"]', data.email);
+    // Confirmar email
+    let confirmEmail = byPH('Confirme seu E-mail');
+    if (await confirmEmail.count() === 0) confirmEmail = byPHPartial('Confirme seu E-mail');
+    if (await confirmEmail.count() > 0) {
+      await confirmEmail.click();
+      await confirmEmail.type(data.email, { delay: 50 });
       console.log('   ✅ Confirmar email');
     }
     await delay(2500);
     
+    // Scroll para ver campos seguintes
+    await page.evaluate(() => window.scrollBy(0, 400));
+    await delay(2000);
+    
     // ─── 9. Endereço ─────────────────────────────────────────────────────
+    currentPhase = 'fase6-endereco';
     console.log('\n📋 [6/16] Endereço...');
     
-    const numberInput = page.locator('input[name="number"]');
-    if (await numberInput.count() > 0) {
-      await reactFill(page, 'input[name="number"]', data.numeroEndereco);
+    // Número (pode ser placeholder="Número" ou name="number")
+    let numField = byPHPartial('Número');
+    if (await numField.count() === 0) numField = page.locator('input[name="number"]').first();
+    if (await numField.count() > 0 && await numField.isVisible().catch(() => false)) {
+      await numField.click();
+      await numField.fill('');
+      await numField.type(data.numeroEndereco, { delay: 80 });
       console.log(`   ✅ Número: ${data.numeroEndereco}`);
     }
     
+    // Complemento
     if (data.complemento) {
-      const complementInput = page.locator('input[name="complement"]');
-      if (await complementInput.count() > 0) {
-        await complementInput.fill(data.complemento);
+      let compField = byPHPartial('Complemento');
+      if (await compField.count() === 0) compField = page.locator('input[name="complement"]').first();
+      if (await compField.count() > 0 && await compField.isVisible().catch(() => false)) {
+        await compField.fill(data.complemento);
         console.log(`   ✅ Complemento: ${data.complemento}`);
       }
     }
     await delay(1500);
     
-    // Scroll para campos de conta
     await page.evaluate(() => window.scrollBy(0, 400));
     await delay(2500);
     
     // ─── 10. Número da Instalação ────────────────────────────────────────
+    currentPhase = 'fase7-instalacao';
     console.log('\n📋 [7/16] Número da instalação...');
     
     if (data.numeroInstalacao) {
-      console.log(`   📊 Número original: ${cliente.numero_instalacao || 'N/A'}`);
-      console.log(`   📊 Número formatado: ${data.numeroInstalacao}`);
+      console.log(`   📊 Número: ${data.numeroInstalacao}`);
       
-      // Seletor exato do mapeamento: input[name="installationNumber"]
-      const instalacaoInput = page.locator('input[name="installationNumber"]').first();
-      if (await instalacaoInput.count() > 0) {
-        await instalacaoInput.waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
-        await instalacaoInput.fill(data.numeroInstalacao);
+      // Tentar vários seletores
+      let instField = byPHPartial('instalação');
+      if (await instField.count() === 0) instField = byPHPartial('Código');
+      if (await instField.count() === 0) instField = page.locator('input[name="installationNumber"]').first();
+      
+      if (await instField.count() > 0 && await instField.isVisible().catch(() => false)) {
+        await instField.click();
+        await instField.fill(data.numeroInstalacao);
         console.log(`   ✅ Instalação: ${data.numeroInstalacao}`);
-        
-        // Aguardar validação e verificar se deu erro
-        await delay(1500);
-        
-        // Se o portal mostrar erro, tentar variações do número
-        const pageText = await page.textContent('body').catch(() => '');
-        const erroInstalacao = /instalação.*inválid|número.*instalação.*não|not found|não encontrad/i.test(pageText);
-        
-        if (erroInstalacao) {
-          console.log('   ⚠️  Portal rejeitou o número, tentando variações...');
-          const rawDigits = (cliente.numero_instalacao || '').replace(/\D/g, '');
-          
-          // Variações a tentar: últimos 7, 8, 10, 12 dígitos, sem zeros
-          const variacoes = [
-            rawDigits.replace(/^0+/, ''),           // sem zeros à esquerda
-            rawDigits.slice(-7),                      // últimos 7
-            rawDigits.slice(-8),                      // últimos 8
-            rawDigits.slice(-12),                     // últimos 12
-            rawDigits,                                // número completo
-          ].filter((v, i, arr) => v.length >= 4 && arr.indexOf(v) === i && v !== data.numeroInstalacao);
-          
-          for (const variacao of variacoes) {
-            await instalacaoInput.fill('');
-            await instalacaoInput.fill(variacao);
-            console.log(`   🔄 Tentando: ${variacao}`);
-            await delay(500);
-            
-            const textoAtual = await page.textContent('body').catch(() => '');
-            const aindaErro = /instalação.*inválid|número.*instalação.*não|not found|não encontrad/i.test(textoAtual);
-            if (!aindaErro) {
-              console.log(`   ✅ Instalação aceita: ${variacao}`);
-              break;
-            }
-          }
-        }
       } else {
-        // Fallback
-        const fallback = page.locator('input[placeholder*="instalação" i], input[name*="instalacao" i]').first();
-        if (await fallback.count() > 0) {
-          await fallback.fill(data.numeroInstalacao);
-          console.log(`   ✅ Instalação (fallback): ${data.numeroInstalacao}`);
-        } else {
-          console.warn('   ⚠️  Campo instalação não encontrado');
-        }
+        console.warn('   ⚠️  Campo instalação não encontrado (pode ser preenchido pelo CEP)');
       }
       await delay(1500);
     }
     
-    // Scroll para distribuidora
     await page.evaluate(() => window.scrollBy(0, 200));
     await delay(1500);
 
-    // ─── 11. Distribuidora (dropdown - NEM SEMPRE APARECE) ──────────────
+    // ─── 11. Distribuidora ──────────────────────────────────────────────
+    currentPhase = 'fase8-distribuidora';
     console.log('\n📋 [8/16] Distribuidora...');
     
     if (data.distribuidora) {
-      let distribuidoraSelecionada = false;
-      
-      // Verificar se o campo existe (nem sempre aparece - depende do CEP)
-      const powerCompany = page.locator('select[name="powerCompany"]');
-      if (await powerCompany.count() > 0) {
+      // Tentar select nativo e dropdown customizado
+      const selectField = page.locator('select:visible').first();
+      let distribOk = false;
+      if (await selectField.count() > 0) {
         try {
-          await powerCompany.selectOption({ label: new RegExp(data.distribuidora, 'i') });
+          await selectField.selectOption({ label: new RegExp(data.distribuidora.split(' ')[0], 'i') });
           console.log(`   ✅ Distribuidora: ${data.distribuidora}`);
-          distribuidoraSelecionada = true;
-        } catch (_) {
-          const primeiraPalavra = data.distribuidora.split(' ')[0];
+          distribOk = true;
+        } catch (_) {}
+      }
+      
+      // Dropdown customizado: procurar por texto "Distribuidora" e clicar
+      if (!distribOk) {
+        const distDropdown = page.locator('div:has-text("Distribuidora")').first();
+        if (await distDropdown.count() > 0) {
           try {
-            await powerCompany.selectOption({ label: new RegExp(primeiraPalavra, 'i') });
-            console.log(`   ✅ Distribuidora (parcial): ${primeiraPalavra}`);
-            distribuidoraSelecionada = true;
+            await distDropdown.click();
+            await delay(500);
+            const opt = page.getByText(data.distribuidora.split(' ')[0], { exact: false }).first();
+            if (await opt.count() > 0) { await opt.click(); distribOk = true; }
+            else await page.keyboard.press('Escape');
           } catch (_) {}
         }
       }
       
-      if (!distribuidoraSelecionada) {
-        console.log('   ℹ️  Campo distribuidora não apareceu (normal - CEP pode determinar automaticamente)');
-      }
-      await delay(500);
+      if (!distribOk) console.log('   ℹ️  Distribuidora: preenchida automaticamente pelo CEP');
     }
     
-    // Scroll para uploads
     await page.evaluate(() => window.scrollBy(0, 400));
     await delay(2500);
     await screenshot(page, customerId, '05-formulario-preenchido');
     
-    // ─── 12. Tipo de Documento (dropdown customizado - precisa CLICAR para abrir) ─
+    // ─── 12. Tipo de Documento ──────────────────────────────────────────
     currentPhase = 'tipo-documento';
     console.log('\n📋 [9/16] Tipo de documento...');
-    console.log(`   📋 Tipo desejado: ${data.documentType}`);
     
-    let tipoDocSelecionado = false;
-    const tipoDoc = (data.documentType || 'RG (Antigo)').toUpperCase();
-    let opcaoTexto = 'RG (Antigo)';
-    if (tipoDoc.includes('CNH')) opcaoTexto = 'CNH';
-    else if (tipoDoc.includes('NOVO')) opcaoTexto = 'RG (Novo)';
+    const tipoDoc = (data.documentType || 'RG').toUpperCase();
+    let opcaoTexto = tipoDoc.includes('CNH') ? 'CNH' : tipoDoc.includes('NOVO') ? 'RG (Novo)' : 'RG';
+    console.log(`   📋 Tipo desejado: ${opcaoTexto}`);
     
-    // O portal usa um dropdown customizado (div com seta ▼), NÃO um <select> nativo
-    // Precisa: 1) clicar no campo para abrir  2) clicar na opção na lista
+    let tipoDocOk = false;
     
-    // Estratégia 1: Encontrar o dropdown "Tipo documento" e clicar para abrir
-    const dropdownSelectors = [
-      // Div/container com texto "Tipo documento" que é clicável
-      'div:has-text("Tipo documento")',
-      // MUI/Material-like selects
-      '[aria-label*="Tipo documento" i]',
-      '[aria-haspopup="listbox"]',
-      // Role combobox
-      '[role="combobox"]',
-      '[role="button"]:has-text("Tipo documento")',
-      // Qualquer elemento clicável com "Tipo documento"
-      'label:has-text("Tipo documento")',
-    ];
-    
-    for (const sel of dropdownSelectors) {
-      if (tipoDocSelecionado) break;
+    // Estratégia 1: select nativo
+    const allSelects = await page.locator('select:visible').all();
+    for (const sel of allSelects) {
       try {
-        const elementos = await page.locator(sel).all();
-        for (const el of elementos) {
-          if (tipoDocSelecionado) break;
-          try {
-            const visible = await el.isVisible().catch(() => false);
-            if (!visible) continue;
-            
-            // Clicar para abrir o dropdown
-            await el.click({ timeout: 5000 });
-            console.log(`   📂 Dropdown aberto via: ${sel}`);
-            await delay(500);
-            
-            // Agora procurar a opção na lista que apareceu
-            const optionSelectors = [
-              `li:has-text("${opcaoTexto}")`,
-              `[role="option"]:has-text("${opcaoTexto}")`,
-              `[role="menuitem"]:has-text("${opcaoTexto}")`,
-              `div[role="listbox"] >> text="${opcaoTexto}"`,
-              `ul >> li:has-text("${opcaoTexto}")`,
-              `.MuiMenuItem-root:has-text("${opcaoTexto}")`,
-              `.MuiListItem-root:has-text("${opcaoTexto}")`,
-            ];
-            
-            for (const optSel of optionSelectors) {
-              try {
-                const opt = page.locator(optSel).first();
-                if (await opt.count() > 0 && await opt.isVisible().catch(() => false)) {
-                  await opt.click({ timeout: 5000 });
-                  console.log(`   ✅ Tipo documento: ${opcaoTexto}`);
-                  tipoDocSelecionado = true;
-                  break;
-                }
-              } catch (_) {}
-            }
-            
-            // Fallback: procurar qualquer texto visível que bata
-            if (!tipoDocSelecionado) {
-              try {
-                const opt = page.getByText(opcaoTexto, { exact: false }).first();
-                if (await opt.count() > 0 && await opt.isVisible().catch(() => false)) {
-                  await opt.click({ timeout: 5000 });
-                  console.log(`   ✅ Tipo documento (getByText): ${opcaoTexto}`);
-                  tipoDocSelecionado = true;
-                }
-              } catch (_) {}
-            }
-            
-            // Se não achou a opção, fechar o dropdown (clicar fora) e tentar próximo seletor
-            if (!tipoDocSelecionado) {
-              await page.keyboard.press('Escape').catch(() => {});
-              await delay(500);
-            }
-          } catch (_) {}
+        const html = await sel.innerHTML();
+        if (html.includes('RG') || html.includes('CNH')) {
+          await sel.selectOption({ label: new RegExp(opcaoTexto, 'i') });
+          console.log(`   ✅ Tipo documento: ${opcaoTexto}`);
+          tipoDocOk = true;
+          break;
         }
       } catch (_) {}
     }
     
-    // Estratégia 2: select nativo (fallback caso seja <select> em vez de dropdown customizado)
-    if (!tipoDocSelecionado) {
-      const allSelects = await page.locator('select:visible').all();
-      for (const select of allSelects) {
-        const options = await select.locator('option').all();
-        for (const opt of options) {
-          const text = await opt.textContent();
-          if (text && (text.includes('RG') || text.includes('CNH'))) {
-            try {
-              if (tipoDoc.includes('CNH')) await select.selectOption({ label: /CNH/i });
-              else if (tipoDoc.includes('NOVO')) await select.selectOption({ label: /RG.*Novo/i });
-              else await select.selectOption({ label: /RG.*Antigo/i });
-              console.log(`   ✅ Tipo documento (select nativo): ${opcaoTexto}`);
-              tipoDocSelecionado = true;
-            } catch (_) {}
-            break;
+    // Estratégia 2: dropdown customizado (clicável)
+    if (!tipoDocOk) {
+      const dropdownTriggers = [
+        'div:has-text("Tipo"):has-text("documento")',
+        'div:has-text("Tipo de documento")',
+        '[aria-haspopup="listbox"]',
+        '[role="combobox"]',
+      ];
+      for (const sel of dropdownTriggers) {
+        if (tipoDocOk) break;
+        try {
+          const el = page.locator(sel).first();
+          if (await el.count() > 0 && await el.isVisible().catch(() => false)) {
+            await el.click({ timeout: 5000 });
+            await delay(500);
+            const opt = page.getByText(opcaoTexto, { exact: false }).first();
+            if (await opt.count() > 0 && await opt.isVisible().catch(() => false)) {
+              await opt.click({ timeout: 5000 });
+              console.log(`   ✅ Tipo documento: ${opcaoTexto}`);
+              tipoDocOk = true;
+            } else {
+              await page.keyboard.press('Escape').catch(() => {});
+            }
           }
-        }
-        if (tipoDocSelecionado) break;
+        } catch (_) {}
       }
     }
     
-    // Estratégia 3: screenshot para debug se falhou
-    if (!tipoDocSelecionado) {
-      console.warn('   ⚠️  Tipo documento não selecionado - tirando screenshot para debug');
+    if (!tipoDocOk) {
+      console.warn('   ⚠️  Tipo documento não selecionado (pode não existir nesta versão do portal)');
       await screenshot(page, customerId, '05b-tipo-doc-FALHOU');
     }
     await delay(1500);
 
-    // ─── 13. UPLOAD: Documentos pessoais (RG/CNH frente + verso) ─────────
+    // ─── 13. UPLOAD: Documentos pessoais (frente + verso) ────────────────
     currentPhase = 'upload-documentos';
-    console.log('\n📋 [10/16] Upload documentos pessoais (RG/CNH)...');
-    await delay(2500);
+    console.log('\n📋 [10/16] Upload documentos pessoais...');
+    await delay(2000);
     
-    // Aguardar inputs file
-    try {
-      await page.locator('input[type="file"]').first().waitFor({ state: 'attached', timeout: 20000 });
-      console.log('   ✅ Campos de upload encontrados');
-    } catch (_) {
-      console.warn('   ⚠️  Campos de upload não encontrados, tentando scroll...');
+    // O portal pode usar input[type="file"] hidden/visible ou drag-drop zones
+    // Aguardar até inputs file aparecerem
+    let fileInputs = [];
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      fileInputs = await page.locator('input[type="file"]').all();
+      console.log(`   📊 Tentativa ${attempt}: ${fileInputs.length} input(s) file encontrado(s)`);
+      if (fileInputs.length >= 2) break;
       await page.evaluate(() => window.scrollBy(0, 300));
-      await delay(1500);
+      await delay(2000);
     }
     
-    // Documento Frente - seletor exato: input[name="documentFront"]
-    try {
-      let docFrente = page.locator('input[type="file"][name="documentFront"]');
-      if (await docFrente.count() === 0) docFrente = page.locator('input[type="file"]').first();
-      await docFrente.setInputFiles(docFrentePath);
-      console.log('   ✅ Documento FRENTE enviado');
-      await delay(500);
-    } catch (e) {
-      console.warn(`   ⚠️  Documento frente: ${e.message}`);
+    // Upload frente
+    if (fileInputs.length >= 1) {
+      try {
+        await fileInputs[0].setInputFiles(docFrentePath);
+        console.log('   ✅ Documento FRENTE enviado');
+        await delay(1500);
+      } catch (e) {
+        console.warn(`   ⚠️  Doc frente: ${e.message}`);
+      }
     }
     
-    // Documento Verso - seletor exato: input[name="documentBack"]
-    try {
-      let docVerso = page.locator('input[type="file"][name="documentBack"]');
-      if (await docVerso.count() === 0) docVerso = page.locator('input[type="file"]').nth(1);
-      await docVerso.setInputFiles(docVersoPath);
-      console.log('   ✅ Documento VERSO enviado');
-      await delay(500);
-    } catch (e) {
-      console.warn(`   ⚠️  Documento verso: ${e.message}`);
+    // Upload verso (se não for CNH com apenas 1 lado)
+    if (fileInputs.length >= 2) {
+      try {
+        await fileInputs[1].setInputFiles(docVersoPath);
+        console.log('   ✅ Documento VERSO enviado');
+        await delay(1500);
+      } catch (e) {
+        console.warn(`   ⚠️  Doc verso: ${e.message}`);
+      }
+    }
+    
+    // Se não encontrou inputs file, tentar zona de drop
+    if (fileInputs.length === 0) {
+      console.warn('   ⚠️  Nenhum input file encontrado - portal pode usar drag-drop ou ter mudado');
+      // Tentar clicar em botão de upload
+      const uploadBtns = page.locator('button:has-text("Upload"), button:has-text("Anexar"), button:has-text("Enviar documento"), label:has-text("Selecionar arquivo")');
+      if (await uploadBtns.count() > 0) {
+        console.log('   📂 Encontrado botão de upload, tentando...');
+        // O clique pode abrir file dialog que não funciona headless
+      }
     }
     
     await screenshot(page, customerId, '06-documentos-enviados');
     await delay(1500);
     
-    // ─── 14. PERGUNTAS PARTE 1: Procurador + PDF (ANTES do upload da conta) ─
-    currentPhase = 'perguntas-parte1';
-    console.log('\n📋 [11/16] Perguntas parte 1 (Procurador + PDF)...');
+    // ─── 14. PERGUNTAS: Procurador + PDF + Débitos ──────────────────────
+    currentPhase = 'perguntas';
+    console.log('\n📋 [11/16] Perguntas (Procurador, PDF, Débitos)...');
     
-    // Scroll para perguntas
     await page.evaluate(() => window.scrollBy(0, 400));
     await delay(1500);
     
-    // === PROCURADOR: SEMPRE NÃO ===
-    let procuradorOk = false;
-    console.log('   [1/3] Procurador...');
+    // Estratégia universal: clicar em TODOS os radios/botões "Não" visíveis
+    let perguntasRespondidas = 0;
     
-    try {
-      const radio = page.locator('input[type="radio"][name="hasProcurator"][value="nao"]');
-      if (await radio.count() > 0) {
-        await radio.first().click({ force: true, timeout: 5000 });
-        console.log('   ✅ Procurador: NÃO');
-        procuradorOk = true;
-      }
-    } catch (_) {}
-    
-    if (!procuradorOk) {
+    // Estratégia 1: radios com value="nao" ou value="Não"
+    const allNaoRadios = await page.locator('input[type="radio"][value="nao"]:visible, input[type="radio"][value="Não"]:visible, input[type="radio"][value="false"]:visible, input[type="radio"][value="0"]:visible').all();
+    for (const r of allNaoRadios) {
       try {
-        const naoLabels = page.locator('label:has-text("Não")').filter({ has: page.locator('input[type="radio"]') });
-        if (await naoLabels.count() > 0) {
-          await naoLabels.first().click({ timeout: 5000 });
-          console.log('   ✅ Procurador: NÃO (label)');
-          procuradorOk = true;
+        const checked = await r.isChecked().catch(() => false);
+        if (!checked) {
+          await r.click({ force: true });
+          const name = await r.getAttribute('name') || 'unknown';
+          console.log(`   ✅ Radio "Não" clicado: ${name}`);
+          perguntasRespondidas++;
         }
       } catch (_) {}
     }
     
-    if (!procuradorOk) console.warn('   ⚠️  Procurador não respondido');
-    await delay(500);
-    
-    // === PDF PROTEGIDO: SEMPRE NÃO ===
-    let pdfOk = false;
-    console.log('   [2/3] PDF Protegido...');
-    
-    try {
-      const radio = page.locator('input[type="radio"][name="pdfProtected"][value="nao"]');
-      if (await radio.count() > 0) {
-        await radio.first().click({ force: true, timeout: 5000 });
-        console.log('   ✅ PDF Protegido: NÃO');
-        pdfOk = true;
+    // Estratégia 2: labels com texto "Não" que contêm radios
+    if (perguntasRespondidas === 0) {
+      const naoLabels = await page.locator('label:has-text("Não")').all();
+      for (const label of naoLabels) {
+        try {
+          const visible = await label.isVisible().catch(() => false);
+          if (!visible) continue;
+          await label.click({ timeout: 3000 });
+          console.log('   ✅ Label "Não" clicado');
+          perguntasRespondidas++;
+        } catch (_) {}
       }
-    } catch (_) {}
-    
-    if (!pdfOk) {
-      try {
-        const naoLabels = page.locator('label:has-text("Não")').filter({ has: page.locator('input[type="radio"]') });
-        if (await naoLabels.count() >= 2) {
-          await naoLabels.nth(1).click({ timeout: 5000 });
-          console.log('   ✅ PDF Protegido: NÃO (2º label)');
-          pdfOk = true;
-        }
-      } catch (_) {}
     }
     
-    if (!pdfOk) console.warn('   ⚠️  PDF Protegido não respondido');
-    await delay(500);
+    // Estratégia 3: botões "Não" (portal customizado)
+    if (perguntasRespondidas === 0) {
+      const naoBtns = await page.locator('button:has-text("Não"), span:has-text("Não")').all();
+      for (const btn of naoBtns) {
+        try {
+          const visible = await btn.isVisible().catch(() => false);
+          if (!visible) continue;
+          await btn.click({ timeout: 3000 });
+          console.log('   ✅ Botão "Não" clicado');
+          perguntasRespondidas++;
+        } catch (_) {}
+      }
+    }
     
-    await screenshot(page, customerId, '07-perguntas-parte1');
+    console.log(`   📊 Total respostas: ${perguntasRespondidas}`);
+    await screenshot(page, customerId, '07-perguntas');
     
-    // ─── 15. UPLOAD: Conta de energia (APÓS procurador e PDF) ────────────
+    // ─── 15. UPLOAD: Conta de energia ────────────────────────────────────
     currentPhase = 'upload-conta';
     console.log('\n📋 [12/16] Upload conta de energia...');
     
-    // Scroll para seção de conta
     await page.evaluate(() => window.scrollBy(0, 300));
     await delay(1500);
     
     let contaEnviada = false;
     
-    // Estratégia 1: seletor exato input[name="electricityBill"]
-    try {
-      const contaInput = page.locator('input[type="file"][name="electricityBill"]');
-      if (await contaInput.count() > 0) {
-        await contaInput.setInputFiles(contaPath);
-        console.log('   ✅ Conta enviada (name=electricityBill)');
+    // Re-buscar inputs file (podem ter aparecido novos após perguntas)
+    const allFileInputs = await page.locator('input[type="file"]').all();
+    console.log(`   📊 Total inputs file agora: ${allFileInputs.length}`);
+    
+    // A conta é geralmente o último ou 3º input file
+    if (allFileInputs.length >= 3) {
+      try {
+        await allFileInputs[2].setInputFiles(contaPath);
+        console.log('   ✅ Conta enviada (3º input)');
         contaEnviada = true;
-      }
-    } catch (e) {
-      console.warn(`   ⚠️  Seletor exato: ${e.message}`);
-    }
-    
-    // Estratégia 2: 3º input file
-    if (!contaEnviada) {
-      try {
-        const allFiles = await page.locator('input[type="file"]').all();
-        console.log(`   📊 Total inputs file: ${allFiles.length}`);
-        if (allFiles.length >= 3) {
-          await allFiles[2].setInputFiles(contaPath);
-          console.log('   ✅ Conta enviada (3º input)');
-          contaEnviada = true;
-        }
       } catch (e) {
-        console.warn(`   ⚠️  Estratégia 2: ${e.message}`);
+        console.warn(`   ⚠️  3º input: ${e.message}`);
       }
     }
     
-    // Estratégia 3: último input file
-    if (!contaEnviada) {
+    // Fallback: último input file
+    if (!contaEnviada && allFileInputs.length > 0) {
       try {
-        const lastInput = page.locator('input[type="file"]').last();
-        await lastInput.setInputFiles(contaPath);
+        await allFileInputs[allFileInputs.length - 1].setInputFiles(contaPath);
         console.log('   ✅ Conta enviada (último input)');
         contaEnviada = true;
       } catch (e) {
-        console.warn(`   ⚠️  Estratégia 3: ${e.message}`);
+        console.warn(`   ⚠️  Último input: ${e.message}`);
       }
     }
     
-    if (!contaEnviada) console.error('   ❌ Conta de energia NÃO enviada');
-    
+    if (!contaEnviada) console.warn('   ⚠️  Conta de energia NÃO enviada');
     await screenshot(page, customerId, '08-conta-enviada');
     await delay(2500);
 
-    // ─── 16. DÉBITOS: aparece APÓS upload da conta de energia ────────────
-    currentPhase = 'debitos';
-    console.log('\n📋 [13/16] Débitos (aparece após upload da conta)...');
+    // ─── 16. Scroll e verificação final ──────────────────────────────────
+    currentPhase = 'pre-submit';
+    console.log('\n📋 [13/16] Verificação pré-submit...');
     
-    // Aguardar mais tempo - o campo de débitos pode demorar a aparecer após upload
+    // Scroll ao final e responder qualquer pergunta restante
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-    await delay(2500);
+    await delay(2000);
     
-    let debitosOk = false;
-    
-    // Tentar até 3 vezes com scroll e espera
-    for (let tentativa = 1; tentativa <= 3 && !debitosOk; tentativa++) {
-      if (tentativa > 1) {
-        console.log(`   🔄 Tentativa ${tentativa}/3 - aguardando campo aparecer...`);
-        await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-        await delay(2500);
-      }
-      
-      // Estratégia 1: seletor exato
+    // Re-clicar em radios "Não" que possam ter aparecido (ex: débitos)
+    const maisNaoRadios = await page.locator('input[type="radio"][value="nao"]:visible, input[type="radio"][value="Não"]:visible').all();
+    for (const r of maisNaoRadios) {
       try {
-        const radio = page.locator('input[type="radio"][name="hasDebt"][value="nao"]');
-        if (await radio.count() > 0) {
-          await radio.first().click({ force: true, timeout: 5000 });
-          console.log('   ✅ Débitos: NÃO');
-          debitosOk = true;
-          break;
+        const checked = await r.isChecked().catch(() => false);
+        if (!checked) {
+          await r.click({ force: true });
+          const name = await r.getAttribute('name') || 'unknown';
+          console.log(`   ✅ Radio "Não" extra clicado: ${name}`);
         }
       } catch (_) {}
-      
-      // Estratégia 2: scan de radios com debt/debito
-      if (!debitosOk) {
-        try {
-          const radios = await page.locator('input[type="radio"]:visible').all();
-          for (const r of radios) {
-            const name = (await r.getAttribute('name') || '').toLowerCase();
-            const value = await r.getAttribute('value');
-            if ((name.includes('debt') || name.includes('debito')) && value === 'nao') {
-              await r.click({ force: true });
-              console.log('   ✅ Débitos: NÃO (scan)');
-              debitosOk = true;
-              break;
-            }
-          }
-        } catch (_) {}
-      }
-      
-      // Estratégia 3: procurar 3º label "Não"
-      if (!debitosOk) {
-        try {
-          const naoLabels = page.locator('label:has-text("Não")').filter({ has: page.locator('input[type="radio"]') });
-          const count = await naoLabels.count();
-          if (tentativa === 1) console.log(`   📊 Labels "Não" encontrados: ${count}`);
-          if (count >= 3) {
-            await naoLabels.nth(2).click({ timeout: 5000 });
-            console.log('   ✅ Débitos: NÃO (3º label)');
-            debitosOk = true;
-          } else {
-            for (let i = count - 1; i >= 0; i--) {
-              const radio = naoLabels.nth(i).locator('input[type="radio"]');
-              const checked = await radio.isChecked().catch(() => false);
-              if (!checked) {
-                await naoLabels.nth(i).click({ timeout: 5000 });
-                console.log(`   ✅ Débitos: NÃO (label ${i} não marcado)`);
-                debitosOk = true;
-                break;
-              }
-            }
-          }
-        } catch (_) {}
-      }
-      
-      // Estratégia 4: procurar texto "débitos" e clicar no "Não" próximo
-      if (!debitosOk) {
-        try {
-          const debitoText = page.getByText(/débitos|debitos/i).first();
-          if (await debitoText.count() > 0) {
-            // Encontrar o container pai e clicar no "Não" dentro dele
-            const parent = debitoText.locator('..').locator('..'); 
-            const naoBtn = parent.locator('label:has-text("Não"), span:has-text("Não")').first();
-            if (await naoBtn.count() > 0) {
-              await naoBtn.click({ timeout: 5000 });
-              console.log('   ✅ Débitos: NÃO (texto próximo)');
-              debitosOk = true;
-            }
-          }
-        } catch (_) {}
-      }
-      
-      // Estratégia 5: clicar em TODOS os radios "nao" não marcados
-      if (!debitosOk) {
-        try {
-          const allNao = await page.locator('input[type="radio"][value="nao"]:visible').all();
-          for (const r of allNao) {
-            const checked = await r.isChecked().catch(() => false);
-            if (!checked) {
-              await r.click({ force: true });
-              const name = await r.getAttribute('name');
-              console.log(`   ✅ Radio "nao" clicado: ${name}`);
-              debitosOk = true;
-            }
-          }
-        } catch (_) {}
-      }
     }
     
-    if (!debitosOk) console.warn('   ⚠️  Débitos não respondido');
-    await delay(1500);
-    
-    console.log(`\n✅ Perguntas: ${[procuradorOk, pdfOk, debitosOk].filter(Boolean).length}/3 respondidas`);
-    await screenshot(page, customerId, '09-perguntas-completas');
-
-    // ─── 16. Diagnóstico: verificar campos vazios antes de enviar ────────
-    currentPhase = 'diagnostico-pre-submit';
-    console.log('\n📋 [13/16] Diagnóstico pré-submit...');
-    
-    // Verificar todos os campos obrigatórios
-    const camposDiag = [
-      { name: 'documentNumber', label: 'CPF' },
-      { name: 'name', label: 'Nome' },
-      { name: 'birthDate', label: 'Nascimento' },
-      { name: 'phone', label: 'WhatsApp' },
-      { name: 'phoneConfirm', label: 'Confirmar WhatsApp' },
-      { name: 'email', label: 'Email' },
-      { name: 'emailConfirm', label: 'Confirmar Email' },
-      { name: 'number', label: 'Número' },
-      { name: 'installationNumber', label: 'Instalação' },
-    ];
-    
+    // Diagnóstico de campos
+    const todosInputs = await page.locator('input:visible').all();
     let camposVazios = 0;
-    for (const c of camposDiag) {
+    for (const inp of todosInputs) {
       try {
-        const el = page.locator(`input[name="${c.name}"]`).first();
-        if (await el.count() > 0) {
-          const val = await el.inputValue();
-          if (!val || val.trim() === '') {
-            console.log(`   ❌ ${c.label}: VAZIO`);
-            camposVazios++;
-          }
-        }
-      } catch (_) {}
-    }
-    
-    // Verificar distribuidora
-    try {
-      const pc = page.locator('select[name="powerCompany"]');
-      if (await pc.count() > 0) {
-        const val = await pc.inputValue();
-        if (!val || val === '' || val === 'default') {
-          console.log('   ❌ Distribuidora: NÃO SELECIONADA');
+        const type = await inp.getAttribute('type') || 'text';
+        if (type === 'file' || type === 'radio' || type === 'checkbox' || type === 'hidden') continue;
+        const val = await inp.inputValue().catch(() => '');
+        const ph = await inp.getAttribute('placeholder') || '';
+        if (!val || val.trim() === '') {
+          console.log(`   ❌ Campo vazio: "${ph}"`);
           camposVazios++;
         }
-      }
-    } catch (_) {}
-    
-    // Verificar uploads
-    const fileInputs = await page.locator('input[type="file"]').all();
-    console.log(`   📊 Inputs file: ${fileInputs.length}`);
-    
-    if (camposVazios > 0) {
-      console.log(`\n   ⚠️  ${camposVazios} campo(s) vazio(s) detectado(s)`);
-      console.log('   💡 Botão Finalizar pode não aparecer');
-    } else {
-      console.log('   ✅ Todos os campos parecem preenchidos');
+      } catch (_) {}
     }
     
-    // ─── 17. Scroll final + CLICAR EM FINALIZAR E FECHAR NAVEGADOR ──────
+    if (camposVazios > 0) {
+      console.log(`   ⚠️  ${camposVazios} campo(s) vazio(s)`);
+    } else {
+      console.log('   ✅ Todos os campos preenchidos');
+    }
+    
+    await screenshot(page, customerId, '09-formulario-pronto');
+    
+    // ─── 17. CLICAR EM FINALIZAR ─────────────────────────────────────────
     currentPhase = 'submit';
-    console.log('\n📋 [14/14] Scroll final - clicando em Finalizar e fechando...');
+    console.log('\n📋 [14/14] Clicando em Finalizar...');
     
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await delay(1500);
-    await screenshot(page, customerId, '09-formulario-pronto');
 
     let finalizarClicado = false;
     if (!stopBeforeSubmit) {
-      // Clicar no botão Finalizar (vários seletores possíveis no portal iGreen)
       const seletoresFinalizar = [
         'button:has-text("Finalizar")',
-        'button[type="submit"]:has-text("Finalizar")',
-        'button[type="submit"]:has-text("Enviar")',
+        'button:has-text("Enviar")',
+        'button:has-text("Concluir")',
+        'button:has-text("Confirmar")',
+        'button[type="submit"]',
         'a:has-text("Finalizar")',
         '[role="button"]:has-text("Finalizar")',
       ];
       for (const sel of seletoresFinalizar) {
         try {
-          const btn = page.locator(sel).first();
-          if (await btn.count() > 0) {
+          const btn = page.locator(sel).last();
+          if (await btn.count() > 0 && await btn.isVisible().catch(() => false)) {
             await btn.scrollIntoViewIfNeeded({ timeout: 5000 }).catch(() => {});
             await delay(500);
             await btn.click({ timeout: 8000 });
-            console.log(`   ✅ Botão Finalizar clicado (seletor: ${sel})`);
+            console.log(`   ✅ Botão clicado: ${sel}`);
             finalizarClicado = true;
             break;
           }
         } catch (_) {}
       }
+      
       if (!finalizarClicado) {
-        console.warn('   ⚠️  Botão Finalizar não encontrado - tentando submit genérico');
-        try {
-          const btn = page.locator('button[type="submit"]').last();
-          if (await btn.count() > 0) {
-            await btn.scrollIntoViewIfNeeded({ timeout: 5000 }).catch(() => {});
-            await btn.click({ timeout: 8000 });
-            finalizarClicado = true;
-          }
-        } catch (_) {}
+        console.warn('   ⚠️  Nenhum botão de submit encontrado');
       }
     }
 
     if (finalizarClicado) {
-      await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
-      await delay(2500);
+      await page.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => {});
+      await delay(3000);
       await screenshot(page, customerId, '10-apos-finalizar');
+      
+      // Verificar se apareceu OTP
+      const pageText = await page.textContent('body').catch(() => '');
+      if (/código|OTP|verificação|SMS|token/i.test(pageText)) {
+        console.log('   📱 OTP detectado - aguardando código...');
+        await atualizarStatus(customerId, 'awaiting_otp');
+        
+        try {
+          const otpCode = await aguardarOTP(customerId);
+          // Preencher campo OTP
+          const otpField = page.locator('input[placeholder*="código" i], input[placeholder*="OTP" i], input[placeholder*="token" i], input[type="tel"], input[maxlength="6"]').first();
+          if (await otpField.count() > 0) {
+            await otpField.type(otpCode, { delay: 100 });
+            console.log(`   ✅ OTP digitado: ${otpCode}`);
+            await delay(1000);
+            
+            // Confirmar OTP
+            const confirmOtpClicked = await clickText('Confirmar') || await clickText('Verificar') || await clickText('Enviar');
+            if (confirmOtpClicked) console.log('   ✅ OTP confirmado');
+            
+            await page.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => {});
+            await delay(3000);
+            await screenshot(page, customerId, '11-apos-otp');
+          }
+        } catch (otpErr) {
+          console.warn(`   ⚠️  OTP falhou: ${otpErr.message}`);
+        }
+      }
+      
+      // Verificar link de assinatura
+      const finalPageText = await page.textContent('body').catch(() => '');
+      if (/assinatura|contrato|sucesso|cadastro realizado/i.test(finalPageText)) {
+        console.log('   🎉 Cadastro finalizado com sucesso!');
+        
+        // Capturar link de assinatura se existir
+        const links = await page.locator('a[href*="certisign"], a[href*="assinatura"], a[href*="sign"]').all();
+        if (links.length > 0) {
+          const signLink = await links[0].getAttribute('href');
+          if (signLink) {
+            console.log(`   🔗 Link de assinatura: ${signLink}`);
+            await getSupabase().from('customers').update({ link_assinatura: signLink }).eq('id', customerId);
+          }
+        }
+      }
+      
       const pageUrl = page.url();
       await atualizarStatus(customerId, 'portal_submitted');
-      console.log('   ✅ Envio concluído - página do iGreen permanece aberta (não fechamos)');
-      if (pageUrl) console.log('   📎 Link da página:', pageUrl);
+      console.log('   ✅ Formulário enviado com sucesso');
+      if (pageUrl) console.log(`   📎 URL: ${pageUrl}`);
       activeBrowser = null;
-      // Não chamamos browser.close(): a página fica aberta até o usuário fechar.
+      
       const duration = ((Date.now() - startTime) / 1000).toFixed(2);
       console.log(`\n${'='.repeat(70)}`);
-      console.log('✅ AUTOMAÇÃO CONCLUÍDA - janela iGreen deixada aberta para você conferir');
-      console.log(`   Tempo: ${duration}s`);
+      console.log(`✅ AUTOMAÇÃO CONCLUÍDA. Tempo: ${duration}s`);
       console.log('='.repeat(70));
       return { success: true, duration: parseFloat(duration), manualSubmit: false, pageUrl };
     }
 
     if (stopBeforeSubmit) {
-      // Modo manual: aguardar usuário clicar Finalizar e fechar o navegador
-      console.log('\n   ⏳ Modo manual: aguardando você clicar Finalizar e fechar o navegador...');
+      console.log('\n   ⏳ Modo manual: aguardando...');
       await atualizarStatus(customerId, 'awaiting_manual_submit');
       try {
         await new Promise((resolve) => {
@@ -1374,14 +1246,13 @@ export async function executarAutomacao(customerId, options = {}) {
       return { success: true, duration: parseFloat(duration), manualSubmit: true };
     }
 
-    // Finalizar não encontrado e não é stopBeforeSubmit: marcar enviado e deixar página aberta
-    console.warn('   ⚠️  Finalizar não clicado - deixando página aberta');
+    // Finalizar não encontrado: marcar enviado e deixar página aberta
+    console.warn('   ⚠️  Finalizar não encontrado - deixando página aberta');
     await atualizarStatus(customerId, 'portal_submitted');
     activeBrowser = null;
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
     console.log(`\n✅ Automação encerrada. Tempo: ${duration}s`);
     return { success: true, duration: parseFloat(duration), manualSubmit: false };
-
 
   } catch (error) {
     console.error(`\n❌ ERRO na automação (fase: ${currentPhase}):`, error.message);
