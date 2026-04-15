@@ -206,7 +206,61 @@ async function atualizarStatus(customerId, status, errorMsg = null) {
   await getSupabase().from('customers').update(updates).eq('id', customerId);
 }
 
-// ─── Whapi Media: baixar quando a URL no banco é whapi-media:xxx ─────────────
+// ─── Enviar link de reconhecimento facial ao cliente via WhatsApp ─────────────
+async function sendFacialLinkToCustomer(customerId, facialLink) {
+  const supabase = getSupabase();
+  if (!supabase) { console.error('   ❌ sendFacialLink: Supabase não configurado'); return; }
+  try {
+    const { data: customer } = await supabase
+      .from('customers').select('phone_whatsapp, consultant_id, name')
+      .eq('id', customerId).single();
+    if (!customer?.phone_whatsapp) { console.error('   ❌ sendFacialLink: telefone não encontrado'); return; }
+
+    let instanceName = null;
+    if (customer.consultant_id) {
+      const { data: inst } = await supabase
+        .from('whatsapp_instances').select('instance_name')
+        .eq('consultant_id', customer.consultant_id).limit(1).single();
+      instanceName = inst?.instance_name;
+    }
+
+    const evolutionUrl = (process.env.EVOLUTION_API_URL || '').replace(/\/$/, '');
+    const evolutionKey = process.env.EVOLUTION_API_KEY || '';
+
+    // Fallback: buscar das settings
+    let eUrl = evolutionUrl, eKey = evolutionKey;
+    if (!eUrl || !eKey) {
+      const { data: rows } = await supabase.from('settings').select('key, value');
+      const s = {}; (rows || []).forEach(r => { s[r.key] = r.value; });
+      eUrl = eUrl || (s.evolution_api_url || '').replace(/\/$/, '');
+      eKey = eKey || s.evolution_api_key || '';
+    }
+
+    let phone = String(customer.phone_whatsapp).replace(/\D/g, '');
+    if (!phone.startsWith('55')) phone = '55' + phone;
+    const remoteJid = `${phone}@s.whatsapp.net`;
+
+    const nome = customer.name?.split(' ')[0] || '';
+    const message = `📲 *Validação Facial*\n\nOlá${nome ? ' ' + nome : ''}! Falta apenas a validação facial para concluir seu cadastro.\n\n🔗 Abra o link abaixo *no celular*:\n${facialLink}\n\n📱 Siga as instruções na tela (selfie + documento).\n\n⚠️ Use boa iluminação e tire o óculos se necessário.\n\nQualquer dúvida, estamos aqui! ☀️`;
+
+    if (eUrl && eKey && instanceName) {
+      const res = await fetch(`${eUrl}/message/sendText/${instanceName}`, {
+        method: 'POST',
+        headers: { apikey: eKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ number: remoteJid, text: message }),
+      });
+      if (res.ok) {
+        console.log(`   ✅ Link facial enviado via WhatsApp para ${phone}`);
+        return;
+      }
+      console.warn(`   ⚠️  Evolution falhou: ${res.status}`);
+    }
+    console.warn('   ⚠️  Não foi possível enviar link facial via WhatsApp');
+  } catch (e) {
+    console.error(`   ❌ sendFacialLink erro: ${e.message}`);
+  }
+}
+
 let _whapiSettings = null;
 async function getWhapiSettings() {
   if (_whapiSettings) return _whapiSettings;
@@ -1190,25 +1244,91 @@ export async function executarAutomacao(customerId, options = {}) {
         }
       }
       
-      // Verificar link de assinatura
+      // ─── Capturar link de reconhecimento facial / assinatura ─────────
+      await delay(3000);
       const finalPageText = await page.textContent('body').catch(() => '');
-      if (/assinatura|contrato|sucesso|cadastro realizado/i.test(finalPageText)) {
-        console.log('   🎉 Cadastro finalizado com sucesso!');
-        
-        // Capturar link de assinatura se existir
-        const links = await page.locator('a[href*="certisign"], a[href*="assinatura"], a[href*="sign"]').all();
-        if (links.length > 0) {
-          const signLink = await links[0].getAttribute('href');
-          if (signLink) {
-            console.log(`   🔗 Link de assinatura: ${signLink}`);
-            await getSupabase().from('customers').update({ link_assinatura: signLink }).eq('id', customerId);
+      const currentUrl = page.url();
+      let facialLink = null;
+
+      // Estratégia 1: Buscar links na página (certisign, assinatura, sign, facial, biometria)
+      const linkSelectors = [
+        'a[href*="certisign"]', 'a[href*="assinatura"]', 'a[href*="sign"]',
+        'a[href*="facial"]', 'a[href*="biometria"]', 'a[href*="validacao"]',
+        'a[href*="reconhecimento"]', 'a[href*="selfie"]',
+      ];
+      for (const sel of linkSelectors) {
+        const links = await page.locator(sel).all();
+        for (const link of links) {
+          const href = await link.getAttribute('href').catch(() => null);
+          if (href && href.startsWith('http')) {
+            facialLink = href;
+            console.log(`   🔗 Link facial encontrado (seletor ${sel}): ${facialLink}`);
+            break;
+          }
+        }
+        if (facialLink) break;
+      }
+
+      // Estratégia 2: Buscar qualquer link externo visível na página pós-OTP
+      if (!facialLink) {
+        const allLinks = await page.locator('a[href^="http"]').all();
+        for (const link of allLinks) {
+          const href = await link.getAttribute('href').catch(() => null);
+          const text = await link.textContent().catch(() => '');
+          if (href && /facial|assinatura|sign|biometria|validar|reconhecimento|selfie|contrato/i.test(text + ' ' + href)) {
+            facialLink = href;
+            console.log(`   🔗 Link facial encontrado (texto): ${facialLink}`);
+            break;
           }
         }
       }
+
+      // Estratégia 3: Se a URL atual mudou para uma página de assinatura/facial
+      if (!facialLink && currentUrl && /facial|assinatura|sign|biometria|certisign/i.test(currentUrl)) {
+        facialLink = currentUrl;
+        console.log(`   🔗 URL atual é o link facial: ${facialLink}`);
+      }
+
+      // Estratégia 4: Buscar em iframes
+      if (!facialLink) {
+        const iframes = await page.locator('iframe[src*="certisign"], iframe[src*="sign"], iframe[src*="facial"]').all();
+        for (const iframe of iframes) {
+          const src = await iframe.getAttribute('src').catch(() => null);
+          if (src && src.startsWith('http')) {
+            facialLink = src;
+            console.log(`   🔗 Link facial encontrado (iframe): ${facialLink}`);
+            break;
+          }
+        }
+      }
+
+      await screenshot(page, customerId, '12-pos-otp-facial');
+
+      // Salvar link e enviar ao cliente via WhatsApp
+      if (facialLink) {
+        console.log(`   📲 Enviando link de reconhecimento facial ao cliente...`);
+        const supabase = getSupabase();
+        if (supabase) {
+          await supabase.from('customers').update({
+            link_assinatura: facialLink,
+            conversation_step: 'aguardando_assinatura',
+            status: 'awaiting_signature',
+            updated_at: new Date().toISOString(),
+          }).eq('id', customerId);
+        }
+        // Enviar link via WhatsApp
+        await sendFacialLinkToCustomer(customerId, facialLink);
+        await atualizarStatus(customerId, 'awaiting_signature');
+      } else if (/assinatura|contrato|sucesso|cadastro realizado/i.test(finalPageText)) {
+        console.log('   🎉 Cadastro finalizado com sucesso (sem link facial detectado)');
+        await atualizarStatus(customerId, 'portal_submitted');
+      } else {
+        console.log('   ⚠️  Nenhum link facial encontrado - marcando como enviado');
+        await atualizarStatus(customerId, 'portal_submitted');
+      }
       
       const pageUrl = page.url();
-      await atualizarStatus(customerId, 'portal_submitted');
-      console.log('   ✅ Formulário enviado com sucesso');
+      console.log('   ✅ Formulário processado com sucesso');
       if (pageUrl) console.log(`   📎 URL: ${pageUrl}`);
       activeBrowser = null;
       
