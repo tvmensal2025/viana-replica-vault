@@ -194,8 +194,8 @@ function NodeCard({ member, hasChildren, childCount, isExpanded, onToggle, onOpe
         </div>
 
         {/* Name */}
-        <p className={`${isRoot ? "text-[11px]" : "text-[10px]"} font-semibold text-foreground text-center leading-tight truncate sensitive-name`}>
-          {member.name.split(" ")[0]}
+        <p className={`${isRoot ? "text-[11px]" : "text-[10px]"} font-semibold ${isVirtual ? "text-gray-400" : "text-foreground"} text-center leading-tight truncate sensitive-name`}>
+          {isVirtual ? `#${member.igreen_id}` : member.name.split(" ")[0]}
         </p>
         
         {/* Stats pills */}
