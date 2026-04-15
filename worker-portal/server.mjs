@@ -435,7 +435,30 @@ app.post('/clear-queue', (req, res) => {
 });
 
 /**
- * POST /confirm-otp
+ * POST /force-submit
+ * Força reenvio de lead ignorando retry limits
+ */
+app.post('/force-submit', async (req, res) => {
+  const { customer_id } = req.body;
+  if (!customer_id) return res.status(400).json({ error: 'customer_id required' });
+  
+  // Limpar bloqueios para este lead
+  retryTracker.delete(customer_id);
+  recentlyProcessed.delete(customer_id);
+  
+  const result = await addToQueue(customer_id, { headless: true });
+  pushActivity('force_submit', customer_id, 'Lead forçado na fila (retry limpo)');
+  
+  res.json({
+    success: true,
+    message: `Lead forçado na fila (posição ${result.position})`,
+    customer_id,
+    position: result.position,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+
  * Recebe código OTP do WhatsApp e armazena para o script usar
  */
 app.post('/confirm-otp', async (req, res) => {
