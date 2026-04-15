@@ -259,6 +259,89 @@ Deno.serve(async (req) => {
     }
 
 
+    // ─── INTERCEPTAR OTP: capturar código antes de buscar cliente ativo ──
+    // O OTP chega via WhatsApp (não SMS). O cliente responde na conversa.
+    if (messageText) {
+      const otpMatch = messageText.replace(/\D/g, '');
+      // OTP válido: 4-8 dígitos puros ou extraído de frase
+      const otpPatterns = [
+        /(?:c[oó]digo|code|otp|token|verifica[cç][aã]o)[^\d]*(\d{4,8})/i,
+        /^(\d{4,8})$/,
+      ];
+      let extractedOtp: string | null = null;
+      for (const pat of otpPatterns) {
+        const m = messageText.match(pat);
+        if (m) { extractedOtp = m[1] || m[0]; break; }
+      }
+      // Se mensagem é apenas dígitos (4-8), considerar como OTP
+      if (!extractedOtp && /^\d{4,8}$/.test(otpMatch)) {
+        extractedOtp = otpMatch;
+      }
+
+      if (extractedOtp) {
+        // Verificar se este telefone tem um lead em awaiting_otp ou portal_submitting
+        const { data: otpCustomer } = await supabase
+          .from("customers")
+          .select("id, name, status")
+          .eq("phone_whatsapp", phone)
+          .eq("consultant_id", instanceData.consultant_id)
+          .in("status", ["awaiting_otp", "portal_submitting"])
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (otpCustomer) {
+          console.log(`🔑 OTP capturado via WhatsApp: ${extractedOtp} para ${otpCustomer.name} (${otpCustomer.id})`);
+          
+          // Salvar OTP no banco
+          await supabase.from("customers").update({
+            otp_code: extractedOtp,
+            otp_received_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }).eq("id", otpCustomer.id);
+
+          // Notificar o Worker VPS (se configurado)
+          const workerUrl = Deno.env.get("WORKER_PORTAL_URL");
+          const workerSecret = Deno.env.get("WORKER_SECRET");
+          if (workerUrl) {
+            try {
+              await fetchWithTimeout(`${workerUrl}/confirm-otp`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Authorization": `Bearer ${workerSecret || ""}`,
+                },
+                body: JSON.stringify({
+                  customer_id: otpCustomer.id,
+                  otp_code: extractedOtp,
+                }),
+                timeout: 5000,
+              });
+              console.log(`✅ OTP enviado ao Worker VPS`);
+            } catch (e: any) {
+              console.warn(`⚠️ Falha ao notificar Worker: ${e.message}`);
+            }
+          }
+
+          // Responder ao cliente
+          await sendText(remoteJid, `✅ Código recebido! Processando...`);
+
+          // Log
+          await supabase.from("conversations").insert({
+            customer_id: otpCustomer.id,
+            message_direction: "inbound",
+            message_text: messageText,
+            message_type: "text",
+            conversation_step: "otp_received",
+          });
+
+          return new Response(JSON.stringify({ ok: true, otp: extractedOtp, customer_id: otpCustomer.id }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
+    }
+
     // ─── Buscar ou criar cliente ──────────────────────────────────────
     const statusFinalizados = [
       'data_complete', 'portal_submitting', 'awaiting_otp', 'validating_otp',
