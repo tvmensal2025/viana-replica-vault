@@ -794,20 +794,30 @@ export async function executarAutomacao(customerId, options = {}) {
     currentPhase = 'fase6-endereco';
     console.log('\n📋 [6/16] Endereço...');
     
-    // Número (pode ser placeholder="Número" ou name="number")
-    let numField = byPHPartial('Número');
-    if (await numField.count() === 0) numField = page.locator('input[name="number"]').first();
-    if (await numField.count() > 0 && await numField.isVisible().catch(() => false)) {
+    // O CEP auto-preenche Endereço, Bairro, Cidade, Estado
+    // Só precisamos preencher "Número" (endereço) e "Complemento"
+    // CUIDADO: "Número" exato para não pegar "Número da instalação"
+    const allInputsForNum = await page.locator('input:visible').all();
+    let numField = null;
+    for (const inp of allInputsForNum) {
+      const ph = await inp.getAttribute('placeholder').catch(() => '') || '';
+      if (ph.trim() === 'Número') {
+        numField = inp;
+        break;
+      }
+    }
+    if (numField) {
       await numField.click();
       await numField.fill('');
-      await numField.type(data.numeroEndereco, { delay: 80 });
-      console.log(`   ✅ Número: ${data.numeroEndereco}`);
+      await numField.type(data.numeroEndereco || '100', { delay: 80 });
+      console.log(`   ✅ Número endereço: ${data.numeroEndereco || '100'}`);
+    } else {
+      console.warn('   ⚠️  Campo Número endereço não encontrado');
     }
     
     // Complemento
     if (data.complemento) {
-      let compField = byPHPartial('Complemento');
-      if (await compField.count() === 0) compField = page.locator('input[name="complement"]').first();
+      let compField = byPH('Complemento');
       if (await compField.count() > 0 && await compField.isVisible().catch(() => false)) {
         await compField.fill(data.complemento);
         console.log(`   ✅ Complemento: ${data.complemento}`);
@@ -825,17 +835,16 @@ export async function executarAutomacao(customerId, options = {}) {
     if (data.numeroInstalacao) {
       console.log(`   📊 Número: ${data.numeroInstalacao}`);
       
-      // Tentar vários seletores
-      let instField = byPHPartial('instalação');
+      let instField = byPHPartial('instala');
       if (await instField.count() === 0) instField = byPHPartial('Código');
-      if (await instField.count() === 0) instField = page.locator('input[name="installationNumber"]').first();
       
       if (await instField.count() > 0 && await instField.isVisible().catch(() => false)) {
         await instField.click();
-        await instField.fill(data.numeroInstalacao);
+        await instField.fill('');
+        await instField.type(data.numeroInstalacao, { delay: 80 });
         console.log(`   ✅ Instalação: ${data.numeroInstalacao}`);
       } else {
-        console.warn('   ⚠️  Campo instalação não encontrado (pode ser preenchido pelo CEP)');
+        console.warn('   ⚠️  Campo instalação não encontrado');
       }
       await delay(1500);
     }
