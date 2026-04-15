@@ -41,6 +41,7 @@ interface NetworkMember {
 interface TreeNode {
   member: NetworkMember;
   children: TreeNode[];
+  isOrphan?: boolean;
 }
 
 interface NetworkPanelProps {
@@ -48,9 +49,10 @@ interface NetworkPanelProps {
 }
 
 /* ── Helpers ── */
+
 function buildTree(members: NetworkMember[]): TreeNode[] {
   const byId = new Map<number, TreeNode>();
-  members.forEach(m => byId.set(m.igreen_id, { member: m, children: [] }));
+  members.forEach(m => byId.set(m.igreen_id, { member: m, children: [], isOrphan: false }));
   const roots: TreeNode[] = [];
   const orphans: TreeNode[] = [];
   members.forEach(m => {
@@ -60,48 +62,56 @@ function buildTree(members: NetworkMember[]): TreeNode[] {
     } else if (m.nivel === 0 || !m.sponsor_id) {
       roots.push(node);
     } else {
+      node.isOrphan = true;
       orphans.push(node);
     }
   });
 
-  // Attach orphans intelligently: find the closest ancestor by nivel
+  // Group orphans by their missing sponsor_id for proper display
   if (orphans.length > 0 && roots.length > 0) {
-    // Sort orphans by nivel so we process shallower ones first
-    orphans.sort((a, b) => a.member.nivel - b.member.nivel);
-
-    // Build a nivel-indexed list of all placed nodes for fast lookup
-    const nodesByNivel = new Map<number, TreeNode[]>();
-    function indexNode(node: TreeNode) {
-      const n = node.member.nivel;
-      if (!nodesByNivel.has(n)) nodesByNivel.set(n, []);
-      nodesByNivel.get(n)!.push(node);
-      node.children.forEach(indexNode);
+    const bySponsor = new Map<number, TreeNode[]>();
+    for (const o of orphans) {
+      const sid = o.member.sponsor_id || 0;
+      if (!bySponsor.has(sid)) bySponsor.set(sid, []);
+      bySponsor.get(sid)!.push(o);
     }
-    roots.forEach(indexNode);
 
-    for (const orphan of orphans) {
-      const targetNivel = orphan.member.nivel - 1;
-      let placed = false;
-
-      // Try to find a node at exactly one nivel above
-      for (let n = targetNivel; n >= 0; n--) {
-        const candidates = nodesByNivel.get(n);
-        if (candidates && candidates.length > 0) {
-          // Attach to the last candidate at that nivel (most recent)
-          candidates[candidates.length - 1].children.push(orphan);
-          placed = true;
-          break;
-        }
-      }
-
-      if (!placed) {
-        roots[0].children.push(orphan);
-      }
-
-      // Index the newly placed orphan so deeper orphans can attach to it
-      const n = orphan.member.nivel;
-      if (!nodesByNivel.has(n)) nodesByNivel.set(n, []);
-      nodesByNivel.get(n)!.push(orphan);
+    // Create virtual group nodes for each external sponsor
+    for (const [sponsorId, children] of bySponsor) {
+      const virtualMember: NetworkMember = {
+        id: `virtual-${sponsorId}`,
+        igreen_id: sponsorId,
+        name: `Patrocinador Externo #${sponsorId}`,
+        phone: null,
+        sponsor_id: null,
+        nivel: (children[0]?.member.nivel ?? 1) - 1,
+        data_ativo: null,
+        cidade: null,
+        uf: null,
+        clientes_ativos: 0,
+        gp: 0,
+        gi: 0,
+        qtde_diretos: children.length,
+        total_pontos: 0,
+        updated_at: "",
+        graduacao: null,
+        graduacao_expansao: null,
+        data_nascimento: null,
+        gp_total: 0,
+        gi_total: 0,
+        bonificavel: 0,
+        green_points: 0,
+        gp_mes: 0,
+        gi_mes: 0,
+        green_points_mes: 0,
+        diretos_ativos: 0,
+        pro: null,
+        inicio_rapido: null,
+        diretos_inicio_rapido: 0,
+        diretos_mes: 0,
+      };
+      const virtualNode: TreeNode = { member: virtualMember, children, isOrphan: true };
+      roots[0].children.push(virtualNode);
     }
   } else if (orphans.length > 0) {
     roots.push(...orphans);

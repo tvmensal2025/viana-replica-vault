@@ -348,7 +348,29 @@ async function syncOneConsultant(
         else netUpdated += (data?.length || 0);
       }
 
-      return { success: true, mode: "sync_network", total_members: netData.length, updated: netUpdated };
+      // Remove stale members that no longer exist in the API
+      const apiIds = finalRecords.map(r => Number(r.igreen_id));
+      const { data: existingMembers } = await supabase
+        .from("network_members")
+        .select("igreen_id")
+        .eq("consultant_id", consultantId);
+
+      if (existingMembers) {
+        const staleIds = existingMembers
+          .map(m => m.igreen_id)
+          .filter(id => !apiIds.includes(id));
+        if (staleIds.length > 0) {
+          console.log(`Removing ${staleIds.length} stale members:`, staleIds);
+          const { error: delErr } = await supabase
+            .from("network_members")
+            .delete()
+            .eq("consultant_id", consultantId)
+            .in("igreen_id", staleIds);
+          if (delErr) console.error("Delete stale error:", delErr);
+        }
+      }
+
+      return { success: true, mode: "sync_network", total_members: netData.length, updated: netUpdated, cleaned: 0 };
     } catch (err) {
       return { success: false, email: portalEmail, error: err instanceof Error ? err.message : "Erro rede" };
     }
