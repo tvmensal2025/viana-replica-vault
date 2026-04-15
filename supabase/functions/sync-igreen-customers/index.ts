@@ -507,7 +507,7 @@ Deno.serve(async (req) => {
       const batch = records.slice(i, i + BATCH_SIZE);
       const { data, error } = await supabase
         .from("customers")
-        .upsert(batch, { onConflict: "phone_whatsapp", ignoreDuplicates: false })
+        .upsert(batch, { onConflict: "phone_whatsapp,consultant_id", ignoreDuplicates: false })
         .select("id");
 
       if (error) {
