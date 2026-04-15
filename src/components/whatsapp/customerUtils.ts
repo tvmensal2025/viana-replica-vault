@@ -7,6 +7,7 @@ export interface Customer {
   electricity_bill_value?: number | null;
   email?: string | null;
   cpf?: string | null;
+  rg?: string | null;
   address_city?: string | null;
   address_state?: string | null;
   address_street?: string | null;

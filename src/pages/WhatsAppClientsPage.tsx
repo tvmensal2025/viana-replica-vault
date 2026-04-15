@@ -150,23 +150,36 @@ export default function WhatsAppClientsPage() {
   const exportToCSV = () => {
     const headers = [
       "Nome", "CPF", "RG", "Email", "Telefone", "Data Nascimento",
-      "Endereço", "CEP", "Cidade", "Estado", "Distribuidora",
-      "Nº Instalação", "Valor Conta", "Status", "Step", "Data Cadastro",
+      "Rua", "Número", "Complemento", "Bairro", "Cidade", "Estado", "CEP",
+      "Distribuidora", "Nº Instalação", "Consumo Médio (kW)", "Valor Conta (R$)", "Desconto Cliente (%)",
+      "Tipo Produto", "Código iGreen", "Andamento", "Devolutiva", "Status Financeiro",
+      "Cashback", "Nível Licenciado", "Licenciado", "Código Licenciado",
+      "Indicado Por", "Telefone Indicador",
+      "Assinatura Cliente", "Assinatura iGreen", "Link Assinatura",
+      "Data Cadastro", "Data Ativo", "Data Validado",
+      "Status", "Step", "Observação",
     ];
 
-    const rows = filteredCustomers.map((c) => [
+    const rows = filteredCustomers.map((c: any) => [
       c.name || "", c.cpf || "", c.rg || "", c.email || "",
       c.phone_whatsapp || "", c.data_nascimento || "",
-      `${c.address_street || ""} ${c.address_number || ""} ${c.address_complement || ""}`.trim(),
-      c.cep || "", c.address_city || "", c.address_state || "",
+      c.address_street || "", c.address_number || "", c.address_complement || "",
+      c.address_neighborhood || "", c.address_city || "", c.address_state || "", c.cep || "",
       c.distribuidora || "", c.numero_instalacao || "",
-      c.electricity_bill_value || "", c.status || "",
-      getStepLabel(c.conversation_step || ""),
-      c.created_at ? format(new Date(c.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR }) : "",
+      c.media_consumo ?? "", c.electricity_bill_value ?? "", c.desconto_cliente ?? "",
+      c.tipo_produto || "energia", c.igreen_code || "", c.andamento_igreen || "",
+      c.devolutiva || "", c.status_financeiro || "",
+      c.cashback || "", c.nivel_licenciado || "",
+      c.registered_by_name || "", c.registered_by_igreen_id || "",
+      c.customer_referred_by_name || "", c.customer_referred_by_phone || "",
+      c.assinatura_cliente || "", c.assinatura_igreen || "", c.link_assinatura || "",
+      c.data_cadastro || (c.created_at ? format(new Date(c.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR }) : ""),
+      c.data_ativo || "", c.data_validado || "",
+      c.status || "", getStepLabel(c.conversation_step || ""), c.observacao || "",
     ]);
 
     const csv = [headers, ...rows].map((row) => row.map((cell) => `"${cell}"`).join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
     link.download = `clientes-whatsapp-${format(new Date(), "yyyy-MM-dd")}.csv`;
