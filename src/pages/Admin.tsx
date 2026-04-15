@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { LogOut, BarChart3, LinkIcon, Settings, Monitor, MessageSquare, LayoutGrid, Users, Copy, Download, X, History, Sparkles, FolderDown, Network, Eye, EyeOff } from "lucide-react";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { PrivacyModeProvider, usePrivacyMode } from "@/contexts/PrivacyModeContext";
 import { useQueryClient } from "@tanstack/react-query";
 import { WhatsAppErrorBoundary } from "@/components/whatsapp/WhatsAppErrorBoundary";
