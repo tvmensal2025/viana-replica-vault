@@ -149,13 +149,14 @@ function getPalette(nivel: number) {
 }
 
 /* ── Node Card ── */
-function NodeCard({ member, hasChildren, childCount, isExpanded, onToggle, onOpenDetails }: {
+function NodeCard({ member, hasChildren, childCount, isExpanded, onToggle, onOpenDetails, isOrphan }: {
   member: NetworkMember;
   hasChildren: boolean;
   childCount: number;
   isExpanded: boolean;
   onToggle: () => void;
   onOpenDetails: () => void;
+  isOrphan?: boolean;
 }) {
   const p = getPalette(member.nivel);
   const initials = member.name.split(" ").filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
