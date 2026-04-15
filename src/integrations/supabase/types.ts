@@ -495,6 +495,20 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "customers_consultant_id_fkey"
+            columns: ["consultant_id"]
+            isOneToOne: false
+            referencedRelation: "consultants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customers_consultant_id_fkey"
+            columns: ["consultant_id"]
+            isOneToOne: false
+            referencedRelation: "consultants_public"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "customers_customer_referred_by_consultant_id_fkey"
             columns: ["customer_referred_by_consultant_id"]
             isOneToOne: false

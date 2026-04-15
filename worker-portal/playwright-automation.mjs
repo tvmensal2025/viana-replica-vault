@@ -149,20 +149,52 @@ function getSupabase() {
 }
 
 async function buscarCliente(customerId) {
-  const { data, error } = await getSupabase()
-    .from('customers')
-    .select(`
-      *,
-      consultants:consultant_id (
-        id,
-        name,
-        igreen_id
-      )
-    `)
-    .eq('id', customerId)
-    .single();
-  if (error) throw new Error(`Erro ao buscar cliente: ${error.message}`);
-  if (!data) throw new Error(`Cliente ${customerId} não encontrado`);
+  // Try join first, fallback to separate queries if FK not cached
+  let data, error;
+  try {
+    const res = await getSupabase()
+      .from('customers')
+      .select(`
+        *,
+        consultants:consultant_id (
+          id,
+          name,
+          igreen_id
+        )
+      `)
+      .eq('id', customerId)
+      .single();
+    data = res.data;
+    error = res.error;
+  } catch (e) {
+    error = e;
+  }
+
+  // Fallback: separate queries if join fails
+  if (error || !data) {
+    console.log(`⚠️ Join falhou (${error?.message || 'sem data'}), usando queries separadas...`);
+    const { data: customer, error: custErr } = await getSupabase()
+      .from('customers')
+      .select('*')
+      .eq('id', customerId)
+      .single();
+    if (custErr) throw new Error(`Erro ao buscar cliente: ${custErr.message}`);
+    if (!customer) throw new Error(`Cliente ${customerId} não encontrado`);
+
+    // Fetch consultant separately
+    if (customer.consultant_id) {
+      const { data: consultant } = await getSupabase()
+        .from('consultants')
+        .select('id, name, igreen_id')
+        .eq('id', customer.consultant_id)
+        .single();
+      customer.consultants = consultant || null;
+    } else {
+      customer.consultants = null;
+    }
+    return customer;
+  }
+
   return data;
 }
 
