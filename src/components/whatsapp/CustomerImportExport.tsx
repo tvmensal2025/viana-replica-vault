@@ -172,17 +172,60 @@ export function CustomerImportExport({ customers, filtered, consultantId, onCust
 
   function handleExport() {
     const exportData = filtered.map((c) => ({
-      Nome: c.name || "", Telefone: c.phone_whatsapp, Email: c.email || "", CPF: c.cpf || "",
-      Status: c.status || "", Cidade: c.address_city || "", Estado: c.address_state || "",
-      Distribuidora: c.distribuidora || "", "Consumo Médio (kW)": c.media_consumo ?? "",
-      "Valor Conta (R$)": c.electricity_bill_value ?? "", Licenciado: c.registered_by_name || "",
-      "Indicado Por": c.customer_referred_by_name || "", "Telefone Indicador": c.customer_referred_by_phone || "",
-      Cashback: c.cashback || "",
-      "Código iGreen": c.igreen_code || "", Andamento: c.andamento_igreen || "",
-      Devolutiva: c.devolutiva || "", Observação: c.observacao || "",
+      // Dados Pessoais
+      "Nome": c.name || "",
+      "CPF": c.cpf || "",
+      "RG": (c as any).rg || "",
+      "Email": c.email || "",
+      "Telefone": c.phone_whatsapp,
+      "Data Nascimento": c.data_nascimento || "",
+      // Endereço
+      "Rua": c.address_street || "",
+      "Número": c.address_number || "",
+      "Complemento": c.address_complement || "",
+      "Bairro": c.address_neighborhood || "",
+      "Cidade": c.address_city || "",
+      "Estado": c.address_state || "",
+      "CEP": c.cep || "",
+      // Energia
+      "Distribuidora": c.distribuidora || "",
+      "Nº Instalação": (c as any).numero_instalacao || "",
+      "Consumo Médio (kW)": c.media_consumo ?? "",
+      "Valor Conta (R$)": c.electricity_bill_value ?? "",
+      "Desconto Cliente (%)": c.desconto_cliente ?? "",
+      // Tipo Produto
+      "Tipo Produto": c.tipo_produto || "energia",
+      // iGreen
+      "Código iGreen": c.igreen_code || "",
+      "Andamento": c.andamento_igreen || "",
+      "Devolutiva": c.devolutiva || "",
+      "Status Financeiro": c.status_financeiro || "",
+      "Cashback": c.cashback || "",
+      "Nível Licenciado": c.nivel_licenciado || "",
+      // Licenciado
+      "Licenciado": c.registered_by_name || "",
+      "Código Licenciado": c.registered_by_igreen_id || "",
+      // Indicação
+      "Indicado Por": c.customer_referred_by_name || "",
+      "Telefone Indicador": c.customer_referred_by_phone || "",
+      // Assinaturas
+      "Assinatura Cliente": c.assinatura_cliente || "",
+      "Assinatura iGreen": c.assinatura_igreen || "",
+      "Link Assinatura": c.link_assinatura || "",
+      // Datas
       "Data Cadastro": c.data_cadastro || c.created_at || "",
+      "Data Ativo": c.data_ativo || "",
+      "Data Validado": c.data_validado || "",
+      // Status
+      "Status": c.status || "",
+      "Observação": c.observacao || "",
     }));
     const ws = XLSX.utils.json_to_sheet(exportData);
+    // Auto-fit column widths
+    const colWidths = Object.keys(exportData[0] || {}).map((key) => ({
+      wch: Math.max(key.length, ...exportData.map((row) => String((row as any)[key] || "").length).slice(0, 50)) + 2,
+    }));
+    ws["!cols"] = colWidths;
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Clientes");
     XLSX.writeFile(wb, `clientes-${new Date().toISOString().split("T")[0]}.xlsx`);
