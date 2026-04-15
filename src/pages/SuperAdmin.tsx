@@ -10,11 +10,13 @@ import { Input } from "@/components/ui/input";
 import {
   Shield, Users, CheckCircle, XCircle, LogOut, Loader2, UserCheck, UserX,
   KeyRound, Brain, MessageSquare, Wifi, WifiOff, AlertTriangle, Send,
-  Search, Eye, TrendingUp, Phone, Calendar, RefreshCw,
+  Search, Eye, TrendingUp, Phone, Calendar, RefreshCw, Sparkles, Activity,
+  ChevronRight, BarChart3,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AIKnowledgePanel } from "@/components/superadmin/AIKnowledgePanel";
 import { CrmAnalyticsTab } from "@/components/superadmin/CrmAnalyticsTab";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 
 interface WhatsAppMetrics {
   hasInstance: boolean;
@@ -190,8 +192,13 @@ const SuperAdmin = () => {
   if (authLoading || roleLoading || (!isAdmin && userId)) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-background">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        <p className="text-muted-foreground">Verificando permissões...</p>
+        <div className="relative">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center animate-pulse">
+            <Shield className="w-8 h-8 text-primary" />
+          </div>
+          <Loader2 className="w-5 h-5 animate-spin text-primary absolute -bottom-1 -right-1" />
+        </div>
+        <p className="text-sm text-muted-foreground font-medium">Verificando permissões...</p>
       </div>
     );
   }
@@ -209,62 +216,86 @@ const SuperAdmin = () => {
   });
 
   const tabs = [
-    { id: "consultores" as const, label: "Consultores", icon: Users },
-    { id: "crm" as const, label: "CRM Analytics", icon: TrendingUp },
+    { id: "consultores" as const, label: "Consultores", icon: Users, count: consultants.length },
+    { id: "crm" as const, label: "CRM Analytics", icon: BarChart3 },
     { id: "ia" as const, label: "IA / Conhecimento", icon: Brain },
   ];
 
   const formatActivity = (lastAct: string | null) => {
-    if (!lastAct) return { text: "Sem atividade", color: "text-muted-foreground", dot: "bg-muted-foreground" };
+    if (!lastAct) return { text: "Sem atividade", color: "text-muted-foreground", dot: "bg-muted-foreground/50", ring: "" };
     const d = new Date(lastAct);
     const days = Math.floor((Date.now() - d.getTime()) / 86400000);
-    if (days === 0) return { text: "Hoje", color: "text-green-400", dot: "bg-green-400" };
-    if (days === 1) return { text: "Ontem", color: "text-green-400", dot: "bg-green-400" };
-    if (days <= 7) return { text: `${days}d atrás`, color: "text-yellow-400", dot: "bg-yellow-400" };
-    return { text: `${days}d atrás`, color: "text-red-400", dot: "bg-red-400" };
+    if (days === 0) return { text: "Hoje", color: "text-emerald-500", dot: "bg-emerald-500", ring: "ring-2 ring-emerald-500/30" };
+    if (days === 1) return { text: "Ontem", color: "text-emerald-400", dot: "bg-emerald-400", ring: "" };
+    if (days <= 7) return { text: `${days}d atrás`, color: "text-amber-400", dot: "bg-amber-400", ring: "" };
+    return { text: `${days}d atrás`, color: "text-red-400", dot: "bg-red-400", ring: "" };
   };
+
+  const statCards = [
+    { label: "Consultores", value: consultants.length, icon: Users, gradient: "from-violet-500/10 to-violet-600/5", iconColor: "text-violet-500", border: "border-violet-500/10" },
+    { label: "Aprovados", value: approvedCount, icon: CheckCircle, gradient: "from-emerald-500/10 to-emerald-600/5", iconColor: "text-emerald-500", border: "border-emerald-500/10" },
+    { label: "Pendentes", value: pendingCount, icon: XCircle, gradient: "from-amber-500/10 to-amber-600/5", iconColor: "text-amber-500", border: "border-amber-500/10" },
+    { label: "Clientes Total", value: totalCustomers.toLocaleString(), icon: TrendingUp, gradient: "from-blue-500/10 to-blue-600/5", iconColor: "text-blue-500", border: "border-blue-500/10" },
+    { label: "WhatsApp Ativo", value: connectedWA, icon: Phone, gradient: "from-green-500/10 to-green-600/5", iconColor: "text-green-500", border: "border-green-500/10" },
+  ];
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Ambient background */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute -top-[40%] -right-[20%] w-[60%] h-[60%] rounded-full bg-primary/[0.02] blur-3xl" />
+        <div className="absolute -bottom-[30%] -left-[15%] w-[50%] h-[50%] rounded-full bg-violet-500/[0.02] blur-3xl" />
+      </div>
+
       {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+      <header className="sticky top-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-2xl backdrop-saturate-150">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
-              <Shield className="w-5 h-5 text-primary" />
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-lg shadow-primary/20">
+              <Shield className="w-5 h-5 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="text-base font-bold font-heading text-foreground leading-tight">Super Admin</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-lg font-bold font-heading text-foreground">Super Admin</h1>
+                <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px] font-medium">v2</Badge>
+              </div>
               <p className="text-xs text-muted-foreground">Gerenciamento da plataforma</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={loadConsultants} disabled={loadingData} className="gap-1.5 text-muted-foreground hover:text-foreground">
+          <div className="flex items-center gap-1.5">
+            <ThemeToggle />
+            <Button variant="ghost" size="icon" onClick={loadConsultants} disabled={loadingData} className="text-muted-foreground hover:text-foreground">
               <RefreshCw className={`w-4 h-4 ${loadingData ? "animate-spin" : ""}`} />
-              <span className="hidden sm:inline">Atualizar</span>
             </Button>
-            <Button variant="ghost" size="sm" onClick={handleLogout} className="text-muted-foreground hover:text-foreground gap-2">
+            <Button variant="ghost" size="icon" onClick={handleLogout} className="text-muted-foreground hover:text-foreground">
               <LogOut className="w-4 h-4" />
-              <span className="hidden sm:inline">Sair</span>
             </Button>
           </div>
         </div>
       </header>
 
       {/* Tab Navigation */}
-      <nav className="border-b border-border bg-card/50">
+      <nav className="border-b border-border/50 bg-background/60 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="flex">
+          <div className="flex gap-1">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
               return (
                 <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-all ${
-                    isActive ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
+                  className={`relative flex items-center gap-2 px-4 py-3.5 text-sm font-medium whitespace-nowrap transition-all rounded-t-lg ${
+                    isActive 
+                      ? "text-primary" 
+                      : "text-muted-foreground hover:text-foreground"
                   }`}>
                   <Icon className="w-4 h-4" />
                   {tab.label}
+                  {tab.count !== undefined && (
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${isActive ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"}`}>
+                      {tab.count}
+                    </span>
+                  )}
+                  {isActive && <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-primary rounded-full" />}
                 </button>
               );
             })}
@@ -272,49 +303,51 @@ const SuperAdmin = () => {
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+      <main className="relative max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
         {activeTab === "consultores" && (
           <>
-            {/* Stats Cards */}
+            {/* Stats Grid */}
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-              {[
-                { label: "Consultores", value: consultants.length, icon: Users, color: "text-primary" },
-                { label: "Aprovados", value: approvedCount, icon: CheckCircle, color: "text-green-400" },
-                { label: "Pendentes", value: pendingCount, icon: XCircle, color: "text-orange-400" },
-                { label: "Clientes Total", value: totalCustomers, icon: TrendingUp, color: "text-blue-400" },
-                { label: "WhatsApp Ativo", value: connectedWA, icon: Phone, color: "text-emerald-400" },
-              ].map((stat) => (
-                <div key={stat.label} className="rounded-xl border border-border bg-card p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <stat.icon className={`w-5 h-5 ${stat.color}`} />
+              {statCards.map((stat) => (
+                <div key={stat.label} className={`premium-card !p-4 group border ${stat.border} hover:scale-[1.02] transition-transform`}>
+                  <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${stat.gradient} flex items-center justify-center mb-3`}>
+                    <stat.icon className={`w-4.5 h-4.5 ${stat.iconColor}`} />
                   </div>
-                  <p className="text-2xl font-bold text-foreground">{stat.value}</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">{stat.label}</p>
+                  <p className="text-2xl font-bold text-foreground tracking-tight">{stat.value}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 font-medium">{stat.label}</p>
                 </div>
               ))}
             </div>
 
             {/* Search */}
             <div className="flex items-center gap-3">
-              <div className="relative flex-1 max-w-sm">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   placeholder="Buscar por nome, licença ou telefone..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9 bg-card border-border"
+                  className="pl-10 h-10 bg-card/50 border-border/50 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary/30"
                 />
               </div>
-              <span className="text-xs text-muted-foreground">{filtered.length} consultor(es)</span>
+              <Badge variant="outline" className="text-xs py-1.5 px-3 border-border/50">
+                {filtered.length} consultor(es)
+              </Badge>
             </div>
 
             {/* Consultant Cards */}
             {loadingData ? (
-              <div className="flex justify-center py-12">
-                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              <div className="flex flex-col items-center justify-center py-16 gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center animate-pulse">
+                  <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                </div>
+                <p className="text-sm text-muted-foreground">Carregando consultores...</p>
               </div>
             ) : filtered.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">Nenhum consultor encontrado</div>
+              <div className="premium-card text-center py-16">
+                <Search className="w-8 h-8 text-muted-foreground/40 mx-auto mb-3" />
+                <p className="text-muted-foreground font-medium">Nenhum consultor encontrado</p>
+              </div>
             ) : (
               <TooltipProvider>
                 <div className="grid gap-3">
@@ -324,45 +357,45 @@ const SuperAdmin = () => {
                     const totalMsgs = (wa?.totalMsgsSent || 0) + (wa?.totalMsgsReceived || 0);
 
                     return (
-                      <div key={c.id} className="rounded-xl border border-border bg-card hover:border-primary/30 transition-colors">
-                        <div className="p-4">
-                          {/* Top row: name + status + actions */}
-                          <div className="flex items-start justify-between gap-4 mb-4">
-                            <div className="flex items-center gap-3 min-w-0">
-                              {/* Avatar placeholder */}
-                              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                                <span className="text-sm font-bold text-primary">
+                      <div key={c.id} className="premium-card !p-0 overflow-hidden group">
+                        <div className="p-5">
+                          {/* Top: Avatar + Name + Actions */}
+                          <div className="flex items-start justify-between gap-4 mb-5">
+                            <div className="flex items-center gap-3.5 min-w-0">
+                              <div className={`relative w-11 h-11 rounded-xl bg-gradient-to-br ${c.approved ? "from-emerald-500/20 to-emerald-600/10" : "from-amber-500/20 to-amber-600/10"} flex items-center justify-center shrink-0 ${activity.ring}`}>
+                                <span className={`text-sm font-bold ${c.approved ? "text-emerald-500" : "text-amber-500"}`}>
                                   {c.name.charAt(0).toUpperCase()}
                                 </span>
+                                {wa?.hasInstance && (
+                                  <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-green-500 border-2 border-card flex items-center justify-center">
+                                    <Wifi className="w-2 h-2 text-white" />
+                                  </div>
+                                )}
                               </div>
                               <div className="min-w-0">
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 mb-0.5">
                                   <h3 className="font-semibold text-foreground truncate">{c.name}</h3>
-                                  <Badge
-                                    variant={c.approved ? "default" : "secondary"}
-                                    className={`text-[10px] px-1.5 py-0 shrink-0 ${
-                                      c.approved
-                                        ? "bg-green-500/15 text-green-400 border-green-500/25"
-                                        : "bg-orange-500/15 text-orange-400 border-orange-500/25"
-                                    }`}
-                                  >
+                                  <Badge className={`text-[10px] px-2 py-0 h-5 font-medium border ${
+                                    c.approved
+                                      ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+                                      : "bg-amber-500/10 text-amber-500 border-amber-500/20"
+                                  }`}>
                                     {c.approved ? "Aprovado" : "Pendente"}
                                   </Badge>
                                 </div>
-                                <p className="text-xs text-muted-foreground truncate">{c.license}</p>
+                                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                                  <span>{c.license}</span>
+                                  <span className="w-1 h-1 rounded-full bg-border" />
+                                  <span>{c.phone}</span>
+                                </div>
                               </div>
                             </div>
 
-                            {/* Actions */}
-                            <div className="flex items-center gap-1.5 shrink-0">
+                            <div className="flex items-center gap-1 shrink-0 opacity-70 group-hover:opacity-100 transition-opacity">
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost" size="sm"
-                                    onClick={() => handleResetPassword(c.id, c.name)}
-                                    disabled={resettingId === c.id}
-                                    className="h-8 w-8 p-0"
-                                  >
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg"
+                                    onClick={() => handleResetPassword(c.id, c.name)} disabled={resettingId === c.id}>
                                     {resettingId === c.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <KeyRound className="w-3.5 h-3.5" />}
                                   </Button>
                                 </TooltipTrigger>
@@ -373,7 +406,7 @@ const SuperAdmin = () => {
                                 size="sm"
                                 onClick={() => toggleApproval(c.id, c.approved)}
                                 disabled={togglingId === c.id}
-                                className="h-8 gap-1 text-xs"
+                                className={`h-8 gap-1.5 text-xs rounded-lg ${c.approved ? "" : "shadow-lg shadow-primary/20"}`}
                               >
                                 {togglingId === c.id ? (
                                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -387,83 +420,38 @@ const SuperAdmin = () => {
                             </div>
                           </div>
 
-                          {/* Metrics row */}
-                          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                            {/* Clientes */}
-                            <div className="flex items-center gap-2.5 rounded-lg bg-muted/40 px-3 py-2">
-                              <Users className="w-4 h-4 text-blue-400 shrink-0" />
-                              <div>
-                                <p className="text-sm font-semibold text-foreground leading-none">{c.total_customers || 0}</p>
-                                <p className="text-[10px] text-muted-foreground mt-0.5">
-                                  Clientes
-                                  {(c.customers_7d || 0) > 0 && (
-                                    <span className="text-green-400 ml-1">+{c.customers_7d}</span>
-                                  )}
-                                </p>
-                              </div>
-                            </div>
-
-                            {/* Deals */}
-                            <div className="flex items-center gap-2.5 rounded-lg bg-muted/40 px-3 py-2">
-                              <TrendingUp className="w-4 h-4 text-purple-400 shrink-0" />
-                              <div>
-                                <p className="text-sm font-semibold text-foreground leading-none">{c.total_deals || 0}</p>
-                                <p className="text-[10px] text-muted-foreground mt-0.5">Deals CRM</p>
-                              </div>
-                            </div>
-
-                            {/* Views 7d */}
-                            <div className="flex items-center gap-2.5 rounded-lg bg-muted/40 px-3 py-2">
-                              <Eye className="w-4 h-4 text-amber-400 shrink-0" />
-                              <div>
-                                <p className="text-sm font-semibold text-foreground leading-none">{c.views_7d || 0}</p>
-                                <p className="text-[10px] text-muted-foreground mt-0.5">Views 7d</p>
-                              </div>
-                            </div>
-
-                            {/* WhatsApp */}
+                          {/* Metrics Grid */}
+                          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                            <MetricPill icon={<Users className="w-3.5 h-3.5" />} iconColor="text-blue-500" bgColor="bg-blue-500/8" value={c.total_customers || 0} label="Clientes" badge={c.customers_7d ? `+${c.customers_7d}` : undefined} badgeColor="text-emerald-500" />
+                            <MetricPill icon={<TrendingUp className="w-3.5 h-3.5" />} iconColor="text-violet-500" bgColor="bg-violet-500/8" value={c.total_deals || 0} label="Deals CRM" />
+                            <MetricPill icon={<Eye className="w-3.5 h-3.5" />} iconColor="text-amber-500" bgColor="bg-amber-500/8" value={c.views_7d || 0} label="Views 7d" />
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <div className="flex items-center gap-2.5 rounded-lg bg-muted/40 px-3 py-2 cursor-default">
-                                  {wa?.hasInstance ? (
-                                    <Wifi className="w-4 h-4 text-green-400 shrink-0" />
-                                  ) : (
-                                    <WifiOff className="w-4 h-4 text-muted-foreground shrink-0" />
-                                  )}
+                                <div className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 ${wa?.hasInstance ? "bg-green-500/8" : "bg-muted/40"} transition-colors cursor-default`}>
+                                  {wa?.hasInstance ? <Wifi className="w-3.5 h-3.5 text-green-500 shrink-0" /> : <WifiOff className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
                                   <div>
                                     <div className="flex items-center gap-1.5">
                                       <span className="text-sm font-semibold text-foreground leading-none">{totalMsgs}</span>
-                                      {(wa?.scheduledFailed || 0) > 0 && (
-                                        <AlertTriangle className="w-3 h-3 text-red-400" />
-                                      )}
+                                      {(wa?.scheduledFailed || 0) > 0 && <AlertTriangle className="w-3 h-3 text-red-400" />}
                                     </div>
-                                    <p className="text-[10px] text-muted-foreground mt-0.5">
-                                      {wa?.hasInstance ? "WhatsApp" : "Sem conexão"}
-                                    </p>
+                                    <p className="text-[10px] text-muted-foreground mt-0.5">{wa?.hasInstance ? "WhatsApp" : "Sem conexão"}</p>
                                   </div>
                                 </div>
                               </TooltipTrigger>
-                              <TooltipContent side="top" className="text-xs space-y-1">
+                              <TooltipContent side="top" className="text-xs space-y-1.5 max-w-xs">
                                 <p className="font-semibold">{wa?.hasInstance ? "✅ Conectado" : "❌ Desconectado"}</p>
                                 {wa?.instanceName && <p className="text-muted-foreground">{wa.instanceName}</p>}
                                 <div className="flex items-center gap-3">
-                                  <span className="flex items-center gap-1 text-green-400"><Send className="w-3 h-3" /> {wa?.totalMsgsSent || 0} enviadas</span>
-                                  <span className="flex items-center gap-1 text-blue-400"><MessageSquare className="w-3 h-3" /> {wa?.totalMsgsReceived || 0} recebidas</span>
+                                  <span className="flex items-center gap-1 text-green-400"><Send className="w-3 h-3" />{wa?.totalMsgsSent || 0}</span>
+                                  <span className="flex items-center gap-1 text-blue-400"><MessageSquare className="w-3 h-3" />{wa?.totalMsgsReceived || 0}</span>
                                 </div>
-                                {(wa?.scheduledFailed || 0) > 0 && (
-                                  <p className="text-red-400">⚠️ {wa?.scheduledFailed} falha(s) de agendamento</p>
-                                )}
+                                {(wa?.scheduledFailed || 0) > 0 && <p className="text-red-400">⚠️ {wa?.scheduledFailed} falha(s)</p>}
                               </TooltipContent>
                             </Tooltip>
-
-                            {/* Última Atividade */}
-                            <div className="flex items-center gap-2.5 rounded-lg bg-muted/40 px-3 py-2">
-                              <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
+                            <div className="flex items-center gap-2.5 rounded-xl bg-muted/30 px-3 py-2.5">
+                              <div className={`w-2 h-2 rounded-full ${activity.dot} shrink-0`} />
                               <div>
-                                <div className="flex items-center gap-1.5">
-                                  <span className={`w-1.5 h-1.5 rounded-full ${activity.dot}`} />
-                                  <p className={`text-sm font-semibold leading-none ${activity.color}`}>{activity.text}</p>
-                                </div>
+                                <p className={`text-sm font-semibold leading-none ${activity.color}`}>{activity.text}</p>
                                 <p className="text-[10px] text-muted-foreground mt-0.5">Atividade</p>
                               </div>
                             </div>
@@ -485,5 +473,23 @@ const SuperAdmin = () => {
   );
 };
 
+function MetricPill({ icon, iconColor, bgColor, value, label, badge, badgeColor }: {
+  icon: React.ReactNode; iconColor: string; bgColor: string; value: number | string; label: string; badge?: string; badgeColor?: string;
+}) {
+  return (
+    <div className={`flex items-center gap-2.5 rounded-xl ${bgColor} px-3 py-2.5 transition-colors`}>
+      <span className={`shrink-0 ${iconColor}`}>{icon}</span>
+      <div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm font-semibold text-foreground leading-none">{value}</span>
+          {badge && <span className={`text-[10px] font-medium ${badgeColor}`}>{badge}</span>}
+        </div>
+        <p className="text-[10px] text-muted-foreground mt-0.5">{label}</p>
+      </div>
+    </div>
+  );
+}
+
 export default SuperAdmin;
+
 // cache-bust
