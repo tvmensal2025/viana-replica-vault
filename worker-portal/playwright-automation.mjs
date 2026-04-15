@@ -206,7 +206,61 @@ async function atualizarStatus(customerId, status, errorMsg = null) {
   await getSupabase().from('customers').update(updates).eq('id', customerId);
 }
 
-// ─── Whapi Media: baixar quando a URL no banco é whapi-media:xxx ─────────────
+// ─── Enviar link de reconhecimento facial ao cliente via WhatsApp ─────────────
+async function sendFacialLinkToCustomer(customerId, facialLink) {
+  const supabase = getSupabase();
+  if (!supabase) { console.error('   ❌ sendFacialLink: Supabase não configurado'); return; }
+  try {
+    const { data: customer } = await supabase
+      .from('customers').select('phone_whatsapp, consultant_id, name')
+      .eq('id', customerId).single();
+    if (!customer?.phone_whatsapp) { console.error('   ❌ sendFacialLink: telefone não encontrado'); return; }
+
+    let instanceName = null;
+    if (customer.consultant_id) {
+      const { data: inst } = await supabase
+        .from('whatsapp_instances').select('instance_name')
+        .eq('consultant_id', customer.consultant_id).limit(1).single();
+      instanceName = inst?.instance_name;
+    }
+
+    const evolutionUrl = (process.env.EVOLUTION_API_URL || '').replace(/\/$/, '');
+    const evolutionKey = process.env.EVOLUTION_API_KEY || '';
+
+    // Fallback: buscar das settings
+    let eUrl = evolutionUrl, eKey = evolutionKey;
+    if (!eUrl || !eKey) {
+      const { data: rows } = await supabase.from('settings').select('key, value');
+      const s = {}; (rows || []).forEach(r => { s[r.key] = r.value; });
+      eUrl = eUrl || (s.evolution_api_url || '').replace(/\/$/, '');
+      eKey = eKey || s.evolution_api_key || '';
+    }
+
+    let phone = String(customer.phone_whatsapp).replace(/\D/g, '');
+    if (!phone.startsWith('55')) phone = '55' + phone;
+    const remoteJid = `${phone}@s.whatsapp.net`;
+
+    const nome = customer.name?.split(' ')[0] || '';
+    const message = `📲 *Validação Facial*\n\nOlá${nome ? ' ' + nome : ''}! Falta apenas a validação facial para concluir seu cadastro.\n\n🔗 Abra o link abaixo *no celular*:\n${facialLink}\n\n📱 Siga as instruções na tela (selfie + documento).\n\n⚠️ Use boa iluminação e tire o óculos se necessário.\n\nQualquer dúvida, estamos aqui! ☀️`;
+
+    if (eUrl && eKey && instanceName) {
+      const res = await fetch(`${eUrl}/message/sendText/${instanceName}`, {
+        method: 'POST',
+        headers: { apikey: eKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ number: remoteJid, text: message }),
+      });
+      if (res.ok) {
+        console.log(`   ✅ Link facial enviado via WhatsApp para ${phone}`);
+        return;
+      }
+      console.warn(`   ⚠️  Evolution falhou: ${res.status}`);
+    }
+    console.warn('   ⚠️  Não foi possível enviar link facial via WhatsApp');
+  } catch (e) {
+    console.error(`   ❌ sendFacialLink erro: ${e.message}`);
+  }
+}
+
 let _whapiSettings = null;
 async function getWhapiSettings() {
   if (_whapiSettings) return _whapiSettings;
