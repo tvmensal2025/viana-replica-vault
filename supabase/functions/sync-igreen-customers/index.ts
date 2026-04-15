@@ -274,6 +274,18 @@ async function syncOneConsultant(
         diretos_inicio_rapido: m.diretos_inicio_rapido ?? 0,
         diretos_mes: m.diretos_mes ?? 0,
         total_pontos: safeNum(m.total_pontos) ?? 0,
+        graduacao: safeStr(m.graduacao) || null,
+        graduacao_expansao: safeStr(m.graduacao_expansao) || null,
+        data_nascimento: safeStr(m.data_nascimento) || null,
+        gp_total: safeNum(m.gp_total) ?? 0,
+        gi_total: safeNum(m.gi_total) ?? 0,
+        bonificavel: safeNum(m.bonificavel) ?? 0,
+        green_points: safeNum(m.green_points) ?? safeNum(m.greenpoints) ?? 0,
+        gp_mes: safeNum(m.gp_mes) ?? safeNum(m.gp) ?? 0,
+        gi_mes: safeNum(m.gi_mes) ?? safeNum(m.gi) ?? 0,
+        green_points_mes: safeNum(m.green_points_mes) ?? safeNum(m.greenpoints_mes) ?? 0,
+        diretos_ativos: m.diretos_ativos ?? m.qtde_diretos_ativos ?? 0,
+        pro: safeStr(m.pro) || null,
         updated_at: new Date().toISOString(),
       }));
 
