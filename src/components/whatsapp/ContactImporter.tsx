@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
-import { Users, ClipboardPaste, FileSpreadsheet, Download, Search, X, CheckSquare, AlertTriangle, Trash2 } from "lucide-react";
+import { Users, ClipboardPaste, FileSpreadsheet, Download, Search, X, CheckSquare, AlertTriangle, Trash2, Phone, Loader2, UserCircle, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/components/ui/use-toast";
 import * as XLSX from "xlsx";
+import { findContacts, fetchAllGroups, getGroupParticipants, type EvolutionContact, type EvolutionGroup, type EvolutionGroupParticipant } from "@/services/evolutionApi";
 import type { BulkContact } from "@/types/whatsapp";
 
 interface Customer {
@@ -21,12 +22,48 @@ interface ContactImporterProps {
   contacts: BulkContact[];
   onContactsChange: (contacts: BulkContact[]) => void;
   disabled?: boolean;
+  instanceName?: string;
 }
 
 function isValidPhone(phone: string): boolean {
   if (!phone) return false;
   if (/sem_celular/i.test(phone)) return false;
   return phone.replace(/\D/g, "").length >= 10;
+}
+
+function formatPhone(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  if (/^55\d{10,11}$/.test(digits)) {
+    const ddd = digits.slice(2, 4);
+    const number = digits.slice(4);
+    if (number.length === 9) return `(${ddd}) ${number.slice(0, 5)}-${number.slice(5)}`;
+    if (number.length === 8) return `(${ddd}) ${number.slice(0, 4)}-${number.slice(4)}`;
+  }
+  if (digits.length > 8) return `+${digits.slice(0, 2)} ${digits.slice(2)}`;
+  return raw;
+}
+
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return (name[0] || "?").toUpperCase();
+}
+
+const AVATAR_COLORS = [
+  "bg-blue-500/20 text-blue-400",
+  "bg-emerald-500/20 text-emerald-400",
+  "bg-purple-500/20 text-purple-400",
+  "bg-orange-500/20 text-orange-400",
+  "bg-pink-500/20 text-pink-400",
+  "bg-cyan-500/20 text-cyan-400",
+  "bg-amber-500/20 text-amber-400",
+  "bg-rose-500/20 text-rose-400",
+];
+
+function getAvatarColor(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
 type StatusFilter = "all" | "approved" | "rejected" | "pending";
@@ -51,7 +88,58 @@ function matchDevolutiva(devolutiva: string | null | undefined, categoryKey: str
   return cat.match.some(m => lower.includes(m));
 }
 
-export function ContactImporter({ customers, contacts, onContactsChange, disabled }: ContactImporterProps) {
+function statusBadge(status?: string) {
+  switch (status) {
+    case "approved": return { label: "Aprovado", cls: "bg-emerald-500/15 text-emerald-400 border-emerald-500/25" };
+    case "rejected": return { label: "Reprovado", cls: "bg-red-500/15 text-red-400 border-red-500/25" };
+    case "pending": return { label: "Pendente", cls: "bg-amber-500/15 text-amber-400 border-amber-500/25" };
+    case "active": return { label: "Ativo", cls: "bg-blue-500/15 text-blue-400 border-blue-500/25" };
+    default: return null;
+  }
+}
+
+function ContactRow({ name, phone, valid, selected, onToggle, status, source }: {
+  name: string; phone: string; valid: boolean; selected?: boolean;
+  onToggle?: () => void; status?: string; source?: string;
+}) {
+  const badge = status ? statusBadge(status) : null;
+  return (
+    <div className={`flex items-center gap-2.5 px-3 py-2 transition-colors ${!valid ? "opacity-40" : ""} ${selected ? "bg-primary/5" : "hover:bg-secondary/40"}`}>
+      {onToggle && <Checkbox checked={selected} onCheckedChange={onToggle} disabled={!valid} />}
+      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 ${getAvatarColor(name)}`}>
+        {getInitials(name)}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-foreground truncate leading-tight">{name}</p>
+        <div className="flex items-center gap-1.5 mt-0.5">
+          <Phone className="w-3 h-3 text-muted-foreground/60" />
+          <span className={`text-xs ${valid ? "text-muted-foreground" : "text-red-400 line-through"}`}>
+            {formatPhone(phone)}
+          </span>
+        </div>
+      </div>
+      {badge && (
+        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md border shrink-0 ${badge.cls}`}>
+          {badge.label}
+        </span>
+      )}
+      {source && (
+        <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ${
+          source === "database" ? "bg-blue-500/15 text-blue-400" :
+          source === "pasted" ? "bg-purple-500/15 text-purple-400" :
+          source === "group" ? "bg-cyan-500/15 text-cyan-400" :
+          source === "contact" ? "bg-orange-500/15 text-orange-400" :
+          "bg-green-500/15 text-green-400"
+        }`}>
+          {source === "database" ? "Base" : source === "pasted" ? "Colado" : source === "group" ? "Grupo" : source === "contact" ? "Celular" : "Importado"}
+        </span>
+      )}
+      {!valid && <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />}
+    </div>
+  );
+}
+
+export function ContactImporter({ customers, contacts, onContactsChange, disabled, instanceName }: ContactImporterProps) {
   const [activeTab, setActiveTab] = useState("database");
   const [pasteText, setPasteText] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -59,6 +147,18 @@ export function ContactImporter({ customers, contacts, onContactsChange, disable
   const [devolutivaFilter, setDevolutivaFilter] = useState("all");
   const [licenciadoFilter, setLicenciadoFilter] = useState<Set<string>>(new Set());
   const [selectedDbIds, setSelectedDbIds] = useState<Set<string>>(new Set());
+
+  // Extract tab state
+  const [extractLoading, setExtractLoading] = useState(false);
+  const [phoneContacts, setPhoneContacts] = useState<EvolutionContact[]>([]);
+  const [groups, setGroups] = useState<EvolutionGroup[]>([]);
+  const [selectedGroupJid, setSelectedGroupJid] = useState<string | null>(null);
+  const [groupParticipants, setGroupParticipants] = useState<EvolutionGroupParticipant[]>([]);
+  const [groupParticipantsLoading, setGroupParticipantsLoading] = useState(false);
+  const [selectedExtractIds, setSelectedExtractIds] = useState<Set<string>>(new Set());
+  const [extractSearch, setExtractSearch] = useState("");
+  const [extractMode, setExtractMode] = useState<"contacts" | "groups">("contacts");
+
   const { toast } = useToast();
 
   const licenciadoOptions = useMemo(() => {
@@ -131,15 +231,9 @@ export function ContactImporter({ customers, contacts, onContactsChange, disable
         phone = parts[0].replace(/\D/g, "");
         name = phone;
       } else {
-        // Detect which part is the phone
         const first = parts[0].replace(/\D/g, "");
-        if (first.length >= 10) {
-          phone = first;
-          name = parts[1];
-        } else {
-          name = parts[0];
-          phone = parts[1].replace(/\D/g, "");
-        }
+        if (first.length >= 10) { phone = first; name = parts[1]; }
+        else { name = parts[0]; phone = parts[1].replace(/\D/g, ""); }
       }
       if (phone.length >= 10 && !existing.has(phone)) {
         existing.add(phone);
@@ -201,26 +295,157 @@ export function ContactImporter({ customers, contacts, onContactsChange, disable
     onContactsChange([]);
   }, [onContactsChange]);
 
+  // ─── Extract: Load phone contacts ───
+  const loadPhoneContacts = useCallback(async () => {
+    if (!instanceName) { toast({ title: "WhatsApp não conectado", variant: "destructive" }); return; }
+    setExtractLoading(true);
+    try {
+      const all = await findContacts(instanceName);
+      const filtered = all.filter(c => {
+        const jid = c.remoteJid || c.id;
+        return jid.endsWith("@s.whatsapp.net") && !jid.startsWith("0@") && !jid.startsWith("status@");
+      });
+      setPhoneContacts(filtered);
+      toast({ title: `${filtered.length} contatos carregados do celular` });
+    } catch {
+      toast({ title: "Erro ao carregar contatos", variant: "destructive" });
+    } finally {
+      setExtractLoading(false);
+    }
+  }, [instanceName, toast]);
+
+  const loadGroups = useCallback(async () => {
+    if (!instanceName) { toast({ title: "WhatsApp não conectado", variant: "destructive" }); return; }
+    setExtractLoading(true);
+    try {
+      const allGroups = await fetchAllGroups(instanceName);
+      setGroups(allGroups);
+      toast({ title: `${allGroups.length} grupos encontrados` });
+    } catch {
+      toast({ title: "Erro ao carregar grupos", variant: "destructive" });
+    } finally {
+      setExtractLoading(false);
+    }
+  }, [instanceName, toast]);
+
+  const loadGroupParticipants = useCallback(async (groupJid: string) => {
+    if (!instanceName) return;
+    setGroupParticipantsLoading(true);
+    setSelectedGroupJid(groupJid);
+    setSelectedExtractIds(new Set());
+    try {
+      const group = groups.find(g => g.id === groupJid);
+      if (group?.participants && group.participants.length > 0) {
+        setGroupParticipants(group.participants);
+      } else {
+        const participants = await getGroupParticipants(instanceName, groupJid);
+        setGroupParticipants(participants);
+      }
+    } catch {
+      toast({ title: "Erro ao carregar participantes", variant: "destructive" });
+    } finally {
+      setGroupParticipantsLoading(false);
+    }
+  }, [instanceName, groups, toast]);
+
+  const addExtractedToList = useCallback(() => {
+    const existing = new Set(contacts.map(c => c.phone));
+    const newContacts: BulkContact[] = [];
+
+    if (extractMode === "contacts") {
+      for (const contact of phoneContacts) {
+        const jid = contact.remoteJid || contact.id;
+        if (!selectedExtractIds.has(jid)) continue;
+        const phone = jid.split("@")[0];
+        if (!isValidPhone(phone) || existing.has(phone)) continue;
+        existing.add(phone);
+        newContacts.push({ id: `contact-${phone}`, name: contact.pushName || phone, phone, source: "pasted" as const });
+      }
+    } else {
+      for (const p of groupParticipants) {
+        if (!selectedExtractIds.has(p.id)) continue;
+        const phone = p.id.split("@")[0];
+        if (!isValidPhone(phone) || existing.has(phone)) continue;
+        existing.add(phone);
+        newContacts.push({ id: `group-${phone}`, name: phone, phone, source: "pasted" as const });
+      }
+    }
+
+    onContactsChange([...contacts, ...newContacts]);
+    setSelectedExtractIds(new Set());
+    toast({ title: `${newContacts.length} contatos adicionados`, description: `Total: ${contacts.length + newContacts.length}` });
+  }, [contacts, onContactsChange, phoneContacts, groupParticipants, selectedExtractIds, extractMode, toast]);
+
+  const exportExtractToExcel = useCallback(() => {
+    const wb = XLSX.utils.book_new();
+    if (extractMode === "contacts" && phoneContacts.length > 0) {
+      const data = phoneContacts.map(c => ({
+        Nome: c.pushName || "",
+        Telefone: (c.remoteJid || c.id).split("@")[0],
+        "Telefone Formatado": formatPhone((c.remoteJid || c.id).split("@")[0]),
+      }));
+      const ws = XLSX.utils.json_to_sheet(data);
+      ws["!cols"] = [{ wch: 30 }, { wch: 18 }, { wch: 20 }];
+      XLSX.utils.book_append_sheet(wb, ws, "Contatos do Celular");
+      XLSX.writeFile(wb, "contatos_celular.xlsx");
+      toast({ title: `${data.length} contatos exportados para Excel` });
+    } else if (extractMode === "groups" && selectedGroupJid && groupParticipants.length > 0) {
+      const groupName = groups.find(g => g.id === selectedGroupJid)?.subject || "Grupo";
+      const safeSheetName = groupName.replace(/[\\/*?:\[\]]/g, "").slice(0, 31);
+      const data = groupParticipants.map(p => ({
+        Telefone: p.id.split("@")[0],
+        "Telefone Formatado": formatPhone(p.id.split("@")[0]),
+        Admin: p.admin ? "Sim" : "Não",
+      }));
+      const ws = XLSX.utils.json_to_sheet(data);
+      ws["!cols"] = [{ wch: 18 }, { wch: 20 }, { wch: 8 }];
+      XLSX.utils.book_append_sheet(wb, ws, safeSheetName);
+      XLSX.writeFile(wb, `grupo_${safeSheetName}.xlsx`);
+      toast({ title: `${data.length} participantes exportados` });
+    } else {
+      toast({ title: "Nenhum dado para exportar", variant: "destructive" });
+    }
+  }, [extractMode, phoneContacts, groups, selectedGroupJid, groupParticipants, toast]);
+
+  const filteredPhoneContacts = useMemo(() => {
+    if (!extractSearch.trim()) return phoneContacts;
+    const q = extractSearch.toLowerCase();
+    return phoneContacts.filter(c => {
+      const name = c.pushName || "";
+      const phone = (c.remoteJid || c.id).split("@")[0];
+      return name.toLowerCase().includes(q) || phone.includes(q);
+    });
+  }, [phoneContacts, extractSearch]);
+
+  const filteredGroupParticipants = useMemo(() => {
+    if (!extractSearch.trim()) return groupParticipants;
+    const q = extractSearch.toLowerCase();
+    return groupParticipants.filter(p => p.id.split("@")[0].includes(q));
+  }, [groupParticipants, extractSearch]);
+
   const validContacts = useMemo(() => contacts.filter(c => isValidPhone(c.phone)), [contacts]);
   const invalidContacts = contacts.length - validContacts.length;
 
   return (
     <div className="space-y-3">
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-3 h-9">
-          <TabsTrigger value="database" className="text-xs gap-1.5" disabled={disabled}>
+        <TabsList className="grid w-full grid-cols-4 h-9">
+          <TabsTrigger value="database" className="text-xs gap-1" disabled={disabled}>
             <Users className="w-3.5 h-3.5" /> Base
           </TabsTrigger>
-          <TabsTrigger value="paste" className="text-xs gap-1.5" disabled={disabled}>
+          <TabsTrigger value="extract" className="text-xs gap-1" disabled={disabled}>
+            <Globe className="w-3.5 h-3.5" /> Extrair
+          </TabsTrigger>
+          <TabsTrigger value="paste" className="text-xs gap-1" disabled={disabled}>
             <ClipboardPaste className="w-3.5 h-3.5" /> Colar
           </TabsTrigger>
-          <TabsTrigger value="import" className="text-xs gap-1.5" disabled={disabled}>
+          <TabsTrigger value="import" className="text-xs gap-1" disabled={disabled}>
             <FileSpreadsheet className="w-3.5 h-3.5" /> Importar
           </TabsTrigger>
         </TabsList>
 
+        {/* ─── DATABASE TAB ─── */}
         <TabsContent value="database" className="space-y-2 mt-2">
-          {/* Filters */}
           <div className="flex flex-wrap gap-1.5">
             {(["all", "approved", "rejected", "pending"] as const).map(f => (
               <button key={f} onClick={() => { setStatusFilter(f); setDevolutivaFilter("all"); }}
@@ -273,7 +498,7 @@ export function ContactImporter({ customers, contacts, onContactsChange, disable
 
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-            <Input placeholder="Buscar..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+            <Input placeholder="Buscar por nome ou telefone..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
               className="pl-8 h-8 text-xs rounded-lg bg-secondary/50 border-border/50" />
           </div>
 
@@ -285,30 +510,203 @@ export function ContactImporter({ customers, contacts, onContactsChange, disable
             <span className="text-[11px] text-primary font-bold">{selectedDbIds.size} marcados</span>
           </div>
 
-          <div className="max-h-40 overflow-y-auto rounded-lg border border-border/50 divide-y divide-border/30">
+          <div className="max-h-52 overflow-y-auto rounded-xl border border-border/50 divide-y divide-border/20">
             {filteredCustomers.length === 0 ? (
-              <p className="text-xs text-muted-foreground text-center py-4">Nenhum cliente encontrado</p>
-            ) : filteredCustomers.map(c => {
-              const valid = isValidPhone(c.phone_whatsapp);
-              return (
-                <div key={c.id} className={`flex items-center gap-2 px-3 py-1.5 text-xs ${!valid ? "opacity-40" : ""} ${selectedDbIds.has(c.id) ? "bg-primary/5" : ""}`}>
-                  <Checkbox checked={selectedDbIds.has(c.id)} onCheckedChange={() => {
-                    setSelectedDbIds(prev => { const n = new Set(prev); n.has(c.id) ? n.delete(c.id) : n.add(c.id); return n; });
-                  }} />
-                  <span className="flex-1 truncate text-foreground">{c.name}</span>
-                  <span className="text-muted-foreground shrink-0">{c.phone_whatsapp}</span>
-                  {!valid && <AlertTriangle className="w-3 h-3 text-red-400 shrink-0" />}
-                </div>
-              );
-            })}
+              <p className="text-xs text-muted-foreground text-center py-6">Nenhum cliente encontrado</p>
+            ) : filteredCustomers.map(c => (
+              <ContactRow
+                key={c.id}
+                name={c.name || c.phone_whatsapp}
+                phone={c.phone_whatsapp}
+                valid={isValidPhone(c.phone_whatsapp)}
+                selected={selectedDbIds.has(c.id)}
+                onToggle={() => setSelectedDbIds(prev => { const n = new Set(prev); n.has(c.id) ? n.delete(c.id) : n.add(c.id); return n; })}
+                status={c.status}
+              />
+            ))}
           </div>
 
           <Button size="sm" onClick={addFromDatabase} disabled={selectedDbIds.size === 0}
-            className="w-full gap-1.5 rounded-lg h-8 text-xs">
+            className="w-full gap-1.5 rounded-lg h-9 text-xs font-bold">
             <Users className="w-3.5 h-3.5" /> Adicionar {selectedDbIds.size} contatos à lista
           </Button>
         </TabsContent>
 
+        {/* ─── EXTRACT TAB ─── */}
+        <TabsContent value="extract" className="space-y-3 mt-2">
+          <div className="flex gap-1.5">
+            <button onClick={() => { setExtractMode("contacts"); setExtractSearch(""); setSelectedExtractIds(new Set()); }}
+              className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all flex items-center justify-center gap-1.5 ${
+                extractMode === "contacts" ? "bg-primary/20 border-primary/40 text-primary" : "bg-secondary/40 border-border/50 text-muted-foreground hover:bg-secondary/60"
+              }`}>
+              <UserCircle className="w-3.5 h-3.5" /> Contatos do Celular
+            </button>
+            <button onClick={() => { setExtractMode("groups"); setExtractSearch(""); setSelectedExtractIds(new Set()); }}
+              className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all flex items-center justify-center gap-1.5 ${
+                extractMode === "groups" ? "bg-primary/20 border-primary/40 text-primary" : "bg-secondary/40 border-border/50 text-muted-foreground hover:bg-secondary/60"
+              }`}>
+              <Users className="w-3.5 h-3.5" /> Grupos
+            </button>
+          </div>
+
+          {extractMode === "contacts" && (
+            <>
+              <Button size="sm" onClick={loadPhoneContacts} disabled={extractLoading || !instanceName}
+                className="w-full gap-1.5 rounded-lg h-9 text-xs" variant="outline">
+                {extractLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UserCircle className="w-3.5 h-3.5" />}
+                {extractLoading ? "Carregando..." : `Carregar Contatos${phoneContacts.length > 0 ? ` (${phoneContacts.length})` : ""}`}
+              </Button>
+
+              {phoneContacts.length > 0 && (
+                <>
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                    <Input placeholder="Buscar contato..." value={extractSearch} onChange={e => setExtractSearch(e.target.value)}
+                      className="pl-8 h-8 text-xs rounded-lg bg-secondary/50 border-border/50" />
+                  </div>
+
+                  <div className="flex items-center justify-between px-1">
+                    <label className="flex items-center gap-2 cursor-pointer text-xs">
+                      <Checkbox
+                        checked={filteredPhoneContacts.length > 0 && filteredPhoneContacts.every(c => selectedExtractIds.has(c.remoteJid || c.id))}
+                        onCheckedChange={(checked) => {
+                          setSelectedExtractIds(prev => {
+                            const n = new Set(prev);
+                            filteredPhoneContacts.forEach(c => { const jid = c.remoteJid || c.id; checked ? n.add(jid) : n.delete(jid); });
+                            return n;
+                          });
+                        }}
+                      />
+                      <span>Selecionar todos ({filteredPhoneContacts.length})</span>
+                    </label>
+                    <span className="text-[11px] text-primary font-bold">{selectedExtractIds.size} marcados</span>
+                  </div>
+
+                  <div className="max-h-52 overflow-y-auto rounded-xl border border-border/50 divide-y divide-border/20">
+                    {filteredPhoneContacts.map(c => {
+                      const jid = c.remoteJid || c.id;
+                      const phone = jid.split("@")[0];
+                      return (
+                        <ContactRow key={jid} name={c.pushName || phone} phone={phone}
+                          valid={isValidPhone(phone)} selected={selectedExtractIds.has(jid)}
+                          onToggle={() => setSelectedExtractIds(prev => { const n = new Set(prev); n.has(jid) ? n.delete(jid) : n.add(jid); return n; })}
+                        />
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={addExtractedToList} disabled={selectedExtractIds.size === 0}
+                      className="flex-1 gap-1.5 rounded-lg h-9 text-xs font-bold">
+                      <Users className="w-3.5 h-3.5" /> Adicionar {selectedExtractIds.size}
+                    </Button>
+                    <Button size="sm" onClick={exportExtractToExcel} variant="outline"
+                      className="gap-1.5 rounded-lg h-9 text-xs">
+                      <Download className="w-3.5 h-3.5" /> Excel
+                    </Button>
+                  </div>
+                </>
+              )}
+            </>
+          )}
+
+          {extractMode === "groups" && (
+            <>
+              <Button size="sm" onClick={loadGroups} disabled={extractLoading || !instanceName}
+                className="w-full gap-1.5 rounded-lg h-9 text-xs" variant="outline">
+                {extractLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Users className="w-3.5 h-3.5" />}
+                {extractLoading ? "Carregando..." : `Carregar Grupos${groups.length > 0 ? ` (${groups.length})` : ""}`}
+              </Button>
+
+              {groups.length > 0 && (
+                <>
+                  <div className="max-h-40 overflow-y-auto rounded-xl border border-border/50 divide-y divide-border/20">
+                    {groups.map(g => (
+                      <button key={g.id} onClick={() => loadGroupParticipants(g.id)}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors ${
+                          selectedGroupJid === g.id ? "bg-primary/10" : "hover:bg-secondary/40"
+                        }`}>
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 ${getAvatarColor(g.subject)}`}>
+                          {getInitials(g.subject)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-foreground truncate">{g.subject}</p>
+                          <p className="text-[11px] text-muted-foreground">{g.size || "?"} participantes</p>
+                        </div>
+                        {selectedGroupJid === g.id && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-primary/20 text-primary border border-primary/30">Selecionado</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+
+                  {selectedGroupJid && (
+                    <>
+                      {groupParticipantsLoading ? (
+                        <div className="flex items-center justify-center py-6 gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                          <span className="text-xs text-muted-foreground">Carregando participantes...</span>
+                        </div>
+                      ) : groupParticipants.length > 0 ? (
+                        <>
+                          <div className="relative">
+                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                            <Input placeholder="Buscar participante..." value={extractSearch} onChange={e => setExtractSearch(e.target.value)}
+                              className="pl-8 h-8 text-xs rounded-lg bg-secondary/50 border-border/50" />
+                          </div>
+
+                          <div className="flex items-center justify-between px-1">
+                            <label className="flex items-center gap-2 cursor-pointer text-xs">
+                              <Checkbox
+                                checked={filteredGroupParticipants.length > 0 && filteredGroupParticipants.every(p => selectedExtractIds.has(p.id))}
+                                onCheckedChange={(checked) => {
+                                  setSelectedExtractIds(prev => {
+                                    const n = new Set(prev);
+                                    filteredGroupParticipants.forEach(p => { checked ? n.add(p.id) : n.delete(p.id); });
+                                    return n;
+                                  });
+                                }}
+                              />
+                              <span>Selecionar todos ({filteredGroupParticipants.length})</span>
+                            </label>
+                            <span className="text-[11px] text-primary font-bold">{selectedExtractIds.size} marcados</span>
+                          </div>
+
+                          <div className="max-h-44 overflow-y-auto rounded-xl border border-border/50 divide-y divide-border/20">
+                            {filteredGroupParticipants.map(p => {
+                              const phone = p.id.split("@")[0];
+                              return (
+                                <ContactRow key={p.id} name={phone} phone={phone}
+                                  valid={isValidPhone(phone)} selected={selectedExtractIds.has(p.id)}
+                                  onToggle={() => setSelectedExtractIds(prev => { const n = new Set(prev); n.has(p.id) ? n.delete(p.id) : n.add(p.id); return n; })}
+                                />
+                              );
+                            })}
+                          </div>
+
+                          <div className="flex gap-2">
+                            <Button size="sm" onClick={addExtractedToList} disabled={selectedExtractIds.size === 0}
+                              className="flex-1 gap-1.5 rounded-lg h-9 text-xs font-bold">
+                              <Users className="w-3.5 h-3.5" /> Adicionar {selectedExtractIds.size}
+                            </Button>
+                            <Button size="sm" onClick={exportExtractToExcel} variant="outline"
+                              className="gap-1.5 rounded-lg h-9 text-xs">
+                              <Download className="w-3.5 h-3.5" /> Excel
+                            </Button>
+                          </div>
+                        </>
+                      ) : (
+                        <p className="text-xs text-muted-foreground text-center py-4">Nenhum participante encontrado</p>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+            </>
+          )}
+        </TabsContent>
+
+        {/* ─── PASTE TAB ─── */}
         <TabsContent value="paste" className="space-y-3 mt-2">
           <p className="text-xs text-muted-foreground">
             Cole os contatos, um por linha, no formato: <code className="px-1 py-0.5 bg-secondary rounded text-primary">nome;telefone</code> ou <code className="px-1 py-0.5 bg-secondary rounded text-primary">telefone;nome</code>
@@ -321,11 +719,12 @@ export function ContactImporter({ customers, contacts, onContactsChange, disable
             className="rounded-lg bg-secondary/30 border-border/40 resize-none text-xs font-mono"
           />
           <Button size="sm" onClick={parsePastedContacts} disabled={!pasteText.trim()}
-            className="w-full gap-1.5 rounded-lg h-8 text-xs">
+            className="w-full gap-1.5 rounded-lg h-9 text-xs font-bold">
             <ClipboardPaste className="w-3.5 h-3.5" /> Adicionar contatos colados
           </Button>
         </TabsContent>
 
+        {/* ─── IMPORT TAB ─── */}
         <TabsContent value="import" className="space-y-3 mt-2">
           <p className="text-xs text-muted-foreground">
             Importe um arquivo Excel ou CSV com as colunas <strong>nome</strong> e <strong>telefone</strong>.
@@ -340,9 +739,9 @@ export function ContactImporter({ customers, contacts, onContactsChange, disable
         </TabsContent>
       </Tabs>
 
-      {/* Contact summary */}
+      {/* ─── CONTACT SUMMARY ─── */}
       {contacts.length > 0 && (
-        <div className="rounded-lg border border-border/50 bg-secondary/10 p-3 space-y-2">
+        <div className="rounded-xl border border-border/50 bg-secondary/10 p-3 space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-foreground">
               📋 {contacts.length} contatos na lista
@@ -365,11 +764,16 @@ export function ContactImporter({ customers, contacts, onContactsChange, disable
               <span className="text-muted-foreground">Importados: {contacts.filter(c => c.source === "imported").length}</span>
             )}
           </div>
-          <div className="max-h-32 overflow-y-auto space-y-0.5">
+          <div className="max-h-40 overflow-y-auto rounded-lg divide-y divide-border/20">
             {contacts.map(c => (
-              <div key={c.id} className="flex items-center gap-2 text-[11px] px-2 py-1 rounded hover:bg-secondary/40">
-                <span className="flex-1 truncate text-foreground">{c.name}</span>
-                <span className="text-muted-foreground shrink-0">{c.phone}</span>
+              <div key={c.id} className="flex items-center gap-2.5 px-2 py-1.5 hover:bg-secondary/40 rounded">
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${getAvatarColor(c.name)}`}>
+                  {getInitials(c.name)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-foreground truncate leading-tight">{c.name}</p>
+                  <p className="text-[11px] text-muted-foreground">{formatPhone(c.phone)}</p>
+                </div>
                 <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
                   c.source === "database" ? "bg-blue-500/15 text-blue-400" :
                   c.source === "pasted" ? "bg-purple-500/15 text-purple-400" :
