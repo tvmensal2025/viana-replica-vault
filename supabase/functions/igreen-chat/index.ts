@@ -81,7 +81,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { message, history } = await req.json();
+    const { message, history, stream } = await req.json();
     if (!message || typeof message !== "string") {
       return new Response(JSON.stringify({ error: "message is required" }), {
         status: 400,
@@ -112,15 +112,45 @@ Deno.serve(async (req) => {
     }
     contents.push({ role: "user", parts: [{ text: message }] });
 
+    // Streaming mode
+    if (stream) {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:streamGenerateContent?alt=sse&key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: fullKnowledge }] },
+            contents,
+            generationConfig: { temperature: 0.4, maxOutputTokens: 1500, topP: 0.85 },
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        const errorBody = await res.text();
+        console.error("Gemini streaming error:", res.status, errorBody);
+        return new Response(
+          JSON.stringify({ reply: "Desculpe, não consegui processar sua pergunta agora. Tente novamente em instantes. 💚" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Response(res.body, {
+        headers: { ...corsHeaders, "Content-Type": "text/event-stream", "Cache-Control": "no-cache" },
+      });
+    }
+
+    // Non-streaming mode (fallback)
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           system_instruction: { parts: [{ text: fullKnowledge }] },
           contents,
-          generationConfig: { temperature: 0.4, maxOutputTokens: 1200, topP: 0.85 },
+          generationConfig: { temperature: 0.4, maxOutputTokens: 1500, topP: 0.85 },
         }),
       }
     );
