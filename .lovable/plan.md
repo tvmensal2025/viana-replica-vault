@@ -1,108 +1,106 @@
 
 
-# Plano: Redesign Completo do Fluxo do Bot WhatsApp
+# Plano: Corrigir Worker Portal Playwright - 8 Falhas Críticas
 
-## Problema Atual
-A primeira mensagem do bot é genérica e já pede a conta de energia direto, sem dar opções ao cliente. Falta persuasão, falta menu inicial, e não envia o vídeo explicativo.
+## Diagnóstico
 
-## Novo Fluxo Completo (Mapeado)
+Inspecionei o portal `digital.igreenenergy.com.br` ao vivo e identifiquei que **o portal foi redesenhado**. A automação atual falha em 8 pontos:
 
 ```text
-Cliente envia qualquer mensagem
-         │
-         ▼
-┌─────────────────────────────────┐
-│  WELCOME (Menu Inicial)         │
-│                                 │
-│  "Olá! Sou assistente da       │
-│  *[Nome Representante]*..."     │
-│                                 │
-│  1️⃣ Entender como funciona     │
-│  2️⃣ Cadastrar                  │
-│  3️⃣ Falar com humano           │
-└─────────────────────────────────┘
-         │
-    ┌────┼────────────────┐
-    ▼    ▼                ▼
- Opção 1  Opção 2       Opção 3
-    │       │              │
-    ▼       │              ▼
-┌──────┐    │    ┌──────────────────┐
-│VÍDEO │    │    │ "Um consultor    │
-│Conexão│   │    │  entrará em      │
-│Green  │   │    │  contato!"       │
-│enviado│   │    │  [FIM temporário]│
-└──────┘    │    └──────────────────┘
-    │       │
-    ▼       │
-┌──────────┐│
-│Pós-vídeo ││
-│           ││
-│ 2️⃣ Cad.  │◄┘
-│ 3️⃣ Humano│
-└──────────┘
-    │
-    ▼
-┌──────────────────────┐
-│ BOT CADASTRO         │
-│ (fluxo atual:        │
-│  aguardando_conta    │
-│  → OCR → docs → etc)│
-└──────────────────────┘
+FALHA                              CAUSA RAIZ
+─────────────────────────────────────────────────────────────────
+1. "nao_aplicavel" URL crash       Não trata valor especial
+2. Campo "Número" não encontrado   Timing: campos de endereço aparecem após CEP auto-fill, automação não espera
+3. Campo "instalação" não encontrado   Mesmo problema de timing
+4. Tipo documento não selecionado  Seletor MUI incompleto - dropdown "Tipo documento" usa MUI Select
+5. 0 inputs file encontrados      PORTAL REDESENHADO: uploads usam cards clicáveis "Frente"/"Verso", NÃO inputs file
+6. Perguntas 0 respostas          Perguntas só aparecem DEPOIS do upload de docs
+7. Conta de energia NÃO enviada   Mesmo que #5 - sem input file
+8. Botão submit não encontrado    Formulário incompleto, botão não aparece
 ```
 
-## Mudanças Técnicas
+## Mudanças no `worker-portal/playwright-automation.mjs`
 
-### 1. Edge Function `evolution-webhook/index.ts`
+### 1. Tratar "nao_aplicavel" no download de documentos (linhas ~292-341)
+- Na função `prepararDocumento()`: verificar se URL é "nao_aplicavel" ANTES de tentar fazer fetch
+- Se for "nao_aplicavel", retornar `null` em vez de placeholder
+- Ajustar `salvarDocumentosCliente()` para mesma verificação
 
-**Case `welcome`** — Substituir a mensagem atual por menu com 3 opções:
-- Mensagem persuasiva com emojis, mencionando 20% de desconto
-- Enviar via `sendButtons` com 3 botões: `entender_desconto`, `cadastrar_agora`, `falar_humano`
-- Manter `conversation_step = "welcome"` (o próximo step depende da resposta)
+### 2. Corrigir timing do campo "Número" endereço (linhas ~847-870)
+- Adicionar `await delay(3000)` antes de buscar campos de endereço (esperar auto-fill do CEP)
+- Usar `byPH('Número')` como primeira tentativa em vez do loop manual
+- Adicionar `waitFor({ state: 'visible', timeout: 10000 })` para o campo
 
-**Novo case `menu_inicial`** — Processa a resposta do menu:
-- **Opção 1 (`entender_desconto`)**: Envia o vídeo Conexão Green via `sendMedia` (nova função), depois envia menu reduzido (Cadastrar / Falar com Humano). Step → `pos_video`
-- **Opção 2 (`cadastrar_agora`)**: Step → `aguardando_conta` (inicia bot atual)
-- **Opção 3 (`falar_humano`)**: Envia mensagem "Um consultor entrará em contato em breve!". Step → `aguardando_humano`
+### 3. Corrigir timing do campo "Número da instalação" (linhas ~885-904)
+- Verificar que o placeholder exato é "Número da instalação" (com acento em "ç" e "ã")
+- Adicionar `byPH('Número da instalação')` como tentativa exata antes do parcial
+- Aumentar timeout de espera
 
-**Novo case `pos_video`** — Menu pós-vídeo:
-- Opção 2: Cadastrar → `aguardando_conta`
-- Opção 3: Falar com humano → `aguardando_humano`
+### 4. Corrigir dropdown "Tipo documento" (linhas ~918-979)
+- O dropdown MUI renderiza como `<div>` com `role="combobox"` ou similar
+- Ao clicar, abre um `<ul>` com `<li>` de opções no portal
+- Adicionar seletor: `div:has-text("Tipo documento")` com dropdown arrow
+- Clicar no trigger, esperar menu abrir, selecionar "CNH" ou "RG (Novo)" etc.
+- Fallback: usar `page.selectOption()` caso seja um `<select>` nativo escondido
 
-**Novo case `aguardando_humano`** — Qualquer msg recebida responde que o consultor foi notificado.
+### 5. REESCREVER uploads de documentos (linhas ~982-1036) - MUDANÇA MAIOR
+O portal agora usa **cards clicáveis** "Frente" e "Verso" em vez de `input[type="file"]`:
+- Clicar no card "Frente" → isso dispara um file dialog via JavaScript
+- Usar `page.waitForEvent('filechooser')` para capturar o dialog
+- Chamar `fileChooser.setFiles(docFrentePath)` para enviar o arquivo
+- Repetir para card "Verso" (se documento_back_url não for "nao_aplicavel")
+- Implementação:
+```javascript
+// Clicar em "Frente" e interceptar o file chooser
+const [frenteChooser] = await Promise.all([
+  page.waitForEvent('filechooser'),
+  page.locator('text=Frente').first().click()
+]);
+await frenteChooser.setFiles(docFrentePath);
 
-### 2. Nova função `sendMedia` em `_shared/evolution-api.ts`
-
-Adicionar função para enviar vídeo/imagem via Evolution API endpoint `message/sendMedia`:
-```typescript
-async function sendMedia(remoteJid, mediaUrl, caption, mediatype)
+// Clicar em "Verso" (se aplicável)
+if (docVersoPath && docVersoPath !== null) {
+  const [versoChooser] = await Promise.all([
+    page.waitForEvent('filechooser'),
+    page.locator('text=Verso').first().click()
+  ]);
+  await versoChooser.setFiles(docVersoPath);
+}
 ```
-Será usada para enviar o vídeo do Supabase Storage (URL já existente no projeto).
 
-### 3. Atualizar `_shared/whatsapp-api.ts`
+### 6. Corrigir perguntas (Procurador, PDF, Débitos) (linhas ~1038-1091)
+- As perguntas só aparecem DEPOIS do upload de docs ter sucesso
+- Adicionar `await delay(3000)` após uploads
+- Scroll para revelar perguntas
+- Adicionar seletores adicionais: `button:has-text("Não")`, `div[role="radio"]:has-text("Não")`
 
-Adicionar `sendMedia` ao sender existente (consistência).
+### 7. Upload conta de energia (linhas ~1093-1131)
+- Mesmo mecanismo de cards clicáveis
+- Usar `page.waitForEvent('filechooser')` ao clicar no card de upload da conta
+- O card pode ter texto "Conta de energia" ou similar
 
-### 4. Variável do vídeo
+### 8. Botão submit (linhas ~1177-1212)
+- O botão só aparece quando todos os campos obrigatórios estão preenchidos
+- Se uploads forem corrigidos, o botão deve aparecer
+- Manter seletores atuais como fallback
 
-Usar a URL já existente no projeto:
-`https://zlzasfhcxcznaprrragl.supabase.co/storage/v1/object/public/video%20igreen/WhatsApp%20Video%202025-05-29%20at%2021.37.39.mp4`
-
-### 5. Deploy
-
-Redeployar a Edge Function `evolution-webhook`.
+### 9. Corrigir SyntaxError no startup
+- O erro `SyntaxError: Unexpected token '*'` na linha 462 é um JSDoc comment
+- Pode ocorrer em versões específicas de Node.js com ESM
+- Converter JSDoc multiline `/** ... */` para comentários simples `// ...`
 
 ## Arquivos Modificados
 
-1. **`supabase/functions/_shared/evolution-api.ts`** — Adicionar `sendMedia`
-2. **`supabase/functions/evolution-webhook/index.ts`** — Novo fluxo welcome → menu_inicial → pos_video → aguardando_humano
-3. **`supabase/functions/_shared/whatsapp-api.ts`** — Adicionar `sendMedia` (consistência)
+1. **`worker-portal/playwright-automation.mjs`** — Todos os 8 fixes acima
+2. **`worker-portal/server.mjs`** — Converter JSDoc para comentários simples (fix SyntaxError)
 
-## Resultado Final
+## Resultado Esperado
 
-- Cliente recebe mensagem persuasiva com 3 opções claras
-- Opção 1 envia o vídeo automaticamente, depois oferece Cadastrar ou Falar com Humano
-- Opção 2 inicia o cadastro direto (fluxo existente preservado 100%)
-- Opção 3 encaminha para atendimento humano
-- Zero chance de erro: todas as respostas inesperadas reenviam o menu
+Após os fixes:
+- Documentos enviados via cards "Frente"/"Verso" com fileChooser
+- Todos os campos preenchidos (Número, instalação, tipo documento)
+- Perguntas respondidas automaticamente
+- Conta de energia enviada
+- Botão "Finalizar" clicado
+- Lead processado 100% sem intervenção manual
 
