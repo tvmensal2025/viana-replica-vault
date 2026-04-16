@@ -1,93 +1,108 @@
 
 
-# Plano: Melhorias no Envio em Massa + Exportação de Contatos + Auditoria de Agendamentos
+# Plano: Redesign Completo do Fluxo do Bot WhatsApp
 
-## Diagnóstico
+## Problema Atual
+A primeira mensagem do bot é genérica e já pede a conta de energia direto, sem dar opções ao cliente. Falta persuasão, falta menu inicial, e não envia o vídeo explicativo.
 
-### Envio em Massa
-- A lista de contatos já mostra nome e telefone, mas de forma **muito compacta** (texto 11px, difícil de ler)
-- Na lista de seleção do banco, nome e telefone aparecem em uma única linha sem destaque
-- Falta formatação visual profissional (avatar, badges de status, telefone formatado)
+## Novo Fluxo Completo (Mapeado)
 
-### Exportação de Contatos
-- **Não existe** funcionalidade para extrair contatos de grupos do WhatsApp
-- **Não existe** funcionalidade para exportar contatos do celular (via Evolution API `findContacts`)
-- A API Evolution já possui o endpoint `findContacts` e `findChats` que retorna grupos (`@g.us`)
-
-### Agendamentos
-- O sistema está **funcional**: 2 enviadas com sucesso, 1 falha (número incorreto)
-- Edge function `send-scheduled-messages` está correta
-- O cron job executa a cada 5 minutos via `pg_cron`
-
----
-
-## Mudanças Planejadas
-
-### 1. Redesign profissional da lista de contatos no Envio em Massa
-**Arquivo:** `src/components/whatsapp/ContactImporter.tsx`
-
-- Exibir **nome em negrito + telefone formatado** com layout claro em cada linha
-- Adicionar ícone de avatar (iniciais coloridas) para cada contato
-- Mostrar badge de status (aprovado/pendente/reprovado) na lista do banco
-- Telefones inválidos com destaque visual (ícone de alerta + texto riscado)
-- Lista final de contatos selecionados com nome, telefone formatado e fonte de origem
-
-### 2. Nova aba "Extrair Contatos" no ContactImporter
-**Arquivo:** `src/components/whatsapp/ContactImporter.tsx`
-
-Adicionar uma **4a aba** com duas seções:
-
-**a) Contatos do Celular:**
-- Busca via `findContacts` da Evolution API (já existe)
-- Lista todos os contatos salvos no celular conectado
-- Nome + telefone formatado
-- Checkbox para selecionar e adicionar à lista de envio
-- Botão "Exportar para Excel" com nome, telefone, pushName
-
-**b) Contatos de Grupos:**
-- Busca via Evolution API endpoint `group/fetchAllGroups/{instance}` para listar grupos
-- Para cada grupo selecionado, busca participantes via `group/participants/{instance}?groupJid=xxx`
-- Exibe participantes com nome + telefone
-- Exportar para Excel organizado por grupo (cada grupo = uma aba)
-
-### 3. Novos endpoints na Evolution API service
-**Arquivo:** `src/services/evolutionApi.ts`
-
-- `fetchAllGroups(instanceName)` — lista todos os grupos
-- `getGroupParticipants(instanceName, groupJid)` — participantes de um grupo
-
-### 4. Agendamentos — sem mudanças necessárias
-O sistema está funcionando corretamente. A falha registrada foi por número errado, não por bug.
-
----
-
-## Detalhes Técnicos
-
-### Novo componente de exportação Excel
-- Utiliza a lib `xlsx` já instalada no projeto
-- Contatos do celular: uma planilha com colunas Nome, Telefone, PushName
-- Contatos de grupos: uma aba por grupo com colunas Nome, Telefone, Admin (sim/não)
-
-### Evolution API endpoints utilizados
-```
-POST /chat/findContacts/{instance}  → contatos do celular (já existe)
-GET  /group/fetchAllGroups/{instance} → lista de grupos  
-GET  /group/participants/{instance}?groupJid=xxx → membros do grupo
+```text
+Cliente envia qualquer mensagem
+         │
+         ▼
+┌─────────────────────────────────┐
+│  WELCOME (Menu Inicial)         │
+│                                 │
+│  "Olá! Sou assistente da       │
+│  *[Nome Representante]*..."     │
+│                                 │
+│  1️⃣ Entender como funciona     │
+│  2️⃣ Cadastrar                  │
+│  3️⃣ Falar com humano           │
+└─────────────────────────────────┘
+         │
+    ┌────┼────────────────┐
+    ▼    ▼                ▼
+ Opção 1  Opção 2       Opção 3
+    │       │              │
+    ▼       │              ▼
+┌──────┐    │    ┌──────────────────┐
+│VÍDEO │    │    │ "Um consultor    │
+│Conexão│   │    │  entrará em      │
+│Green  │   │    │  contato!"       │
+│enviado│   │    │  [FIM temporário]│
+└──────┘    │    └──────────────────┘
+    │       │
+    ▼       │
+┌──────────┐│
+│Pós-vídeo ││
+│           ││
+│ 2️⃣ Cad.  │◄┘
+│ 3️⃣ Humano│
+└──────────┘
+    │
+    ▼
+┌──────────────────────┐
+│ BOT CADASTRO         │
+│ (fluxo atual:        │
+│  aguardando_conta    │
+│  → OCR → docs → etc)│
+└──────────────────────┘
 ```
 
-### Formatação de telefone profissional
-```
-5511990092401 → (11) 99009-2401
-5521988887777 → (21) 98888-7777
-```
+## Mudanças Técnicas
 
----
+### 1. Edge Function `evolution-webhook/index.ts`
+
+**Case `welcome`** — Substituir a mensagem atual por menu com 3 opções:
+- Mensagem persuasiva com emojis, mencionando 20% de desconto
+- Enviar via `sendButtons` com 3 botões: `entender_desconto`, `cadastrar_agora`, `falar_humano`
+- Manter `conversation_step = "welcome"` (o próximo step depende da resposta)
+
+**Novo case `menu_inicial`** — Processa a resposta do menu:
+- **Opção 1 (`entender_desconto`)**: Envia o vídeo Conexão Green via `sendMedia` (nova função), depois envia menu reduzido (Cadastrar / Falar com Humano). Step → `pos_video`
+- **Opção 2 (`cadastrar_agora`)**: Step → `aguardando_conta` (inicia bot atual)
+- **Opção 3 (`falar_humano`)**: Envia mensagem "Um consultor entrará em contato em breve!". Step → `aguardando_humano`
+
+**Novo case `pos_video`** — Menu pós-vídeo:
+- Opção 2: Cadastrar → `aguardando_conta`
+- Opção 3: Falar com humano → `aguardando_humano`
+
+**Novo case `aguardando_humano`** — Qualquer msg recebida responde que o consultor foi notificado.
+
+### 2. Nova função `sendMedia` em `_shared/evolution-api.ts`
+
+Adicionar função para enviar vídeo/imagem via Evolution API endpoint `message/sendMedia`:
+```typescript
+async function sendMedia(remoteJid, mediaUrl, caption, mediatype)
+```
+Será usada para enviar o vídeo do Supabase Storage (URL já existente no projeto).
+
+### 3. Atualizar `_shared/whatsapp-api.ts`
+
+Adicionar `sendMedia` ao sender existente (consistência).
+
+### 4. Variável do vídeo
+
+Usar a URL já existente no projeto:
+`https://zlzasfhcxcznaprrragl.supabase.co/storage/v1/object/public/video%20igreen/WhatsApp%20Video%202025-05-29%20at%2021.37.39.mp4`
+
+### 5. Deploy
+
+Redeployar a Edge Function `evolution-webhook`.
 
 ## Arquivos Modificados
 
-| Arquivo | Mudança |
-|---------|---------|
-| `src/components/whatsapp/ContactImporter.tsx` | Redesign visual + nova aba "Extrair" |
-| `src/services/evolutionApi.ts` | Novos endpoints grupos |
-| `src/components/whatsapp/BulkBlockSendPanel.tsx` | Ajustes menores de layout |
+1. **`supabase/functions/_shared/evolution-api.ts`** — Adicionar `sendMedia`
+2. **`supabase/functions/evolution-webhook/index.ts`** — Novo fluxo welcome → menu_inicial → pos_video → aguardando_humano
+3. **`supabase/functions/_shared/whatsapp-api.ts`** — Adicionar `sendMedia` (consistência)
+
+## Resultado Final
+
+- Cliente recebe mensagem persuasiva com 3 opções claras
+- Opção 1 envia o vídeo automaticamente, depois oferece Cadastrar ou Falar com Humano
+- Opção 2 inicia o cadastro direto (fluxo existente preservado 100%)
+- Opção 3 encaminha para atendimento humano
+- Zero chance de erro: todas as respostas inesperadas reenviam o menu
 
