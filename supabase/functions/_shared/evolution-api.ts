@@ -145,7 +145,45 @@ export function createEvolutionSender(apiUrl: string, apiKey: string, instanceNa
     }
   }
 
-  return { sendText, sendButtons, downloadMedia };
+  async function sendMedia(remoteJid: string, mediaUrl: string, caption: string, mediatype: "video" | "image" | "document" = "video"): Promise<boolean> {
+    try {
+      const res = await fetchWithTimeout(`${baseUrl}/message/sendMedia/${instanceName}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": apiKey,
+        },
+        body: JSON.stringify({
+          number: remoteJid,
+          mediatype,
+          mimetype: mediatype === "video" ? "video/mp4" : mediatype === "image" ? "image/jpeg" : "application/pdf",
+          caption,
+          media: mediaUrl,
+        }),
+        timeout: 60_000,
+      });
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        logStructured("error", "evolution_send_media_failed", {
+          instance: instanceName,
+          status: res.status,
+          error: errorText.substring(0, 200),
+        });
+        return false;
+      }
+
+      return true;
+    } catch (error: any) {
+      logStructured("error", "evolution_send_media_exception", {
+        instance: instanceName,
+        error: error?.message,
+      });
+      return false;
+    }
+  }
+
+  return { sendText, sendButtons, downloadMedia, sendMedia };
 }
 
 /**

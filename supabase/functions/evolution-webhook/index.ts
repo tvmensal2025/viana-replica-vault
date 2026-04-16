@@ -204,7 +204,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { sendText, sendButtons, downloadMedia } = createEvolutionSender(
+    const { sendText, sendButtons, downloadMedia, sendMedia } = createEvolutionSender(
       EVOLUTION_API_URL,
       EVOLUTION_API_KEY,
       instanceName
@@ -455,14 +455,124 @@ Deno.serve(async (req) => {
     // ═══════════════════════════════════════════════════════════════════
     switch (step) {
 
-      // ─── 1. BOAS-VINDAS ─────────────────────────────────────────────
+      // ─── 1. BOAS-VINDAS (Menu Inicial com 3 opções) ────────────────────
       case "welcome": {
-        reply =
-          `👋 Olá! Eu sou o assistente da *${nomeRepresentante}* em parceria com a *iGreen Energy*!\n\n` +
-          "💡 Sabia que você pode economizar até *20% na sua conta de luz* com energia solar?\n\n" +
-          "Para fazer uma simulação gratuita, preciso de alguns dados.\n\n" +
-          "📸 *Envie uma FOTO ou PDF da sua conta de energia* para começarmos!";
-        updates.conversation_step = "aguardando_conta";
+        const welcomeMsg =
+          `👋 Olá! Eu sou o assistente digital da *${nomeRepresentante}* em parceria com a *iGreen Energy*! ☀️\n\n` +
+          `💡 Você sabia que pode *economizar até 20% na sua conta de luz* sem precisar instalar nada?\n\n` +
+          `🌱 A iGreen Energy oferece energia limpa e renovável, direto da fonte para a sua casa!\n\n` +
+          `Como posso te ajudar?`;
+
+        await sendButtons(remoteJid, welcomeMsg, [
+          { id: "entender_desconto", title: "💡 Como funciona?" },
+          { id: "cadastrar_agora", title: "📋 Cadastrar" },
+          { id: "falar_humano", title: "🧑 Falar com humano" },
+        ]);
+
+        updates.conversation_step = "menu_inicial";
+        reply = "";
+        break;
+      }
+
+      // ─── 1b. MENU INICIAL (processa resposta do welcome) ──────────────
+      case "menu_inicial": {
+        const resp = isButton ? buttonId : messageText.toLowerCase().trim();
+
+        if (resp === "entender_desconto" || resp === "1" || resp?.includes("funciona") || resp?.includes("entender") || resp?.includes("desconto")) {
+          // Opção 1: Enviar vídeo explicativo
+          const videoUrl = "https://zlzasfhcxcznaprrragl.supabase.co/storage/v1/object/public/video%20igreen/WhatsApp%20Video%202025-05-29%20at%2021.37.39.mp4";
+          
+          await sendText(remoteJid, "🎬 Assista este vídeo rápido e entenda como funciona o desconto na sua conta de luz:");
+          
+          const sent = await sendMedia(remoteJid, videoUrl, "☀️ Conexão Green — Energia limpa com até 20% de desconto!", "video");
+          
+          if (!sent) {
+            // Fallback: enviar link
+            await sendText(remoteJid, `📹 Assista aqui: ${videoUrl}`);
+          }
+
+          // Aguardar 3 segundos antes do menu pós-vídeo
+          await new Promise(r => setTimeout(r, 3000));
+
+          const posVideoMsg = "📺 Assistiu o vídeo? Agora escolha como deseja prosseguir:";
+          await sendButtons(remoteJid, posVideoMsg, [
+            { id: "cadastrar_agora", title: "📋 Cadastrar agora" },
+            { id: "falar_humano", title: "🧑 Falar com humano" },
+          ]);
+
+          updates.conversation_step = "pos_video";
+          reply = "";
+
+        } else if (resp === "cadastrar_agora" || resp === "2" || resp?.includes("cadastr")) {
+          // Opção 2: Ir direto para cadastro
+          reply =
+            "📋 Ótimo! Vamos iniciar seu cadastro.\n\n" +
+            "📸 *Envie uma FOTO ou PDF da sua conta de energia* para começarmos!\n\n" +
+            "Formatos aceitos: JPG, PNG ou PDF";
+          updates.conversation_step = "aguardando_conta";
+
+        } else if (resp === "falar_humano" || resp === "3" || resp?.includes("humano") || resp?.includes("atendente") || resp?.includes("pessoa")) {
+          // Opção 3: Falar com humano
+          reply =
+            `🧑 Entendido! Um consultor da equipe *${nomeRepresentante}* entrará em contato com você em breve.\n\n` +
+            "⏰ Nosso horário de atendimento é de segunda a sexta, das 8h às 18h.\n\n" +
+            "Enquanto isso, se mudar de ideia, é só digitar *cadastrar* para iniciar!";
+          updates.conversation_step = "aguardando_humano";
+
+        } else {
+          // Resposta não reconhecida — reenviar menu
+          const retryMsg = "🤔 Não entendi sua resposta. Por favor, escolha uma das opções:";
+          await sendButtons(remoteJid, retryMsg, [
+            { id: "entender_desconto", title: "💡 Como funciona?" },
+            { id: "cadastrar_agora", title: "📋 Cadastrar" },
+            { id: "falar_humano", title: "🧑 Falar com humano" },
+          ]);
+          reply = "";
+        }
+        break;
+      }
+
+      // ─── 1c. PÓS-VÍDEO (menu reduzido) ───────────────────────────────
+      case "pos_video": {
+        const resp = isButton ? buttonId : messageText.toLowerCase().trim();
+
+        if (resp === "cadastrar_agora" || resp === "1" || resp?.includes("cadastr")) {
+          reply =
+            "📋 Ótimo! Vamos iniciar seu cadastro.\n\n" +
+            "📸 *Envie uma FOTO ou PDF da sua conta de energia* para começarmos!\n\n" +
+            "Formatos aceitos: JPG, PNG ou PDF";
+          updates.conversation_step = "aguardando_conta";
+
+        } else if (resp === "falar_humano" || resp === "2" || resp?.includes("humano") || resp?.includes("atendente") || resp?.includes("pessoa")) {
+          reply =
+            `🧑 Entendido! Um consultor da equipe *${nomeRepresentante}* entrará em contato com você em breve.\n\n` +
+            "⏰ Nosso horário de atendimento é de segunda a sexta, das 8h às 18h.\n\n" +
+            "Enquanto isso, se mudar de ideia, é só digitar *cadastrar* para iniciar!";
+          updates.conversation_step = "aguardando_humano";
+
+        } else {
+          const retryMsg = "🤔 Não entendi. Escolha uma opção:";
+          await sendButtons(remoteJid, retryMsg, [
+            { id: "cadastrar_agora", title: "📋 Cadastrar agora" },
+            { id: "falar_humano", title: "🧑 Falar com humano" },
+          ]);
+          reply = "";
+        }
+        break;
+      }
+
+      // ─── 1d. AGUARDANDO HUMANO ────────────────────────────────────────
+      case "aguardando_humano": {
+        const resp = messageText.toLowerCase().trim();
+        if (resp?.includes("cadastr") || resp === "2") {
+          reply =
+            "📋 Vamos iniciar seu cadastro!\n\n" +
+            "📸 *Envie uma FOTO ou PDF da sua conta de energia* para começarmos!\n\n" +
+            "Formatos aceitos: JPG, PNG ou PDF";
+          updates.conversation_step = "aguardando_conta";
+        } else {
+          reply = `⏳ Sua solicitação já foi registrada! Um consultor da equipe *${nomeRepresentante}* entrará em contato em breve.\n\nSe quiser iniciar o cadastro agora, digite *cadastrar*.`;
+        }
         break;
       }
 

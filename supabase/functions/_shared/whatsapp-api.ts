@@ -66,5 +66,31 @@ export function createWhatsAppSender(evolutionUrl: string, evolutionKey: string,
     return false;
   }
 
-  return { sendText, sendButtons };
+  async function sendMedia(chatId: string, mediaUrl: string, caption: string, mediatype: "video" | "image" | "document" = "video"): Promise<boolean> {
+    const number = chatId.replace("@s.whatsapp.net", "");
+    try {
+      const res = await fetchWithTimeout(`${base}/message/sendMedia/${instanceName}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: evolutionKey },
+        body: JSON.stringify({
+          number,
+          mediatype,
+          mimetype: mediatype === "video" ? "video/mp4" : mediatype === "image" ? "image/jpeg" : "application/pdf",
+          caption,
+          media: mediaUrl,
+        }),
+        timeout: 60_000,
+      });
+      if (!res.ok) {
+        console.error("sendMedia Evolution falhou:", res.status);
+        return false;
+      }
+      return true;
+    } catch (e: any) {
+      console.error("sendMedia Evolution erro:", e?.message);
+      return false;
+    }
+  }
+
+  return { sendText, sendButtons, sendMedia };
 }
