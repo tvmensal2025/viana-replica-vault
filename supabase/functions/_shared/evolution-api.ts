@@ -146,6 +146,8 @@ export function createEvolutionSender(apiUrl: string, apiKey: string, instanceNa
   }
 
   async function sendMedia(remoteJid: string, mediaUrl: string, caption: string, mediatype: "video" | "image" | "document" = "video"): Promise<boolean> {
+    // Evolution API espera apenas o número, sem sufixo JID
+    const number = remoteJid.replace("@s.whatsapp.net", "").replace("@c.us", "");
     try {
       const res = await fetchWithTimeout(`${baseUrl}/message/sendMedia/${instanceName}`, {
         method: "POST",
@@ -154,13 +156,14 @@ export function createEvolutionSender(apiUrl: string, apiKey: string, instanceNa
           "apikey": apiKey,
         },
         body: JSON.stringify({
-          number: remoteJid,
+          number,
           mediatype,
           mimetype: mediatype === "video" ? "video/mp4" : mediatype === "image" ? "image/jpeg" : "application/pdf",
           caption,
           media: mediaUrl,
+          fileName: mediatype === "video" ? "video.mp4" : mediatype === "image" ? "image.jpg" : "document.pdf",
         }),
-        timeout: 60_000,
+        timeout: 120_000,
       });
 
       if (!res.ok) {
