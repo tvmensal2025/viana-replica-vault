@@ -44,14 +44,7 @@ const ConsultantPage = () => {
   const rawPhone = consultant.phone?.replace(/\D/g, '') || "";
   const normalizedPhone = rawPhone.startsWith("55") ? rawPhone : `55${rawPhone}`;
   
-  // QR code: priorizar connected_phone da instância
-  const qrPhone = instancePhone || normalizedPhone;
-  const botMessage = encodeURIComponent(
-    "Olá! Gostaria de fazer meu cadastro na iGreen Energy e enviar meus documentos."
-  );
-  const whatsappBotUrl = `https://api.whatsapp.com/send?phone=${qrPhone}&text=${botMessage}`;
-
-  // Botão de atendimento: também priorizar instância
+  // Botão de atendimento: priorizar instância
   const contactPhone = instancePhone || normalizedPhone;
   const whatsappUrl = `https://api.whatsapp.com/send?phone=${contactPhone}&text=${encodeURIComponent("Olá, gostaria de mais informações sobre o desconto na conta de luz oferecido pela iGreen Energy")}`;
 
