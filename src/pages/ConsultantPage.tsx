@@ -2,7 +2,7 @@ import { useParams } from "react-router-dom";
 import { useConsultant } from "@/hooks/useConsultant";
 import { useTrackView } from "@/hooks/useTrackView";
 import HeroSection from "@/components/HeroSection";
-import QRCodeSection from "@/components/QRCodeSection";
+
 import AboutSection from "@/components/AboutSection";
 import HowItWorksSection from "@/components/HowItWorksSection";
 import SolarPlantsSection from "@/components/SolarPlantsSection";
