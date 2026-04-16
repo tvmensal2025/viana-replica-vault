@@ -2,7 +2,7 @@ import { useParams } from "react-router-dom";
 import { useConsultant } from "@/hooks/useConsultant";
 import { useTrackView } from "@/hooks/useTrackView";
 import HeroSection from "@/components/HeroSection";
-import QRCodeSection from "@/components/QRCodeSection";
+
 import AboutSection from "@/components/AboutSection";
 import HowItWorksSection from "@/components/HowItWorksSection";
 import SolarPlantsSection from "@/components/SolarPlantsSection";
@@ -44,14 +44,7 @@ const ConsultantPage = () => {
   const rawPhone = consultant.phone?.replace(/\D/g, '') || "";
   const normalizedPhone = rawPhone.startsWith("55") ? rawPhone : `55${rawPhone}`;
   
-  // QR code: priorizar connected_phone da instância
-  const qrPhone = instancePhone || normalizedPhone;
-  const botMessage = encodeURIComponent(
-    "Olá! Gostaria de fazer meu cadastro na iGreen Energy e enviar meus documentos."
-  );
-  const whatsappBotUrl = `https://api.whatsapp.com/send?phone=${qrPhone}&text=${botMessage}`;
-
-  // Botão de atendimento: também priorizar instância
+  // Botão de atendimento: priorizar instância
   const contactPhone = instancePhone || normalizedPhone;
   const whatsappUrl = `https://api.whatsapp.com/send?phone=${contactPhone}&text=${encodeURIComponent("Olá, gostaria de mais informações sobre o desconto na conta de luz oferecido pela iGreen Energy")}`;
 
@@ -64,11 +57,6 @@ const ConsultantPage = () => {
       />
       <div className="min-h-screen">
         <HeroSection cadastroUrl={consultant.cadastro_url} whatsappUrl={whatsappUrl} consultantId={consultant.id} />
-        <QRCodeSection
-          whatsappUrl={whatsappBotUrl}
-          consultantName={consultant.name}
-          consultantId={consultant.igreen_id || undefined}
-        />
         <AboutSection />
         <HowItWorksSection />
         <SolarPlantsSection />
