@@ -858,33 +858,74 @@ export async function executarAutomacao(customerId, options = {}) {
     await page.evaluate(() => window.scrollBy(0, 300));
     await delay(1500);
     
-    // Preencher "Número" - buscar campo com placeholder exato "Número"
+    // Preencher "Número" - MUI floating labels + placeholder fallback
     let numField = null;
-    // Tentativa 1: placeholder exato
-    const numByPH = byPH('Número');
-    if (await numByPH.count() > 0 && await numByPH.isVisible().catch(() => false)) {
-      numField = numByPH;
+    
+    // Tentativa 1: getByLabel (MUI floating label) — exact match para não pegar "Número da instalação"
+    try {
+      const numByLabel = page.getByLabel('Número', { exact: true });
+      if (await numByLabel.count() > 0 && await numByLabel.isVisible().catch(() => false)) {
+        numField = numByLabel;
+        console.log('   📍 Campo Número encontrado via getByLabel');
+      }
+    } catch (_) {}
+    
+    // Tentativa 2: label adjacente ao input (MUI pattern: label + div > input)
+    if (!numField) {
+      const numByLabelCSS = page.locator('label:has-text("Número") + div input, label:has-text("Número") ~ div input').first();
+      if (await numByLabelCSS.count() > 0 && await numByLabelCSS.isVisible().catch(() => false)) {
+        // Verificar que não é "Número da instalação" ou "Número do seu WhatsApp"
+        const parentText = await numByLabelCSS.evaluate(el => {
+          const parent = el.closest('.MuiFormControl-root') || el.parentElement?.parentElement;
+          return parent?.textContent || '';
+        }).catch(() => '');
+        if (!parentText.includes('instalação') && !parentText.includes('WhatsApp') && !parentText.includes('celular')) {
+          numField = numByLabelCSS;
+          console.log('   📍 Campo Número encontrado via label CSS');
+        }
+      }
     }
-    // Tentativa 2: buscar todos inputs visíveis e filtrar
+    
+    // Tentativa 3: placeholder exato
+    if (!numField) {
+      const numByPH = byPH('Número');
+      if (await numByPH.count() > 0 && await numByPH.isVisible().catch(() => false)) {
+        numField = numByPH;
+        console.log('   📍 Campo Número encontrado via placeholder');
+      }
+    }
+    
+    // Tentativa 4: buscar todos inputs visíveis e filtrar
     if (!numField) {
       const allInputsForNum = await page.locator('input:visible').all();
       for (const inp of allInputsForNum) {
         const ph = (await inp.getAttribute('placeholder').catch(() => '') || '').trim();
         const name = (await inp.getAttribute('name').catch(() => '') || '').trim();
-        if (ph === 'Número' || name === 'number' || name === 'addressNumber') {
+        const ariaLabel = (await inp.getAttribute('aria-label').catch(() => '') || '').trim();
+        if (ph === 'Número' || name === 'number' || name === 'addressNumber' || ariaLabel === 'Número') {
           numField = inp;
+          console.log('   📍 Campo Número encontrado via scan de inputs');
           break;
         }
       }
     }
-    // Tentativa 3: esperar mais e tentar de novo
+    
+    // Tentativa 5: esperar mais e tentar de novo
     if (!numField) {
       await delay(3000);
       await page.evaluate(() => window.scrollBy(0, 200));
       await delay(1000);
-      const retryNum = byPH('Número');
-      if (await retryNum.count() > 0 && await retryNum.isVisible().catch(() => false)) {
-        numField = retryNum;
+      try {
+        const retryLabel = page.getByLabel('Número', { exact: true });
+        if (await retryLabel.count() > 0 && await retryLabel.isVisible().catch(() => false)) {
+          numField = retryLabel;
+        }
+      } catch (_) {}
+      if (!numField) {
+        const retryNum = byPH('Número');
+        if (await retryNum.count() > 0 && await retryNum.isVisible().catch(() => false)) {
+          numField = retryNum;
+        }
       }
     }
     
@@ -918,25 +959,68 @@ export async function executarAutomacao(customerId, options = {}) {
     if (data.numeroInstalacao) {
       console.log(`   📊 Número: ${data.numeroInstalacao}`);
       
-      // Tentativa 1: placeholder exato
-      let instField = byPH('Número da instalação');
-      // Tentativa 2: parcial (instala, instalação)
-      if (await instField.count() === 0) instField = byPHPartial('instala');
-      // Tentativa 3: parcial (Código, código)
-      if (await instField.count() === 0) instField = byPHPartial('Código');
-      // Tentativa 4: name-based
-      if (await instField.count() === 0) instField = page.locator('input[name*="install" i], input[name*="codigo" i]').first();
+      let instField = null;
       
-      // Aguardar visibilidade com timeout
+      // Tentativa 1: getByLabel (MUI floating label)
       try {
-        await instField.waitFor({ state: 'visible', timeout: 8000 });
-      } catch (_) {
-        // Scroll extra e retry
-        await page.evaluate(() => window.scrollBy(0, 300));
-        await delay(2000);
+        const instByLabel = page.getByLabel(/Número da instalação/i);
+        if (await instByLabel.count() > 0 && await instByLabel.isVisible().catch(() => false)) {
+          instField = instByLabel;
+          console.log('   📍 Campo instalação encontrado via getByLabel');
+        }
+      } catch (_) {}
+      
+      // Tentativa 2: label CSS adjacente
+      if (!instField) {
+        const instByLabelCSS = page.locator('label:has-text("instalação") + div input, label:has-text("instalação") ~ div input').first();
+        if (await instByLabelCSS.count() > 0 && await instByLabelCSS.isVisible().catch(() => false)) {
+          instField = instByLabelCSS;
+          console.log('   📍 Campo instalação encontrado via label CSS');
+        }
       }
       
-      if (await instField.count() > 0 && await instField.isVisible().catch(() => false)) {
+      // Tentativa 3: placeholder exato
+      if (!instField) {
+        const instByPH = byPH('Número da instalação');
+        if (await instByPH.count() > 0 && await instByPH.isVisible().catch(() => false)) {
+          instField = instByPH;
+        }
+      }
+      // Tentativa 4: parcial (instala, instalação)
+      if (!instField) {
+        const instPartial = byPHPartial('instala');
+        if (await instPartial.count() > 0 && await instPartial.isVisible().catch(() => false)) {
+          instField = instPartial;
+        }
+      }
+      // Tentativa 5: parcial (Código, código)
+      if (!instField) {
+        const instCodigo = byPHPartial('Código');
+        if (await instCodigo.count() > 0 && await instCodigo.isVisible().catch(() => false)) {
+          instField = instCodigo;
+        }
+      }
+      // Tentativa 6: name-based
+      if (!instField) {
+        const instName = page.locator('input[name*="install" i], input[name*="codigo" i]').first();
+        if (await instName.count() > 0 && await instName.isVisible().catch(() => false)) {
+          instField = instName;
+        }
+      }
+      
+      // Aguardar visibilidade com timeout
+      if (!instField) {
+        await page.evaluate(() => window.scrollBy(0, 300));
+        await delay(2000);
+        try {
+          const retryInst = page.getByLabel(/instalação/i);
+          if (await retryInst.count() > 0 && await retryInst.isVisible().catch(() => false)) {
+            instField = retryInst;
+          }
+        } catch (_) {}
+      }
+      
+      if (instField) {
         await instField.click();
         await instField.fill('');
         await instField.type(data.numeroInstalacao, { delay: 80 });
@@ -1109,6 +1193,7 @@ export async function executarAutomacao(customerId, options = {}) {
       
       // Upload FRENTE
       const frenteCards = [
+        page.getByText('Frente', { exact: true }),
         page.locator('text=Frente').first(),
         page.locator('[data-testid*="frente" i]').first(),
         page.locator('div:has-text("Frente"):not(:has(div:has-text("Frente")))').first(),
@@ -1122,13 +1207,13 @@ export async function executarAutomacao(customerId, options = {}) {
         try {
           if (await card.count() > 0 && await card.isVisible().catch(() => false)) {
             const [frenteChooser] = await Promise.all([
-              page.waitForEvent('filechooser', { timeout: 5000 }),
-              card.click({ timeout: 3000 }),
+              page.waitForEvent('filechooser', { timeout: 8000 }),
+              card.click({ timeout: 5000 }),
             ]);
             await frenteChooser.setFiles(docFrentePath);
             console.log('   ✅ Documento FRENTE enviado (fileChooser)');
             docsEnviados++;
-            await delay(2000);
+            await delay(3000);
             break;
           }
         } catch (e) {
@@ -1136,9 +1221,13 @@ export async function executarAutomacao(customerId, options = {}) {
         }
       }
       
-      // Upload VERSO (se aplicável)
-      if (docVersoPath && docsEnviados > 0) {
+      // Upload VERSO — SOMENTE se documento NÃO é CNH (CNH só tem Frente)
+      const isCNH = (data.documentType || '').toUpperCase().includes('CNH');
+      if (!isCNH && docVersoPath && docsEnviados > 0) {
+        console.log('   📋 Documento é RG — enviando verso...');
+        await delay(1500);
         const versoCards = [
+          page.getByText('Verso', { exact: true }),
           page.locator('text=Verso').first(),
           page.locator('[data-testid*="verso" i]').first(),
           page.locator('div:has-text("Verso"):not(:has(div:has-text("Verso")))').first(),
@@ -1151,19 +1240,21 @@ export async function executarAutomacao(customerId, options = {}) {
           try {
             if (await card.count() > 0 && await card.isVisible().catch(() => false)) {
               const [versoChooser] = await Promise.all([
-                page.waitForEvent('filechooser', { timeout: 5000 }),
-                card.click({ timeout: 3000 }),
+                page.waitForEvent('filechooser', { timeout: 8000 }),
+                card.click({ timeout: 5000 }),
               ]);
               await versoChooser.setFiles(docVersoPath);
               console.log('   ✅ Documento VERSO enviado (fileChooser)');
               docsEnviados++;
-              await delay(2000);
+              await delay(3000);
               break;
             }
           } catch (e) {
             console.log(`   ⚠️  Verso card falhou: ${e.message.substring(0, 60)}`);
           }
         }
+      } else if (isCNH) {
+        console.log('   📋 Documento é CNH — verso não necessário ✅');
       }
     }
     
