@@ -57,11 +57,6 @@ const ConsultantPage = () => {
       />
       <div className="min-h-screen">
         <HeroSection cadastroUrl={consultant.cadastro_url} whatsappUrl={whatsappUrl} consultantId={consultant.id} />
-        <QRCodeSection
-          whatsappUrl={whatsappBotUrl}
-          consultantName={consultant.name}
-          consultantId={consultant.igreen_id || undefined}
-        />
         <AboutSection />
         <HowItWorksSection />
         <SolarPlantsSection />
