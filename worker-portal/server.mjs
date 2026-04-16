@@ -214,10 +214,10 @@ function getSupabase() {
 const linkSentRecently = new Set();
 const LINK_SENT_TTL_MS = 15 * 60 * 1000;
 
-/**
- * Envia o link da página iGreen para o cliente via WhatsApp (Evolution API).
- * Faz até 3 tentativas. Não reenvia se já enviou nos últimos 15 min.
- */
+//
+// Envia o link da página iGreen para o cliente via WhatsApp (Evolution API).
+// Faz até 3 tentativas. Não reenvia se já enviou nos últimos 15 min.
+///
 async function sendLinkToCustomer(customerId, pageUrl) {
   if (linkSentRecently.has(customerId)) {
     console.log('   ⏭️  Link já enviado para este cliente recentemente; não reenviar.');
@@ -365,10 +365,10 @@ app.use((req, res, next) => {
   next();
 });
 
-/**
- * POST /submit-lead
- * Adiciona lead na fila de processamento (processa 1 por vez)
- */
+//
+// POST /submit-lead
+// Adiciona lead na fila de processamento (processa 1 por vez)
+///
 app.post('/submit-lead', async (req, res) => {
   const { customer_id, headless, stop_before_submit } = req.body;
   
@@ -407,10 +407,10 @@ app.post('/submit-lead', async (req, res) => {
   });
 });
 
-/**
- * POST /clear-queue
- * Zera a fila de leads (não cancela o job atual, mas nenhum novo será processado após ele)
- */
+//
+// POST /clear-queue
+// Zera a fila de leads (não cancela o job atual, mas nenhum novo será processado após ele)
+///
 app.post('/clear-queue', (req, res) => {
   const n = queue.length;
   queue.length = 0;
@@ -432,10 +432,10 @@ app.post('/clear-queue', (req, res) => {
   });
 });
 
-/**
- * POST /force-submit
- * Força reenvio de lead ignorando retry limits
- */
+//
+// POST /force-submit
+// Força reenvio de lead ignorando retry limits
+///
 app.post('/force-submit', async (req, res) => {
   const { customer_id } = req.body;
   if (!customer_id) return res.status(400).json({ error: 'customer_id required' });
@@ -456,9 +456,9 @@ app.post('/force-submit', async (req, res) => {
   });
 });
 
-/**
- * Recebe código OTP do WhatsApp e armazena para o script usar
- */
+//
+// Recebe código OTP do WhatsApp e armazena para o script usar
+///
 app.post('/confirm-otp', async (req, res) => {
   const { customer_id, otp_code } = req.body;
   
@@ -518,11 +518,11 @@ app.post('/confirm-otp', async (req, res) => {
   console.log(`✅ OTP armazenado. Total de códigos em memória: ${otpCodes.size}`);
 });
 
-/**
- * GET /otp/:customer_id
- * Retorna código OTP armazenado (usado pelo script Playwright)
- * Verifica: 1) memória local, 2) Supabase
- */
+//
+// GET /otp/:customer_id
+// Retorna código OTP armazenado (usado pelo script Playwright)
+// Verifica: 1) memória local, 2) Supabase
+///
 app.get('/otp/:customer_id', async (req, res) => {
   const { customer_id } = req.params;
   
@@ -591,10 +591,10 @@ function extrairOTP(texto) {
   return null;
 }
 
-/**
- * POST /webhook/whapi
- * Recebe mensagens do Whapi (WhatsApp) e extrai OTP
- */
+//
+// POST /webhook/whapi
+// Recebe mensagens do Whapi (WhatsApp) e extrai OTP
+///
 app.post('/webhook/whapi', async (req, res) => {
   try {
     const payload = req.body;
@@ -692,14 +692,14 @@ app.post('/webhook/whapi', async (req, res) => {
   }
 });
 
-/**
- * GET /health
- * Health check endpoint
- */
-/**
- * GET /screenshots/:customerId
- * Lista screenshots de uma execução (para diagnóstico)
- */
+//
+// GET /health
+// Health check endpoint
+///
+//
+// GET /screenshots/:customerId
+// Lista screenshots de uma execução (para diagnóstico)
+///
 app.get('/screenshots/:customerId', async (req, res) => {
   const { customerId } = req.params;
   try {
@@ -713,10 +713,10 @@ app.get('/screenshots/:customerId', async (req, res) => {
   }
 });
 
-/**
- * GET /screenshot/:filename
- * Serve um screenshot específico
- */
+//
+// GET /screenshot/:filename
+// Serve um screenshot específico
+///
 app.get('/screenshot/:filename', async (req, res) => {
   const { filename } = req.params;
   const { join } = await import('path');
@@ -726,10 +726,10 @@ app.get('/screenshot/:filename', async (req, res) => {
   res.sendFile(filepath, { root: '.' });
 });
 
-/**
- * GET /page-dump/:customerId
- * Retorna o HTML salvo da última execução (para diagnóstico)
- */
+//
+// GET /page-dump/:customerId
+// Retorna o HTML salvo da última execução (para diagnóstico)
+///
 app.get('/page-dump/:customerId', async (req, res) => {
   const { customerId } = req.params;
   try {
@@ -746,18 +746,18 @@ app.get('/page-dump/:customerId', async (req, res) => {
   }
 });
 
-/**
- * GET /queue
- * Mostra status completo da fila de processamento
- */
+//
+// GET /queue
+// Mostra status completo da fila de processamento
+///
 app.get('/queue', (req, res) => {
   res.json(getQueueStatus());
 });
 
-/**
- * GET /status
- * JSON com fila + últimas atividades (por que abriu, etc.) - sem auth para ver no navegador
- */
+//
+// GET /status
+// JSON com fila + últimas atividades (por que abriu, etc.) - sem auth para ver no navegador
+///
 app.get('/status', (req, res) => {
   const status = getQueueStatus();
   res.json({
@@ -768,10 +768,10 @@ app.get('/status', (req, res) => {
   });
 });
 
-/**
- * GET /dashboard
- * Página HTML simples para ver o que está acontecendo (sem auth)
- */
+//
+// GET /dashboard
+// Página HTML simples para ver o que está acontecendo (sem auth)
+///
 app.get('/dashboard', (req, res) => {
   const status = getQueueStatus();
   const activities = activityLog.slice(-25).reverse();
@@ -818,10 +818,10 @@ app.get('/dashboard', (req, res) => {
   res.send(html);
 });
 
-/**
- * GET /health
- * Health check endpoint
- */
+//
+// GET /health
+// Health check endpoint
+///
 app.get('/health', (req, res) => {
   const status = getQueueStatus();
   res.json({ 
@@ -838,9 +838,9 @@ app.get('/health', (req, res) => {
   });
 });
 
-/**
- * Limpar códigos OTP expirados
- */
+//
+// Limpar códigos OTP expirados
+///
 function cleanExpiredOtpCodes() {
   const now = Date.now();
   let cleaned = 0;
@@ -860,10 +860,10 @@ function cleanExpiredOtpCodes() {
 // Limpar códigos expirados a cada 1 minuto
 setInterval(cleanExpiredOtpCodes, 60 * 1000);
 
-/**
- * Busca leads pendentes: data_complete + portal_submitting travados (>2 min).
- * Roda na inicialização e a cada 5 segundos.
- */
+//
+// Busca leads pendentes: data_complete + portal_submitting travados (>2 min).
+// Roda na inicialização e a cada 5 segundos.
+///
 async function recuperarLeadsPendentes() {
   // SOLUÇÃO 5: Não rodar polling enquanto tem job processando
   if (currentJob || isProcessingLock) {
