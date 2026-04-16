@@ -1,18 +1,17 @@
-/**
- * Automação Playwright - Portal iGreen v3.0
- * Fluxo 100% automático: CEP → Calcular → Garantir → Formulário → Upload Docs → Perguntas → OTP → Enviar
- * 
- * v3.0 - Correções críticas:
- * ✅ Upload de RG/CNH (frente + verso) via input[type="file"]
- * ✅ Upload da conta de energia (3 estratégias de fallback)
- * ✅ Tipo de documento (dropdown customizado + select tradicional)
- * ✅ Procurador: NÃO (4 estratégias)
- * ✅ PDF Protegido: NÃO (4 estratégias)
- * ✅ Débitos: NÃO (3 estratégias)
- * ✅ CPF com .type() para validação automática
- * ✅ Validação pós-submit (verifica mensagem de sucesso)
- * ✅ Screenshots em cada fase
- */
+// Automação Playwright - Portal iGreen v4.0
+// Fluxo 100% automático: CEP → Calcular → Garantir → Formulário → Upload Docs → Perguntas → OTP → Enviar
+//
+// v4.0 - Correções críticas:
+// ✅ Upload via fileChooser (cards clicáveis "Frente"/"Verso")
+// ✅ Fallback para input[type="file"] (portal antigo)
+// ✅ Tipo de documento (MUI Select + select nativo)
+// ✅ Timing corrigido (espera auto-fill CEP, campos dinâmicos)
+// ✅ Tratar "nao_aplicavel" em URLs de documentos
+// ✅ Perguntas: Radio + Label + Button + MUI RadioGroup
+// ✅ Upload conta via fileChooser
+// ✅ CPF com .type() para validação automática
+// ✅ Validação pós-submit (verifica mensagem de sucesso)
+// ✅ Screenshots em cada fase
 
 import { chromium } from 'playwright';
 import { createClient } from '@supabase/supabase-js';
@@ -290,8 +289,13 @@ async function downloadWhapiMedia(mediaId, label) {
 
 // ─── Preparar arquivos de upload ──────────────────────────────────────────────
 async function prepararDocumento(url, label) {
+  // Tratar URLs inválidas (nao_aplicavel, vazio, etc.)
+  if (!url || url === 'nao_aplicavel' || url === 'null' || url === 'undefined' || url.trim() === '') {
+    console.log(`   ⚠️  ${label}: URL não aplicável, retornando null`);
+    return null;
+  }
   // whapi-media:xxx → baixar via API Whapi
-  if (url && url.startsWith('whapi-media:')) {
+  if (url.startsWith('whapi-media:')) {
     try {
       const mediaId = url.replace('whapi-media:', '').trim();
       const outPath = await downloadWhapiMedia(mediaId, label);
@@ -302,33 +306,31 @@ async function prepararDocumento(url, label) {
     }
   }
   // Tentar baixar foto real do documento (URL HTTP ou data:)
-  if (url) {
-    try {
-      let outPath;
-      
-      if (url.startsWith('data:')) {
-        const isPdf = url.includes('application/pdf');
-        const ext = isPdf ? 'pdf' : 'jpg';
+  try {
+    let outPath;
+    
+    if (url.startsWith('data:')) {
+      const isPdf = url.includes('application/pdf');
+      const ext = isPdf ? 'pdf' : 'jpg';
+      outPath = join(TMP_DIR, `${label}-${Date.now()}.${ext}`);
+      const base64 = url.replace(/^data:[^;]+;base64,/, '');
+      writeFileSync(outPath, Buffer.from(base64, 'base64'));
+    } else if (url.startsWith('http')) {
+      const res = await fetch(url);
+      if (res.ok) {
+        const ct = (res.headers.get('content-type') || '').toLowerCase();
+        const ext = ct.includes('pdf') ? 'pdf' : 'jpg';
         outPath = join(TMP_DIR, `${label}-${Date.now()}.${ext}`);
-        const base64 = url.replace(/^data:[^;]+;base64,/, '');
-        writeFileSync(outPath, Buffer.from(base64, 'base64'));
-      } else {
-        const res = await fetch(url);
-        if (res.ok) {
-          const ct = (res.headers.get('content-type') || '').toLowerCase();
-          const ext = ct.includes('pdf') ? 'pdf' : 'jpg';
-          outPath = join(TMP_DIR, `${label}-${Date.now()}.${ext}`);
-          writeFileSync(outPath, Buffer.from(await res.arrayBuffer()));
-        }
+        writeFileSync(outPath, Buffer.from(await res.arrayBuffer()));
       }
-      
-      if (outPath && existsSync(outPath)) {
-        console.log(`📄 ${label} baixado: ${outPath}`);
-        return outPath;
-      }
-    } catch (e) {
-      console.warn(`⚠️  Erro ao baixar ${label}: ${e.message}`);
     }
+    
+    if (outPath && existsSync(outPath)) {
+      console.log(`📄 ${label} baixado: ${outPath}`);
+      return outPath;
+    }
+  } catch (e) {
+    console.warn(`⚠️  Erro ao baixar ${label}: ${e.message}`);
   }
   
   // Fallback: criar JPEG placeholder
@@ -396,7 +398,7 @@ async function prepararContaEnergia(cliente) {
 async function salvarDocumentosCliente(cliente) {
   try {
     const nome = (cliente.name || 'SEM-NOME').replace(/[^a-zA-ZÀ-ÿ0-9 ]/g, '').trim().replace(/\s+/g, '-');
-    const dataHoje = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const dataHoje = new Date().toISOString().split('T')[0];
     const pastaCliente = join(homedir(), 'Documents', 'iGreen', 'contratos', `${nome}-${dataHoje}`);
     
     await mkdir(pastaCliente, { recursive: true });
@@ -405,7 +407,7 @@ async function salvarDocumentosCliente(cliente) {
     let salvos = 0;
 
     // RG/CNH Frente
-    if (cliente.document_front_url) {
+    if (cliente.document_front_url && cliente.document_front_url !== 'nao_aplicavel') {
       try {
         const ext = await baixarArquivo(cliente.document_front_url, join(pastaCliente, `RG-frente-${nome}`));
         console.log(`   ✅ RG-frente-${nome}${ext}`);
@@ -414,7 +416,7 @@ async function salvarDocumentosCliente(cliente) {
     }
 
     // RG/CNH Verso
-    if (cliente.document_back_url) {
+    if (cliente.document_back_url && cliente.document_back_url !== 'nao_aplicavel') {
       try {
         const ext = await baixarArquivo(cliente.document_back_url, join(pastaCliente, `RG-verso-${nome}`));
         console.log(`   ✅ RG-verso-${nome}${ext}`);
@@ -423,7 +425,7 @@ async function salvarDocumentosCliente(cliente) {
     }
 
     // Conta de Luz
-    if (cliente.electricity_bill_photo_url) {
+    if (cliente.electricity_bill_photo_url && cliente.electricity_bill_photo_url !== 'nao_aplicavel') {
       try {
         const ext = await baixarArquivo(cliente.electricity_bill_photo_url, join(pastaCliente, `conta-de-luz-${nome}`));
         console.log(`   ✅ conta-de-luz-${nome}${ext}`);
@@ -848,18 +850,44 @@ export async function executarAutomacao(customerId, options = {}) {
     currentPhase = 'fase6-endereco';
     console.log('\n📋 [6/16] Endereço...');
     
-    // O CEP auto-preenche Endereço, Bairro, Cidade, Estado
-    // Só precisamos preencher "Número" (endereço) e "Complemento"
-    // CUIDADO: "Número" exato para não pegar "Número da instalação"
-    const allInputsForNum = await page.locator('input:visible').all();
+    // Aguardar CEP auto-fill completar (endereço, bairro, cidade, estado)
+    console.log('   ⏳ Aguardando auto-preenchimento do CEP (3s)...');
+    await delay(3000);
+    
+    // Scroll para revelar campos de endereço
+    await page.evaluate(() => window.scrollBy(0, 300));
+    await delay(1500);
+    
+    // Preencher "Número" - buscar campo com placeholder exato "Número"
     let numField = null;
-    for (const inp of allInputsForNum) {
-      const ph = await inp.getAttribute('placeholder').catch(() => '') || '';
-      if (ph.trim() === 'Número') {
-        numField = inp;
-        break;
+    // Tentativa 1: placeholder exato
+    const numByPH = byPH('Número');
+    if (await numByPH.count() > 0 && await numByPH.isVisible().catch(() => false)) {
+      numField = numByPH;
+    }
+    // Tentativa 2: buscar todos inputs visíveis e filtrar
+    if (!numField) {
+      const allInputsForNum = await page.locator('input:visible').all();
+      for (const inp of allInputsForNum) {
+        const ph = (await inp.getAttribute('placeholder').catch(() => '') || '').trim();
+        const name = (await inp.getAttribute('name').catch(() => '') || '').trim();
+        if (ph === 'Número' || name === 'number' || name === 'addressNumber') {
+          numField = inp;
+          break;
+        }
       }
     }
+    // Tentativa 3: esperar mais e tentar de novo
+    if (!numField) {
+      await delay(3000);
+      await page.evaluate(() => window.scrollBy(0, 200));
+      await delay(1000);
+      const retryNum = byPH('Número');
+      if (await retryNum.count() > 0 && await retryNum.isVisible().catch(() => false)) {
+        numField = retryNum;
+      }
+    }
+    
     if (numField) {
       await numField.click();
       await numField.fill('');
@@ -872,6 +900,7 @@ export async function executarAutomacao(customerId, options = {}) {
     // Complemento
     if (data.complemento) {
       let compField = byPH('Complemento');
+      if (await compField.count() === 0) compField = byPHPartial('Complemento');
       if (await compField.count() > 0 && await compField.isVisible().catch(() => false)) {
         await compField.fill(data.complemento);
         console.log(`   ✅ Complemento: ${data.complemento}`);
@@ -889,8 +918,23 @@ export async function executarAutomacao(customerId, options = {}) {
     if (data.numeroInstalacao) {
       console.log(`   📊 Número: ${data.numeroInstalacao}`);
       
-      let instField = byPHPartial('instala');
+      // Tentativa 1: placeholder exato
+      let instField = byPH('Número da instalação');
+      // Tentativa 2: parcial (instala, instalação)
+      if (await instField.count() === 0) instField = byPHPartial('instala');
+      // Tentativa 3: parcial (Código, código)
       if (await instField.count() === 0) instField = byPHPartial('Código');
+      // Tentativa 4: name-based
+      if (await instField.count() === 0) instField = page.locator('input[name*="install" i], input[name*="codigo" i]').first();
+      
+      // Aguardar visibilidade com timeout
+      try {
+        await instField.waitFor({ state: 'visible', timeout: 8000 });
+      } catch (_) {
+        // Scroll extra e retry
+        await page.evaluate(() => window.scrollBy(0, 300));
+        await delay(2000);
+      }
       
       if (await instField.count() > 0 && await instField.isVisible().catch(() => false)) {
         await instField.click();
@@ -934,14 +978,18 @@ export async function executarAutomacao(customerId, options = {}) {
     let tipoDocOk = false;
     
     // Portal usa MUI Select (dropdown customizado com div, não <select>)
-    // O trigger é um div com role="combobox" ou aria-haspopup="listbox"
     const muiTriggers = [
+      // MUI Select com classe específica
+      '.MuiSelect-select',
+      // Combobox/listbox ARIA
       '[role="combobox"]',
       '[aria-haspopup="listbox"]',
-      // MUI Select renderiza com classe MuiSelect
-      '.MuiSelect-select',
-      // Fallback: div que mostra "Tipo documento"
+      // Select nativo escondido que pode estar presente
+      'select',
+      // Label + div wrapper para tipo documento
       'div:has-text("Tipo documento"):not(:has(div:has-text("Tipo documento")))',
+      // Input com placeholder de tipo
+      'input[placeholder*="tipo" i]',
     ];
     
     for (const sel of muiTriggers) {
@@ -949,16 +997,49 @@ export async function executarAutomacao(customerId, options = {}) {
       try {
         const el = page.locator(sel).first();
         if (await el.count() > 0 && await el.isVisible().catch(() => false)) {
+          // Checar se é um <select> nativo
+          const tagName = await el.evaluate(e => e.tagName).catch(() => '');
+          if (tagName === 'SELECT') {
+            // Select nativo: usar selectOption
+            await el.selectOption({ label: opcaoTexto }).catch(async () => {
+              // Tentar por value parcial
+              const options = await el.locator('option').allTextContents();
+              const match = options.find(o => o.includes('CNH') || o.includes(opcaoTexto));
+              if (match) {
+                await el.selectOption({ label: match });
+              }
+            });
+            console.log(`   ✅ Tipo documento (select nativo): ${opcaoTexto}`);
+            tipoDocOk = true;
+            break;
+          }
+          
+          // MUI Select: clicar para abrir dropdown
           await el.click({ timeout: 5000 });
-          await delay(800);
+          await delay(1000);
           
           // MUI abre um popover/menu com role="listbox" ou ul com li items
-          const opt = page.locator(`li:has-text("${opcaoTexto}"), [role="option"]:has-text("${opcaoTexto}")`).first();
-          if (await opt.count() > 0 && await opt.isVisible().catch(() => false)) {
-            await opt.click({ timeout: 5000 });
-            console.log(`   ✅ Tipo documento: ${opcaoTexto}`);
-            tipoDocOk = true;
-          } else {
+          // Tentar múltiplos seletores para as opções
+          const optionSelectors = [
+            `li:has-text("${opcaoTexto}")`,
+            `[role="option"]:has-text("${opcaoTexto}")`,
+            `.MuiMenuItem-root:has-text("${opcaoTexto}")`,
+            `ul li:has-text("${opcaoTexto}")`,
+          ];
+          
+          let optionClicked = false;
+          for (const optSel of optionSelectors) {
+            const opt = page.locator(optSel).first();
+            if (await opt.count() > 0 && await opt.isVisible().catch(() => false)) {
+              await opt.click({ timeout: 5000 });
+              console.log(`   ✅ Tipo documento: ${opcaoTexto}`);
+              tipoDocOk = true;
+              optionClicked = true;
+              break;
+            }
+          }
+          
+          if (!optionClicked) {
             // Tentar texto parcial
             const optAlt = page.getByText(opcaoTexto, { exact: false }).first();
             if (await optAlt.count() > 0 && await optAlt.isVisible().catch(() => false)) {
@@ -976,6 +1057,13 @@ export async function executarAutomacao(customerId, options = {}) {
     if (!tipoDocOk) {
       console.warn('   ⚠️  Tipo documento não selecionado - usando default do portal');
       await screenshot(page, customerId, '05b-tipo-doc-FALHOU');
+      // Dump HTML para diagnóstico
+      try {
+        const html = await page.content();
+        const htmlPath = join(SCREENSHOTS_DIR, `${customerId}-05b-tipo-doc-FALHOU-${Date.now()}.html`);
+        writeFileSync(htmlPath, html);
+        console.log('   📄 HTML dump salvo para diagnóstico');
+      } catch (_) {}
     }
     await delay(1500);
 
@@ -984,63 +1072,137 @@ export async function executarAutomacao(customerId, options = {}) {
     console.log('\n📋 [10/16] Upload documentos pessoais...');
     await delay(2000);
     
-    // Portal usa inputs hidden: #file-frente e #file-verso
-    // Primeiro tentar pelos IDs exatos conhecidos
-    const fileFrente = page.locator('#file-frente, input[type="file"]').first();
-    const fileVerso = page.locator('#file-verso, input[type="file"]').last();
+    // Scroll para revelar seção de upload
+    await page.evaluate(() => window.scrollBy(0, 400));
+    await delay(2000);
     
-    // Verificar se existem pelo menos 2 inputs file
+    let docsEnviados = 0;
+    
+    // ESTRATÉGIA 1: input[type="file"] direto (portal antigo)
     const allFileInputsCount = await page.locator('input[type="file"]').count();
     console.log(`   📊 ${allFileInputsCount} input(s) file encontrado(s)`);
     
-    // Upload frente
-    if (allFileInputsCount >= 1) {
+    if (allFileInputsCount >= 1 && docFrentePath) {
       try {
-        await fileFrente.setInputFiles(docFrentePath);
-        console.log('   ✅ Documento FRENTE enviado');
+        await page.locator('input[type="file"]').first().setInputFiles(docFrentePath);
+        console.log('   ✅ Documento FRENTE enviado (input file)');
+        docsEnviados++;
         await delay(2000);
       } catch (e) {
-        console.warn(`   ⚠️  Doc frente: ${e.message}`);
+        console.warn(`   ⚠️  Doc frente (input): ${e.message}`);
+      }
+      if (allFileInputsCount >= 2 && docVersoPath) {
+        try {
+          await page.locator('input[type="file"]').nth(1).setInputFiles(docVersoPath);
+          console.log('   ✅ Documento VERSO enviado (input file)');
+          docsEnviados++;
+          await delay(2000);
+        } catch (e) {
+          console.warn(`   ⚠️  Doc verso (input): ${e.message}`);
+        }
       }
     }
     
-    // Upload verso
-    if (allFileInputsCount >= 2 && docVersoPath) {
-      try {
-        await fileVerso.setInputFiles(docVersoPath);
-        console.log('   ✅ Documento VERSO enviado');
-        await delay(2000);
-      } catch (e) {
-        console.warn(`   ⚠️  Doc verso: ${e.message}`);
+    // ESTRATÉGIA 2: Cards clicáveis "Frente"/"Verso" com fileChooser (portal redesenhado)
+    if (docsEnviados === 0 && docFrentePath) {
+      console.log('   🔄 Tentando upload via cards clicáveis (fileChooser)...');
+      
+      // Upload FRENTE
+      const frenteCards = [
+        page.locator('text=Frente').first(),
+        page.locator('[data-testid*="frente" i]').first(),
+        page.locator('div:has-text("Frente"):not(:has(div:has-text("Frente")))').first(),
+        page.locator('label:has-text("Frente")').first(),
+        page.locator('button:has-text("Frente")').first(),
+        page.locator('span:has-text("Frente")').first(),
+      ];
+      
+      for (const card of frenteCards) {
+        if (docsEnviados > 0) break;
+        try {
+          if (await card.count() > 0 && await card.isVisible().catch(() => false)) {
+            const [frenteChooser] = await Promise.all([
+              page.waitForEvent('filechooser', { timeout: 5000 }),
+              card.click({ timeout: 3000 }),
+            ]);
+            await frenteChooser.setFiles(docFrentePath);
+            console.log('   ✅ Documento FRENTE enviado (fileChooser)');
+            docsEnviados++;
+            await delay(2000);
+            break;
+          }
+        } catch (e) {
+          console.log(`   ⚠️  Frente card falhou: ${e.message.substring(0, 60)}`);
+        }
+      }
+      
+      // Upload VERSO (se aplicável)
+      if (docVersoPath && docsEnviados > 0) {
+        const versoCards = [
+          page.locator('text=Verso').first(),
+          page.locator('[data-testid*="verso" i]').first(),
+          page.locator('div:has-text("Verso"):not(:has(div:has-text("Verso")))').first(),
+          page.locator('label:has-text("Verso")').first(),
+          page.locator('button:has-text("Verso")').first(),
+          page.locator('span:has-text("Verso")').first(),
+        ];
+        
+        for (const card of versoCards) {
+          try {
+            if (await card.count() > 0 && await card.isVisible().catch(() => false)) {
+              const [versoChooser] = await Promise.all([
+                page.waitForEvent('filechooser', { timeout: 5000 }),
+                card.click({ timeout: 3000 }),
+              ]);
+              await versoChooser.setFiles(docVersoPath);
+              console.log('   ✅ Documento VERSO enviado (fileChooser)');
+              docsEnviados++;
+              await delay(2000);
+              break;
+            }
+          } catch (e) {
+            console.log(`   ⚠️  Verso card falhou: ${e.message.substring(0, 60)}`);
+          }
+        }
       }
     }
     
-    if (allFileInputsCount === 0) {
-      console.warn('   ⚠️  Nenhum input file encontrado');
-      // Scroll para tentar revelar
-      await page.evaluate(() => window.scrollBy(0, 300));
-      await delay(2000);
-      // Re-tentar
-      const retryCount = await page.locator('input[type="file"]').count();
-      if (retryCount >= 1) {
-        await page.locator('input[type="file"]').first().setInputFiles(docFrentePath).catch(() => {});
-        console.log('   ✅ Documento FRENTE enviado (retry)');
-      }
-      if (retryCount >= 2 && docVersoPath) {
-        await page.locator('input[type="file"]').last().setInputFiles(docVersoPath).catch(() => {});
-        console.log('   ✅ Documento VERSO enviado (retry)');
+    // ESTRATÉGIA 3: Clicar em qualquer área de upload/dropzone genérica
+    if (docsEnviados === 0 && docFrentePath) {
+      console.log('   🔄 Tentando upload via dropzone genérica...');
+      const dropzones = [
+        page.locator('[class*="upload" i], [class*="dropzone" i], [class*="drag" i]').first(),
+        page.locator('div[role="button"]:has-text("upload")').first(),
+      ];
+      for (const dz of dropzones) {
+        try {
+          if (await dz.count() > 0 && await dz.isVisible().catch(() => false)) {
+            const [chooser] = await Promise.all([
+              page.waitForEvent('filechooser', { timeout: 5000 }),
+              dz.click({ timeout: 3000 }),
+            ]);
+            await chooser.setFiles(docFrentePath);
+            console.log('   ✅ Documento enviado (dropzone)');
+            docsEnviados++;
+            await delay(2000);
+            break;
+          }
+        } catch (_) {}
       }
     }
     
+    console.log(`   📊 Total docs enviados: ${docsEnviados}`);
     await screenshot(page, customerId, '06-documentos-enviados');
-    await delay(1500);
+    await delay(2000);
     
     // ─── 14. PERGUNTAS: Procurador + PDF + Débitos ──────────────────────
     currentPhase = 'perguntas';
     console.log('\n📋 [11/16] Perguntas (Procurador, PDF, Débitos)...');
     
+    // Aguardar perguntas aparecerem após upload de docs
+    await delay(3000);
     await page.evaluate(() => window.scrollBy(0, 400));
-    await delay(1500);
+    await delay(2000);
     
     // Estratégia universal: clicar em TODOS os radios/botões "Não" visíveis
     let perguntasRespondidas = 0;
@@ -1087,6 +1249,20 @@ export async function executarAutomacao(customerId, options = {}) {
       }
     }
     
+    // Estratégia 4: div[role="radio"] com texto "Não" (MUI RadioGroup)
+    if (perguntasRespondidas === 0) {
+      const muiRadios = await page.locator('[role="radio"]:has-text("Não")').all();
+      for (const radio of muiRadios) {
+        try {
+          const visible = await radio.isVisible().catch(() => false);
+          if (!visible) continue;
+          await radio.click({ timeout: 3000 });
+          console.log('   ✅ MUI Radio "Não" clicado');
+          perguntasRespondidas++;
+        } catch (_) {}
+      }
+    }
+    
     console.log(`   📊 Total respostas: ${perguntasRespondidas}`);
     await screenshot(page, customerId, '07-perguntas');
     
@@ -1095,11 +1271,11 @@ export async function executarAutomacao(customerId, options = {}) {
     console.log('\n📋 [12/16] Upload conta de energia...');
     
     await page.evaluate(() => window.scrollBy(0, 300));
-    await delay(1500);
+    await delay(2000);
     
     let contaEnviada = false;
     
-    // Re-buscar inputs file (podem ter aparecido novos após perguntas)
+    // ESTRATÉGIA 1: input[type="file"] disponível
     const allFileInputs = await page.locator('input[type="file"]').all();
     console.log(`   📊 Total inputs file agora: ${allFileInputs.length}`);
     
@@ -1114,7 +1290,6 @@ export async function executarAutomacao(customerId, options = {}) {
       }
     }
     
-    // Fallback: último input file
     if (!contaEnviada && allFileInputs.length > 0) {
       try {
         await allFileInputs[allFileInputs.length - 1].setInputFiles(contaPath);
@@ -1122,6 +1297,37 @@ export async function executarAutomacao(customerId, options = {}) {
         contaEnviada = true;
       } catch (e) {
         console.warn(`   ⚠️  Último input: ${e.message}`);
+      }
+    }
+    
+    // ESTRATÉGIA 2: Card clicável "Conta de energia" / "Conta de luz" com fileChooser
+    if (!contaEnviada) {
+      console.log('   🔄 Tentando upload conta via fileChooser...');
+      const contaCards = [
+        page.locator('text=Conta de energia').first(),
+        page.locator('text=Conta de luz').first(),
+        page.locator('text=Fatura').first(),
+        page.locator('[data-testid*="conta" i]').first(),
+        page.locator('div:has-text("Conta"):not(:has(div:has-text("Conta")))').last(),
+        page.locator('label:has-text("Conta")').first(),
+        page.locator('button:has-text("Conta")').first(),
+      ];
+      
+      for (const card of contaCards) {
+        if (contaEnviada) break;
+        try {
+          if (await card.count() > 0 && await card.isVisible().catch(() => false)) {
+            const [contaChooser] = await Promise.all([
+              page.waitForEvent('filechooser', { timeout: 5000 }),
+              card.click({ timeout: 3000 }),
+            ]);
+            await contaChooser.setFiles(contaPath);
+            console.log('   ✅ Conta enviada (fileChooser)');
+            contaEnviada = true;
+          }
+        } catch (e) {
+          console.log(`   ⚠️  Conta card falhou: ${e.message.substring(0, 60)}`);
+        }
       }
     }
     
