@@ -290,8 +290,13 @@ async function downloadWhapiMedia(mediaId, label) {
 
 // ─── Preparar arquivos de upload ──────────────────────────────────────────────
 async function prepararDocumento(url, label) {
+  // Tratar URLs inválidas (nao_aplicavel, vazio, etc.)
+  if (!url || url === 'nao_aplicavel' || url === 'null' || url === 'undefined' || url.trim() === '') {
+    console.log(`   ⚠️  ${label}: URL não aplicável, retornando null`);
+    return null;
+  }
   // whapi-media:xxx → baixar via API Whapi
-  if (url && url.startsWith('whapi-media:')) {
+  if (url.startsWith('whapi-media:')) {
     try {
       const mediaId = url.replace('whapi-media:', '').trim();
       const outPath = await downloadWhapiMedia(mediaId, label);
@@ -302,33 +307,31 @@ async function prepararDocumento(url, label) {
     }
   }
   // Tentar baixar foto real do documento (URL HTTP ou data:)
-  if (url) {
-    try {
-      let outPath;
-      
-      if (url.startsWith('data:')) {
-        const isPdf = url.includes('application/pdf');
-        const ext = isPdf ? 'pdf' : 'jpg';
+  try {
+    let outPath;
+    
+    if (url.startsWith('data:')) {
+      const isPdf = url.includes('application/pdf');
+      const ext = isPdf ? 'pdf' : 'jpg';
+      outPath = join(TMP_DIR, `${label}-${Date.now()}.${ext}`);
+      const base64 = url.replace(/^data:[^;]+;base64,/, '');
+      writeFileSync(outPath, Buffer.from(base64, 'base64'));
+    } else if (url.startsWith('http')) {
+      const res = await fetch(url);
+      if (res.ok) {
+        const ct = (res.headers.get('content-type') || '').toLowerCase();
+        const ext = ct.includes('pdf') ? 'pdf' : 'jpg';
         outPath = join(TMP_DIR, `${label}-${Date.now()}.${ext}`);
-        const base64 = url.replace(/^data:[^;]+;base64,/, '');
-        writeFileSync(outPath, Buffer.from(base64, 'base64'));
-      } else {
-        const res = await fetch(url);
-        if (res.ok) {
-          const ct = (res.headers.get('content-type') || '').toLowerCase();
-          const ext = ct.includes('pdf') ? 'pdf' : 'jpg';
-          outPath = join(TMP_DIR, `${label}-${Date.now()}.${ext}`);
-          writeFileSync(outPath, Buffer.from(await res.arrayBuffer()));
-        }
+        writeFileSync(outPath, Buffer.from(await res.arrayBuffer()));
       }
-      
-      if (outPath && existsSync(outPath)) {
-        console.log(`📄 ${label} baixado: ${outPath}`);
-        return outPath;
-      }
-    } catch (e) {
-      console.warn(`⚠️  Erro ao baixar ${label}: ${e.message}`);
     }
+    
+    if (outPath && existsSync(outPath)) {
+      console.log(`📄 ${label} baixado: ${outPath}`);
+      return outPath;
+    }
+  } catch (e) {
+    console.warn(`⚠️  Erro ao baixar ${label}: ${e.message}`);
   }
   
   // Fallback: criar JPEG placeholder
@@ -396,7 +399,7 @@ async function prepararContaEnergia(cliente) {
 async function salvarDocumentosCliente(cliente) {
   try {
     const nome = (cliente.name || 'SEM-NOME').replace(/[^a-zA-ZÀ-ÿ0-9 ]/g, '').trim().replace(/\s+/g, '-');
-    const dataHoje = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const dataHoje = new Date().toISOString().split('T')[0];
     const pastaCliente = join(homedir(), 'Documents', 'iGreen', 'contratos', `${nome}-${dataHoje}`);
     
     await mkdir(pastaCliente, { recursive: true });
@@ -405,7 +408,7 @@ async function salvarDocumentosCliente(cliente) {
     let salvos = 0;
 
     // RG/CNH Frente
-    if (cliente.document_front_url) {
+    if (cliente.document_front_url && cliente.document_front_url !== 'nao_aplicavel') {
       try {
         const ext = await baixarArquivo(cliente.document_front_url, join(pastaCliente, `RG-frente-${nome}`));
         console.log(`   ✅ RG-frente-${nome}${ext}`);
@@ -414,7 +417,7 @@ async function salvarDocumentosCliente(cliente) {
     }
 
     // RG/CNH Verso
-    if (cliente.document_back_url) {
+    if (cliente.document_back_url && cliente.document_back_url !== 'nao_aplicavel') {
       try {
         const ext = await baixarArquivo(cliente.document_back_url, join(pastaCliente, `RG-verso-${nome}`));
         console.log(`   ✅ RG-verso-${nome}${ext}`);
@@ -423,7 +426,7 @@ async function salvarDocumentosCliente(cliente) {
     }
 
     // Conta de Luz
-    if (cliente.electricity_bill_photo_url) {
+    if (cliente.electricity_bill_photo_url && cliente.electricity_bill_photo_url !== 'nao_aplicavel') {
       try {
         const ext = await baixarArquivo(cliente.electricity_bill_photo_url, join(pastaCliente, `conta-de-luz-${nome}`));
         console.log(`   ✅ conta-de-luz-${nome}${ext}`);
@@ -848,18 +851,44 @@ export async function executarAutomacao(customerId, options = {}) {
     currentPhase = 'fase6-endereco';
     console.log('\n📋 [6/16] Endereço...');
     
-    // O CEP auto-preenche Endereço, Bairro, Cidade, Estado
-    // Só precisamos preencher "Número" (endereço) e "Complemento"
-    // CUIDADO: "Número" exato para não pegar "Número da instalação"
-    const allInputsForNum = await page.locator('input:visible').all();
+    // Aguardar CEP auto-fill completar (endereço, bairro, cidade, estado)
+    console.log('   ⏳ Aguardando auto-preenchimento do CEP (3s)...');
+    await delay(3000);
+    
+    // Scroll para revelar campos de endereço
+    await page.evaluate(() => window.scrollBy(0, 300));
+    await delay(1500);
+    
+    // Preencher "Número" - buscar campo com placeholder exato "Número"
     let numField = null;
-    for (const inp of allInputsForNum) {
-      const ph = await inp.getAttribute('placeholder').catch(() => '') || '';
-      if (ph.trim() === 'Número') {
-        numField = inp;
-        break;
+    // Tentativa 1: placeholder exato
+    const numByPH = byPH('Número');
+    if (await numByPH.count() > 0 && await numByPH.isVisible().catch(() => false)) {
+      numField = numByPH;
+    }
+    // Tentativa 2: buscar todos inputs visíveis e filtrar
+    if (!numField) {
+      const allInputsForNum = await page.locator('input:visible').all();
+      for (const inp of allInputsForNum) {
+        const ph = (await inp.getAttribute('placeholder').catch(() => '') || '').trim();
+        const name = (await inp.getAttribute('name').catch(() => '') || '').trim();
+        if (ph === 'Número' || name === 'number' || name === 'addressNumber') {
+          numField = inp;
+          break;
+        }
       }
     }
+    // Tentativa 3: esperar mais e tentar de novo
+    if (!numField) {
+      await delay(3000);
+      await page.evaluate(() => window.scrollBy(0, 200));
+      await delay(1000);
+      const retryNum = byPH('Número');
+      if (await retryNum.count() > 0 && await retryNum.isVisible().catch(() => false)) {
+        numField = retryNum;
+      }
+    }
+    
     if (numField) {
       await numField.click();
       await numField.fill('');
@@ -872,6 +901,7 @@ export async function executarAutomacao(customerId, options = {}) {
     // Complemento
     if (data.complemento) {
       let compField = byPH('Complemento');
+      if (await compField.count() === 0) compField = byPHPartial('Complemento');
       if (await compField.count() > 0 && await compField.isVisible().catch(() => false)) {
         await compField.fill(data.complemento);
         console.log(`   ✅ Complemento: ${data.complemento}`);
@@ -889,8 +919,23 @@ export async function executarAutomacao(customerId, options = {}) {
     if (data.numeroInstalacao) {
       console.log(`   📊 Número: ${data.numeroInstalacao}`);
       
-      let instField = byPHPartial('instala');
+      // Tentativa 1: placeholder exato
+      let instField = byPH('Número da instalação');
+      // Tentativa 2: parcial (instala, instalação)
+      if (await instField.count() === 0) instField = byPHPartial('instala');
+      // Tentativa 3: parcial (Código, código)
       if (await instField.count() === 0) instField = byPHPartial('Código');
+      // Tentativa 4: name-based
+      if (await instField.count() === 0) instField = page.locator('input[name*="install" i], input[name*="codigo" i]').first();
+      
+      // Aguardar visibilidade com timeout
+      try {
+        await instField.waitFor({ state: 'visible', timeout: 8000 });
+      } catch (_) {
+        // Scroll extra e retry
+        await page.evaluate(() => window.scrollBy(0, 300));
+        await delay(2000);
+      }
       
       if (await instField.count() > 0 && await instField.isVisible().catch(() => false)) {
         await instField.click();
