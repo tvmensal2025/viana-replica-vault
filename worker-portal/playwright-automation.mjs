@@ -1029,63 +1029,137 @@ export async function executarAutomacao(customerId, options = {}) {
     console.log('\n📋 [10/16] Upload documentos pessoais...');
     await delay(2000);
     
-    // Portal usa inputs hidden: #file-frente e #file-verso
-    // Primeiro tentar pelos IDs exatos conhecidos
-    const fileFrente = page.locator('#file-frente, input[type="file"]').first();
-    const fileVerso = page.locator('#file-verso, input[type="file"]').last();
+    // Scroll para revelar seção de upload
+    await page.evaluate(() => window.scrollBy(0, 400));
+    await delay(2000);
     
-    // Verificar se existem pelo menos 2 inputs file
+    let docsEnviados = 0;
+    
+    // ESTRATÉGIA 1: input[type="file"] direto (portal antigo)
     const allFileInputsCount = await page.locator('input[type="file"]').count();
     console.log(`   📊 ${allFileInputsCount} input(s) file encontrado(s)`);
     
-    // Upload frente
-    if (allFileInputsCount >= 1) {
+    if (allFileInputsCount >= 1 && docFrentePath) {
       try {
-        await fileFrente.setInputFiles(docFrentePath);
-        console.log('   ✅ Documento FRENTE enviado');
+        await page.locator('input[type="file"]').first().setInputFiles(docFrentePath);
+        console.log('   ✅ Documento FRENTE enviado (input file)');
+        docsEnviados++;
         await delay(2000);
       } catch (e) {
-        console.warn(`   ⚠️  Doc frente: ${e.message}`);
+        console.warn(`   ⚠️  Doc frente (input): ${e.message}`);
+      }
+      if (allFileInputsCount >= 2 && docVersoPath) {
+        try {
+          await page.locator('input[type="file"]').nth(1).setInputFiles(docVersoPath);
+          console.log('   ✅ Documento VERSO enviado (input file)');
+          docsEnviados++;
+          await delay(2000);
+        } catch (e) {
+          console.warn(`   ⚠️  Doc verso (input): ${e.message}`);
+        }
       }
     }
     
-    // Upload verso
-    if (allFileInputsCount >= 2 && docVersoPath) {
-      try {
-        await fileVerso.setInputFiles(docVersoPath);
-        console.log('   ✅ Documento VERSO enviado');
-        await delay(2000);
-      } catch (e) {
-        console.warn(`   ⚠️  Doc verso: ${e.message}`);
+    // ESTRATÉGIA 2: Cards clicáveis "Frente"/"Verso" com fileChooser (portal redesenhado)
+    if (docsEnviados === 0 && docFrentePath) {
+      console.log('   🔄 Tentando upload via cards clicáveis (fileChooser)...');
+      
+      // Upload FRENTE
+      const frenteCards = [
+        page.locator('text=Frente').first(),
+        page.locator('[data-testid*="frente" i]').first(),
+        page.locator('div:has-text("Frente"):not(:has(div:has-text("Frente")))').first(),
+        page.locator('label:has-text("Frente")').first(),
+        page.locator('button:has-text("Frente")').first(),
+        page.locator('span:has-text("Frente")').first(),
+      ];
+      
+      for (const card of frenteCards) {
+        if (docsEnviados > 0) break;
+        try {
+          if (await card.count() > 0 && await card.isVisible().catch(() => false)) {
+            const [frenteChooser] = await Promise.all([
+              page.waitForEvent('filechooser', { timeout: 5000 }),
+              card.click({ timeout: 3000 }),
+            ]);
+            await frenteChooser.setFiles(docFrentePath);
+            console.log('   ✅ Documento FRENTE enviado (fileChooser)');
+            docsEnviados++;
+            await delay(2000);
+            break;
+          }
+        } catch (e) {
+          console.log(`   ⚠️  Frente card falhou: ${e.message.substring(0, 60)}`);
+        }
+      }
+      
+      // Upload VERSO (se aplicável)
+      if (docVersoPath && docsEnviados > 0) {
+        const versoCards = [
+          page.locator('text=Verso').first(),
+          page.locator('[data-testid*="verso" i]').first(),
+          page.locator('div:has-text("Verso"):not(:has(div:has-text("Verso")))').first(),
+          page.locator('label:has-text("Verso")').first(),
+          page.locator('button:has-text("Verso")').first(),
+          page.locator('span:has-text("Verso")').first(),
+        ];
+        
+        for (const card of versoCards) {
+          try {
+            if (await card.count() > 0 && await card.isVisible().catch(() => false)) {
+              const [versoChooser] = await Promise.all([
+                page.waitForEvent('filechooser', { timeout: 5000 }),
+                card.click({ timeout: 3000 }),
+              ]);
+              await versoChooser.setFiles(docVersoPath);
+              console.log('   ✅ Documento VERSO enviado (fileChooser)');
+              docsEnviados++;
+              await delay(2000);
+              break;
+            }
+          } catch (e) {
+            console.log(`   ⚠️  Verso card falhou: ${e.message.substring(0, 60)}`);
+          }
+        }
       }
     }
     
-    if (allFileInputsCount === 0) {
-      console.warn('   ⚠️  Nenhum input file encontrado');
-      // Scroll para tentar revelar
-      await page.evaluate(() => window.scrollBy(0, 300));
-      await delay(2000);
-      // Re-tentar
-      const retryCount = await page.locator('input[type="file"]').count();
-      if (retryCount >= 1) {
-        await page.locator('input[type="file"]').first().setInputFiles(docFrentePath).catch(() => {});
-        console.log('   ✅ Documento FRENTE enviado (retry)');
-      }
-      if (retryCount >= 2 && docVersoPath) {
-        await page.locator('input[type="file"]').last().setInputFiles(docVersoPath).catch(() => {});
-        console.log('   ✅ Documento VERSO enviado (retry)');
+    // ESTRATÉGIA 3: Clicar em qualquer área de upload/dropzone genérica
+    if (docsEnviados === 0 && docFrentePath) {
+      console.log('   🔄 Tentando upload via dropzone genérica...');
+      const dropzones = [
+        page.locator('[class*="upload" i], [class*="dropzone" i], [class*="drag" i]').first(),
+        page.locator('div[role="button"]:has-text("upload")').first(),
+      ];
+      for (const dz of dropzones) {
+        try {
+          if (await dz.count() > 0 && await dz.isVisible().catch(() => false)) {
+            const [chooser] = await Promise.all([
+              page.waitForEvent('filechooser', { timeout: 5000 }),
+              dz.click({ timeout: 3000 }),
+            ]);
+            await chooser.setFiles(docFrentePath);
+            console.log('   ✅ Documento enviado (dropzone)');
+            docsEnviados++;
+            await delay(2000);
+            break;
+          }
+        } catch (_) {}
       }
     }
     
+    console.log(`   📊 Total docs enviados: ${docsEnviados}`);
     await screenshot(page, customerId, '06-documentos-enviados');
-    await delay(1500);
+    await delay(2000);
     
     // ─── 14. PERGUNTAS: Procurador + PDF + Débitos ──────────────────────
     currentPhase = 'perguntas';
     console.log('\n📋 [11/16] Perguntas (Procurador, PDF, Débitos)...');
     
+    // Aguardar perguntas aparecerem após upload de docs
+    await delay(3000);
     await page.evaluate(() => window.scrollBy(0, 400));
-    await delay(1500);
+    await delay(2000);
     
     // Estratégia universal: clicar em TODOS os radios/botões "Não" visíveis
     let perguntasRespondidas = 0;
@@ -1132,6 +1206,20 @@ export async function executarAutomacao(customerId, options = {}) {
       }
     }
     
+    // Estratégia 4: div[role="radio"] com texto "Não" (MUI RadioGroup)
+    if (perguntasRespondidas === 0) {
+      const muiRadios = await page.locator('[role="radio"]:has-text("Não")').all();
+      for (const radio of muiRadios) {
+        try {
+          const visible = await radio.isVisible().catch(() => false);
+          if (!visible) continue;
+          await radio.click({ timeout: 3000 });
+          console.log('   ✅ MUI Radio "Não" clicado');
+          perguntasRespondidas++;
+        } catch (_) {}
+      }
+    }
+    
     console.log(`   📊 Total respostas: ${perguntasRespondidas}`);
     await screenshot(page, customerId, '07-perguntas');
     
@@ -1140,11 +1228,11 @@ export async function executarAutomacao(customerId, options = {}) {
     console.log('\n📋 [12/16] Upload conta de energia...');
     
     await page.evaluate(() => window.scrollBy(0, 300));
-    await delay(1500);
+    await delay(2000);
     
     let contaEnviada = false;
     
-    // Re-buscar inputs file (podem ter aparecido novos após perguntas)
+    // ESTRATÉGIA 1: input[type="file"] disponível
     const allFileInputs = await page.locator('input[type="file"]').all();
     console.log(`   📊 Total inputs file agora: ${allFileInputs.length}`);
     
@@ -1159,7 +1247,6 @@ export async function executarAutomacao(customerId, options = {}) {
       }
     }
     
-    // Fallback: último input file
     if (!contaEnviada && allFileInputs.length > 0) {
       try {
         await allFileInputs[allFileInputs.length - 1].setInputFiles(contaPath);
@@ -1167,6 +1254,37 @@ export async function executarAutomacao(customerId, options = {}) {
         contaEnviada = true;
       } catch (e) {
         console.warn(`   ⚠️  Último input: ${e.message}`);
+      }
+    }
+    
+    // ESTRATÉGIA 2: Card clicável "Conta de energia" / "Conta de luz" com fileChooser
+    if (!contaEnviada) {
+      console.log('   🔄 Tentando upload conta via fileChooser...');
+      const contaCards = [
+        page.locator('text=Conta de energia').first(),
+        page.locator('text=Conta de luz').first(),
+        page.locator('text=Fatura').first(),
+        page.locator('[data-testid*="conta" i]').first(),
+        page.locator('div:has-text("Conta"):not(:has(div:has-text("Conta")))').last(),
+        page.locator('label:has-text("Conta")').first(),
+        page.locator('button:has-text("Conta")').first(),
+      ];
+      
+      for (const card of contaCards) {
+        if (contaEnviada) break;
+        try {
+          if (await card.count() > 0 && await card.isVisible().catch(() => false)) {
+            const [contaChooser] = await Promise.all([
+              page.waitForEvent('filechooser', { timeout: 5000 }),
+              card.click({ timeout: 3000 }),
+            ]);
+            await contaChooser.setFiles(contaPath);
+            console.log('   ✅ Conta enviada (fileChooser)');
+            contaEnviada = true;
+          }
+        } catch (e) {
+          console.log(`   ⚠️  Conta card falhou: ${e.message.substring(0, 60)}`);
+        }
       }
     }
     
