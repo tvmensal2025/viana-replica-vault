@@ -33,9 +33,11 @@ const SUGGESTIONS = [
 ];
 
 const CADASTRO_KEYWORDS = [
-  "cadastrar", "cadastro", "como cadastro", "como faço para cadastrar",
+  "cadastrar", "cadastro", "como cadastro", "como faco para cadastrar",
   "registrar", "como registro", "quero cadastrar", "como me cadastro",
-  "como se cadastrar", "fazer cadastro", "inscrição", "inscrever",
+  "como se cadastrar", "fazer cadastro", "inscricao", "inscrever",
+  "cadastra", "como funciona o cadastro", "preciso cadastrar",
+  "quero registrar", "como faz pra cadastrar", "como cadastra",
 ];
 
 const VIDEO_URLS_MAP: Record<string, string> = {
@@ -51,39 +53,32 @@ function detectCadastroIntent(text: string): boolean {
 }
 
 function renderVideoInText(text: string): JSX.Element[] {
-  const urlRegex = /(https?:\/\/[^\s)]+)/g;
-  const parts = text.split(urlRegex);
+  const urlPattern = /(https?:\/\/[^\s)]+)/g;
+  const parts = text.split(urlPattern);
 
   return parts.map((part, i) => {
-    if (urlRegex.test(part)) {
-      urlRegex.lastIndex = 0;
-      const isYoutube = part.includes("youtube.com") || part.includes("youtu.be");
-      if (isYoutube) {
-        return (
-          <div key={i} className="my-2 rounded-xl overflow-hidden border border-border/30">
-            <video controls playsInline preload="none" className="w-full aspect-video">
-              <source src={ENERGY_VIDEO_URL} type="video/mp4" />
-            </video>
-          </div>
-        );
-      }
-      const isVideo = /\.(mp4|webm|ogg)(\?|$)/i.test(part);
-      if (isVideo) {
-        return (
-          <div key={i} className="my-2 rounded-xl overflow-hidden border border-border/30">
-            <video controls playsInline preload="none" className="w-full aspect-video">
-              <source src={part} type="video/mp4" />
-            </video>
-          </div>
-        );
-      }
+    const isUrl = /^https?:\/\//.test(part);
+    if (!isUrl) return <span key={i}>{part}</span>;
+
+    const isYoutube = part.includes("youtube.com") || part.includes("youtu.be");
+    const isVideoFile = /\.(mp4|webm|ogg)(\?|$)/i.test(part);
+
+    if (isYoutube || isVideoFile) {
+      const videoSrc = isYoutube ? ENERGY_VIDEO_URL : part;
       return (
-        <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-primary underline break-all">
-          {part}
-        </a>
+        <div key={i} className="my-2 rounded-xl overflow-hidden border border-border/30">
+          <video controls playsInline preload="metadata" className="w-full aspect-video">
+            <source src={videoSrc} type="video/mp4" />
+          </video>
+        </div>
       );
     }
-    return <span key={i}>{part}</span>;
+
+    return (
+      <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-primary underline break-all">
+        {part}
+      </a>
+    );
   });
 }
 
