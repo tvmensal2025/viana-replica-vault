@@ -1,18 +1,17 @@
-/**
- * Automação Playwright - Portal iGreen v3.0
- * Fluxo 100% automático: CEP → Calcular → Garantir → Formulário → Upload Docs → Perguntas → OTP → Enviar
- * 
- * v3.0 - Correções críticas:
- * ✅ Upload de RG/CNH (frente + verso) via input[type="file"]
- * ✅ Upload da conta de energia (3 estratégias de fallback)
- * ✅ Tipo de documento (dropdown customizado + select tradicional)
- * ✅ Procurador: NÃO (4 estratégias)
- * ✅ PDF Protegido: NÃO (4 estratégias)
- * ✅ Débitos: NÃO (3 estratégias)
- * ✅ CPF com .type() para validação automática
- * ✅ Validação pós-submit (verifica mensagem de sucesso)
- * ✅ Screenshots em cada fase
- */
+// Automação Playwright - Portal iGreen v4.0
+// Fluxo 100% automático: CEP → Calcular → Garantir → Formulário → Upload Docs → Perguntas → OTP → Enviar
+//
+// v4.0 - Correções críticas:
+// ✅ Upload via fileChooser (cards clicáveis "Frente"/"Verso")
+// ✅ Fallback para input[type="file"] (portal antigo)
+// ✅ Tipo de documento (MUI Select + select nativo)
+// ✅ Timing corrigido (espera auto-fill CEP, campos dinâmicos)
+// ✅ Tratar "nao_aplicavel" em URLs de documentos
+// ✅ Perguntas: Radio + Label + Button + MUI RadioGroup
+// ✅ Upload conta via fileChooser
+// ✅ CPF com .type() para validação automática
+// ✅ Validação pós-submit (verifica mensagem de sucesso)
+// ✅ Screenshots em cada fase
 
 import { chromium } from 'playwright';
 import { createClient } from '@supabase/supabase-js';
