@@ -487,8 +487,8 @@ Deno.serve(async (req) => {
           const sent = await sendMedia(remoteJid, videoUrl, "☀️ Conexão Green — Energia limpa com até 20% de desconto!", "video");
           
           if (!sent) {
-            // Fallback: enviar link
-            await sendText(remoteJid, `📹 Assista aqui: ${videoUrl}`);
+            // Sem fallback de link — apenas avisar que o vídeo virá em instantes
+            await sendText(remoteJid, "⚠️ Tive um problema momentâneo ao enviar o vídeo. Mas vamos seguir com seu cadastro normalmente!");
           }
 
           // Aguardar 3 segundos antes do menu pós-vídeo
