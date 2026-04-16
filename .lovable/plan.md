@@ -1,106 +1,110 @@
 
 
-# Plano: Corrigir Worker Portal Playwright - 8 Falhas Críticas
+# Plano: Corrigir Worker Portal - Fluxo Completo Testado ao Vivo
 
-## Diagnóstico
+## Diagnóstico Confirmado (inspeção ao vivo do portal)
 
-Inspecionei o portal `digital.igreenenergy.com.br` ao vivo e identifiquei que **o portal foi redesenhado**. A automação atual falha em 8 pontos:
+Testei o portal `digital.igreenenergy.com.br` passo a passo e confirmei a estrutura real:
 
 ```text
-FALHA                              CAUSA RAIZ
-─────────────────────────────────────────────────────────────────
-1. "nao_aplicavel" URL crash       Não trata valor especial
-2. Campo "Número" não encontrado   Timing: campos de endereço aparecem após CEP auto-fill, automação não espera
-3. Campo "instalação" não encontrado   Mesmo problema de timing
-4. Tipo documento não selecionado  Seletor MUI incompleto - dropdown "Tipo documento" usa MUI Select
-5. 0 inputs file encontrados      PORTAL REDESENHADO: uploads usam cards clicáveis "Frente"/"Verso", NÃO inputs file
-6. Perguntas 0 respostas          Perguntas só aparecem DEPOIS do upload de docs
-7. Conta de energia NÃO enviada   Mesmo que #5 - sem input file
-8. Botão submit não encontrado    Formulário incompleto, botão não aparece
+CAMPO                    SELETOR REAL (LABEL, NÃO PLACEHOLDER)
+────────────────────────────────────────────────────────────────
+CPF ou CNPJ              input dentro de div com label "CPF ou CNPJ*"
+Nome completo            AUTO-FILL pela Receita (após CPF)
+Data de Nascimento       AUTO-FILL pela Receita (após CPF)
+WhatsApp                 label "Número do seu WhatsApp*"
+Confirme celular         label "Confirme seu celular*"
+E-mail                   label "E-mail*"
+Confirme E-mail          label "Confirme seu E-mail*"
+CEP                      label "CEP*" (auto-fill no form)
+Endereço                 label "Endereço*" (auto-fill pelo CEP)
+Número                   label "Número*" (precisa preencher)
+Bairro/Cidade/Estado     AUTO-FILL pelo CEP
+Complemento              label "Complemento" (opcional)
+Nº da instalação         label "Número da instalação*"
+Tipo documento           MUI Select (dropdown) - trigger: div, opções em ul>li
+Documento pessoal        Cards clicáveis "Frente" (e "Verso" se RG)
 ```
 
-## Mudanças no `worker-portal/playwright-automation.mjs`
+### Descobertas críticas:
+1. **CNH = só 1 card ("Frente")**, sem Verso. RG = 2 cards
+2. **MUI Select para "Tipo documento"**: opções em `div[2] > div[3] > ul > li` (li[1]=RG Antigo, li[2]=RG Novo, li[3]=CNH)
+3. **Cards de upload usam fileChooser** - não input[type="file"]
+4. **Campos usam LABELS MUI** (floating labels), não placeholders puros
 
-### 1. Tratar "nao_aplicavel" no download de documentos (linhas ~292-341)
-- Na função `prepararDocumento()`: verificar se URL é "nao_aplicavel" ANTES de tentar fazer fetch
-- Se for "nao_aplicavel", retornar `null` em vez de placeholder
-- Ajustar `salvarDocumentosCliente()` para mesma verificação
+## Mudanças em `worker-portal/playwright-automation.mjs`
 
-### 2. Corrigir timing do campo "Número" endereço (linhas ~847-870)
-- Adicionar `await delay(3000)` antes de buscar campos de endereço (esperar auto-fill do CEP)
-- Usar `byPH('Número')` como primeira tentativa em vez do loop manual
-- Adicionar `waitFor({ state: 'visible', timeout: 10000 })` para o campo
+### 1. Corrigir seletor de campos — usar labels MUI como fallback
+O script atual usa `byPH('Número')` que busca por `placeholder="Número"`. O portal usa labels flutuantes MUI. Adicionar fallback via `page.getByLabel('Número')` e `page.locator('label:has-text("Número") + div input, label:has-text("Número") ~ div input')`.
 
-### 3. Corrigir timing do campo "Número da instalação" (linhas ~885-904)
-- Verificar que o placeholder exato é "Número da instalação" (com acento em "ç" e "ã")
-- Adicionar `byPH('Número da instalação')` como tentativa exata antes do parcial
-- Aumentar timeout de espera
+### 2. Corrigir campo "Número" endereço
+- Usar `page.getByLabel('Número', { exact: true })` como estratégia principal
+- Manter fallback por placeholder
+- Aguardar 3s após CEP + email serem preenchidos (auto-fill precisa de tempo)
 
-### 4. Corrigir dropdown "Tipo documento" (linhas ~918-979)
-- O dropdown MUI renderiza como `<div>` com `role="combobox"` ou similar
-- Ao clicar, abre um `<ul>` com `<li>` de opções no portal
-- Adicionar seletor: `div:has-text("Tipo documento")` com dropdown arrow
-- Clicar no trigger, esperar menu abrir, selecionar "CNH" ou "RG (Novo)" etc.
-- Fallback: usar `page.selectOption()` caso seja um `<select>` nativo escondido
+### 3. Corrigir campo "Número da instalação"
+- Usar `page.getByLabel('Número da instalação')` como estratégia principal  
+- Fallback por placeholder parcial
 
-### 5. REESCREVER uploads de documentos (linhas ~982-1036) - MUDANÇA MAIOR
-O portal agora usa **cards clicáveis** "Frente" e "Verso" em vez de `input[type="file"]`:
-- Clicar no card "Frente" → isso dispara um file dialog via JavaScript
-- Usar `page.waitForEvent('filechooser')` para capturar o dialog
-- Chamar `fileChooser.setFiles(docFrentePath)` para enviar o arquivo
-- Repetir para card "Verso" (se documento_back_url não for "nao_aplicavel")
+### 4. Corrigir dropdown "Tipo documento" — MUI Select
+A estrutura confirmada:
+- **Trigger**: `div` dentro de `form > div > div[8]` — clicar na div que mostra o valor atual
+- **Opções**: aparecem em `body > div[2] > div[3] > ul > li` como popover MUI
 - Implementação:
 ```javascript
-// Clicar em "Frente" e interceptar o file chooser
-const [frenteChooser] = await Promise.all([
-  page.waitForEvent('filechooser'),
-  page.locator('text=Frente').first().click()
-]);
-await frenteChooser.setFiles(docFrentePath);
-
-// Clicar em "Verso" (se aplicável)
-if (docVersoPath && docVersoPath !== null) {
-  const [versoChooser] = await Promise.all([
-    page.waitForEvent('filechooser'),
-    page.locator('text=Verso').first().click()
-  ]);
-  await versoChooser.setFiles(docVersoPath);
-}
+// Clicar no trigger MUI Select
+const muiSelect = page.locator('.MuiSelect-select, [role="combobox"]').first();
+await muiSelect.click();
+await delay(800);
+// Selecionar opção no popover
+const option = page.locator(`li:has-text("${opcaoTexto}"), [role="option"]:has-text("${opcaoTexto}")`).first();
+await option.click();
 ```
 
-### 6. Corrigir perguntas (Procurador, PDF, Débitos) (linhas ~1038-1091)
-- As perguntas só aparecem DEPOIS do upload de docs ter sucesso
-- Adicionar `await delay(3000)` após uploads
-- Scroll para revelar perguntas
-- Adicionar seletores adicionais: `button:has-text("Não")`, `div[role="radio"]:has-text("Não")`
+### 5. Upload documentos — fileChooser com lógica CNH vs RG
+- **CNH**: só 1 card "Frente" (não tentar "Verso")
+- **RG**: 2 cards "Frente" + "Verso"
+- Usar `page.waitForEvent('filechooser')` ao clicar no card
+- **Não usar docVersoPath se tipo = CNH** (evita erro)
+- Seletor do card: `page.getByText('Frente')` e `page.getByText('Verso')`
 
-### 7. Upload conta de energia (linhas ~1093-1131)
-- Mesmo mecanismo de cards clicáveis
-- Usar `page.waitForEvent('filechooser')` ao clicar no card de upload da conta
-- O card pode ter texto "Conta de energia" ou similar
+### 6. Perguntas e conta de energia
+- Perguntas só aparecem após upload ter sucesso
+- Adicionar `await delay(3000)` pós-upload + scroll
+- Conta de energia: mesma lógica de fileChooser
 
-### 8. Botão submit (linhas ~1177-1212)
-- O botão só aparece quando todos os campos obrigatórios estão preenchidos
-- Se uploads forem corrigidos, o botão deve aparecer
-- Manter seletores atuais como fallback
+### 7. Tratar "nao_aplicavel" — já implementado, verificar que funciona
 
-### 9. Corrigir SyntaxError no startup
-- O erro `SyntaxError: Unexpected token '*'` na linha 462 é um JSDoc comment
-- Pode ocorrer em versões específicas de Node.js com ESM
-- Converter JSDoc multiline `/** ... */` para comentários simples `// ...`
+### 8. "Cadastro existente" — botão "Continuar com um novo cadastro"
+- Já existe lógica, manter. Verificar que clica corretamente
+
+### 9. Botão Finalizar
+- Aparece após todos campos + uploads preenchidos
+- Seletores: `button:has-text("Finalizar")`, `button[type="submit"]`
+
+## Dados de teste (dos documentos enviados)
+
+```
+Nome: HUMBERTO VIEIRA E SILVA (auto-fill pela Receita)
+CPF: 332.773.541-72
+Data Nasc: 22/07/1964 (auto-fill)
+CEP: 13309-410
+Endereço: auto-fill pelo CEP
+Número: 182
+Código instalação: 2095855190
+Documento: CNH (1 página frente)
+Valor conta: R$ 205,04
+Email: TVMENSAL011@GMAIL.COM
+Telefone: 11998731258 (→ formato portal: 1199873-1258)
+```
 
 ## Arquivos Modificados
 
-1. **`worker-portal/playwright-automation.mjs`** — Todos os 8 fixes acima
-2. **`worker-portal/server.mjs`** — Converter JSDoc para comentários simples (fix SyntaxError)
+1. **`worker-portal/playwright-automation.mjs`** — Reescrever seções 6-14 com seletores corretos baseados na inspeção ao vivo
+2. **`worker-portal/server.mjs`** — Verificar e corrigir JSDoc (SyntaxError na linha 462)
 
 ## Resultado Esperado
 
-Após os fixes:
-- Documentos enviados via cards "Frente"/"Verso" com fileChooser
-- Todos os campos preenchidos (Número, instalação, tipo documento)
-- Perguntas respondidas automaticamente
-- Conta de energia enviada
-- Botão "Finalizar" clicado
-- Lead processado 100% sem intervenção manual
+Fluxo completo sem erros:
+CEP+Valor → Calcular → Garantir → CPF (auto-fill nome/nasc) → WhatsApp+Confirmar → Email+Confirmar → Número endereço → Nº instalação → Tipo doc (CNH) → Upload Frente (fileChooser) → Perguntas (Não) → Upload Conta → Finalizar → OTP → Assinatura facial
 
