@@ -979,14 +979,18 @@ export async function executarAutomacao(customerId, options = {}) {
     let tipoDocOk = false;
     
     // Portal usa MUI Select (dropdown customizado com div, não <select>)
-    // O trigger é um div com role="combobox" ou aria-haspopup="listbox"
     const muiTriggers = [
+      // MUI Select com classe específica
+      '.MuiSelect-select',
+      // Combobox/listbox ARIA
       '[role="combobox"]',
       '[aria-haspopup="listbox"]',
-      // MUI Select renderiza com classe MuiSelect
-      '.MuiSelect-select',
-      // Fallback: div que mostra "Tipo documento"
+      // Select nativo escondido que pode estar presente
+      'select',
+      // Label + div wrapper para tipo documento
       'div:has-text("Tipo documento"):not(:has(div:has-text("Tipo documento")))',
+      // Input com placeholder de tipo
+      'input[placeholder*="tipo" i]',
     ];
     
     for (const sel of muiTriggers) {
@@ -994,16 +998,49 @@ export async function executarAutomacao(customerId, options = {}) {
       try {
         const el = page.locator(sel).first();
         if (await el.count() > 0 && await el.isVisible().catch(() => false)) {
+          // Checar se é um <select> nativo
+          const tagName = await el.evaluate(e => e.tagName).catch(() => '');
+          if (tagName === 'SELECT') {
+            // Select nativo: usar selectOption
+            await el.selectOption({ label: opcaoTexto }).catch(async () => {
+              // Tentar por value parcial
+              const options = await el.locator('option').allTextContents();
+              const match = options.find(o => o.includes('CNH') || o.includes(opcaoTexto));
+              if (match) {
+                await el.selectOption({ label: match });
+              }
+            });
+            console.log(`   ✅ Tipo documento (select nativo): ${opcaoTexto}`);
+            tipoDocOk = true;
+            break;
+          }
+          
+          // MUI Select: clicar para abrir dropdown
           await el.click({ timeout: 5000 });
-          await delay(800);
+          await delay(1000);
           
           // MUI abre um popover/menu com role="listbox" ou ul com li items
-          const opt = page.locator(`li:has-text("${opcaoTexto}"), [role="option"]:has-text("${opcaoTexto}")`).first();
-          if (await opt.count() > 0 && await opt.isVisible().catch(() => false)) {
-            await opt.click({ timeout: 5000 });
-            console.log(`   ✅ Tipo documento: ${opcaoTexto}`);
-            tipoDocOk = true;
-          } else {
+          // Tentar múltiplos seletores para as opções
+          const optionSelectors = [
+            `li:has-text("${opcaoTexto}")`,
+            `[role="option"]:has-text("${opcaoTexto}")`,
+            `.MuiMenuItem-root:has-text("${opcaoTexto}")`,
+            `ul li:has-text("${opcaoTexto}")`,
+          ];
+          
+          let optionClicked = false;
+          for (const optSel of optionSelectors) {
+            const opt = page.locator(optSel).first();
+            if (await opt.count() > 0 && await opt.isVisible().catch(() => false)) {
+              await opt.click({ timeout: 5000 });
+              console.log(`   ✅ Tipo documento: ${opcaoTexto}`);
+              tipoDocOk = true;
+              optionClicked = true;
+              break;
+            }
+          }
+          
+          if (!optionClicked) {
             // Tentar texto parcial
             const optAlt = page.getByText(opcaoTexto, { exact: false }).first();
             if (await optAlt.count() > 0 && await optAlt.isVisible().catch(() => false)) {
@@ -1021,6 +1058,13 @@ export async function executarAutomacao(customerId, options = {}) {
     if (!tipoDocOk) {
       console.warn('   ⚠️  Tipo documento não selecionado - usando default do portal');
       await screenshot(page, customerId, '05b-tipo-doc-FALHOU');
+      // Dump HTML para diagnóstico
+      try {
+        const html = await page.content();
+        const htmlPath = join(SCREENSHOTS_DIR, `${customerId}-05b-tipo-doc-FALHOU-${Date.now()}.html`);
+        writeFileSync(htmlPath, html);
+        console.log('   📄 HTML dump salvo para diagnóstico');
+      } catch (_) {}
     }
     await delay(1500);
 

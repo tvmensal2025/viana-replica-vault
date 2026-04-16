@@ -1,13 +1,11 @@
-/**
- * Worker VPS - Servidor HTTP para automação do portal iGreen
- * 
- * Endpoints:
- * - POST /submit-lead    - Dispara automação Playwright
- * - POST /confirm-otp    - Recebe código OTP (manual)
- * - POST /webhook/whapi  - Recebe webhook do Whapi (WhatsApp)
- * - GET  /otp/:id        - Playwright busca OTP
- * - GET  /health         - Health check
- */
+// Worker VPS - Servidor HTTP para automação do portal iGreen
+//
+// Endpoints:
+// - POST /submit-lead    - Dispara automação Playwright
+// - POST /confirm-otp    - Recebe código OTP (manual)
+// - POST /webhook/whapi  - Recebe webhook do Whapi (WhatsApp)
+// - GET  /otp/:id        - Playwright busca OTP
+// - GET  /health         - Health check
 
 import express from 'express';
 import { createClient } from '@supabase/supabase-js';
