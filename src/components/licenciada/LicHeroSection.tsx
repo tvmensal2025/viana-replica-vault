@@ -111,7 +111,7 @@ const LicHeroSection = ({ cadastroUrl, whatsappUrl, consultantId }: LicHeroSecti
         {/* Video - priority on mobile */}
         <div className="max-w-4xl mx-auto mb-3 md:mb-4 rounded-xl md:rounded-2xl overflow-hidden relative" style={{ boxShadow: 'var(--shadow-green-lg)' }}>
           <div className="absolute inset-0 rounded-xl md:rounded-2xl border border-primary/20 z-10 pointer-events-none" />
-          <video controls playsInline preload="none" className="w-full aspect-video relative z-0">
+          <video controls playsInline autoPlay muted preload="auto" className="w-full aspect-video relative z-0">
             <source src="https://zlzasfhcxcznaprrragl.supabase.co/storage/v1/object/public/video%20igreen/imagine-licenciado.mp4" type="video/mp4" />
           </video>
         </div>
