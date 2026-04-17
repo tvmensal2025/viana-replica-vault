@@ -213,8 +213,20 @@ ANALISE ESTA IMAGEM DA FRENTE da CNH.
 Na CNH (frente) os campos estão em posições padrão:
 - NOME: nome do titular em destaque (geralmente no topo, em maiúsculas).
 - CPF: exatamente 11 dígitos (campo "CPF" ou ao lado do número do documento).
-- DATA DE NASCIMENTO: DD/MM/AAAA (campo "Nascimento" ou "Data de Nasc.").
-- RG / IDENTIDADE: número do documento de identidade (pode aparecer como "Identidade" ou "RG"); na CNH costuma ter pontos e traços — retorne APENAS os dígitos (7 a 12 números).
+- DATA DE NASCIMENTO: DD/MM/AAAA — fica perto do nome do titular, normalmente rotulada como "DATA NASCIMENTO" ou "NASCIMENTO".
+- RG / IDENTIDADE: número do documento de identidade (pode aparecer como "Identidade" ou "RG"); retorne APENAS os dígitos (7 a 12 números).
+
+⚠️ ATENÇÃO CRÍTICA — DATA DE NASCIMENTO:
+A CNH tem VÁRIAS datas. Você DEVE extrair APENAS a data rotulada como "NASCIMENTO" / "DATA NASCIMENTO" / "DATA DE NASC.".
+NUNCA confunda com:
+  ❌ "DATA EMISSÃO" / "DATA DE EMISSÃO" / "EMITIDO EM"
+  ❌ "VALIDADE" / "VÁLIDA ATÉ" / "VENCIMENTO"
+  ❌ "1ª HABILITAÇÃO" / "PRIMEIRA HABILITAÇÃO" / "DATA 1ª HAB"
+  ❌ Datas no verso ou no canto da página
+Regra de plausibilidade: a data de nascimento DEVE ser anterior à data atual e o titular deve ter entre 18 e 100 anos (ano entre 1920 e ${new Date().getFullYear() - 17}).
+Se houver QUALQUER dúvida sobre qual data é o nascimento, retorne "" em dataNascimento e marque dataNascimentoConfianca como "baixa".
+
+Adicione um campo extra "dataNascimentoConfianca" com valor "alta" (rótulo "Nascimento" claramente visível ao lado), "media" (inferida pela posição perto do nome) ou "baixa" (sem rótulo claro ou ambígua).
 
 REGRAS OBRIGATÓRIAS:
 - Extraia APENAS o que está ESCRITO e LEGÍVEL. NUNCA invente ou adivinhe.
@@ -224,7 +236,7 @@ REGRAS OBRIGATÓRIAS:
 - Data: estritamente DD/MM/AAAA.
 
 Retorne APENAS este JSON, sem markdown e sem texto antes ou depois:
-{"nome":"","rg":"","cpf":"","dataNascimento":"","nomePai":"","nomeMae":""}`;
+{"nome":"","rg":"","cpf":"","dataNascimento":"","dataNascimentoConfianca":"","nomePai":"","nomeMae":""}`;
   }
   // RG FRENTE (novo ou antigo)
   return `Você é um especialista em extrair dados da FRENTE do REGISTRO GERAL (RG) brasileiro.
@@ -305,7 +317,33 @@ export async function ocrDocumento(imagemUrl: string | null, geminiApiKey: strin
       const rgDig = dados.rg.replace(/\D/g, "");
       dados.rg = normalizarRG(dados.rg) || (rgDig.length >= 7 && rgDig.length <= 12 ? rgDig : "");
     }
-    if (dados.dataNascimento) dados.dataNascimento = validarDataNascimento(dados.dataNascimento);
+    if (dados.dataNascimento) {
+      const validada = validarDataNascimento(dados.dataNascimento);
+      // Validação de plausibilidade extra: ano entre 1920 e (hoje - 17 anos)
+      if (validada) {
+        const m = validada.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        if (m) {
+          const year = parseInt(m[3], 10);
+          const maxYear = new Date().getFullYear() - 17;
+          if (year < 1920 || year > maxYear) {
+            console.warn(`⚠️ Data nasc fora do plausível (${year}): descartando`);
+            dados.dataNascimento = "";
+            dados.dataNascimentoConfianca = "baixa";
+          } else {
+            dados.dataNascimento = validada;
+          }
+        } else {
+          dados.dataNascimento = validada;
+        }
+      } else {
+        dados.dataNascimento = "";
+      }
+    }
+    // Para CNH, se confiança não veio do modelo, marcar como "media" por padrão
+    const isCNH = /cnh/i.test(tipo);
+    if (isCNH && dados.dataNascimento && !dados.dataNascimentoConfianca) {
+      dados.dataNascimentoConfianca = "media";
+    }
     if (dados.nome) dados.nome = validarNomeOCR(dados.nome);
 
     // Score de confiança: campos críticos do documento (nome, cpf, rg, nascimento)

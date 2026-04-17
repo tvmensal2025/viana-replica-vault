@@ -808,7 +808,15 @@ Deno.serve(async (req) => {
               if (d.cpf) updates.cpf = d.cpf.replace(/\D/g, "");
               if (d.rg) updates.rg = d.rg;
               // OCR retorna camelCase (dataNascimento, nomePai, nomeMae)
-              if (d.dataNascimento) updates.data_nascimento = d.dataNascimento;
+              // CNH: só salva data se confiança for "alta". Senão deixa em branco para o portal preencher via CPF.
+              const dataConf = String(d.dataNascimentoConfianca || "").toLowerCase();
+              const dataConfiavel = d.dataNascimento && (dataConf === "alta" || (!dataConf && /cnh/i.test(customer.document_type || "") === false));
+              if (dataConfiavel) {
+                updates.data_nascimento = d.dataNascimento;
+                console.log(`✅ CNH: data nasc ${d.dataNascimento} aceita (confiança: ${dataConf || "n/a"})`);
+              } else if (d.dataNascimento) {
+                console.warn(`⚠️ CNH: data nasc ${d.dataNascimento} NÃO salva (confiança: ${dataConf}). Será confirmada com cliente ou virá do portal via CPF.`);
+              }
               if (d.nomePai) updates.nome_pai = d.nomePai;
               if (d.nomeMae) updates.nome_mae = d.nomeMae;
             }
@@ -820,7 +828,7 @@ Deno.serve(async (req) => {
           const nome = updates.name || customer.name || "—";
           const cpf = updates.cpf || customer.cpf || "—";
           const rg = updates.rg || customer.rg || "—";
-          const nasc = updates.data_nascimento || customer.data_nascimento || "—";
+          const nasc = updates.data_nascimento || customer.data_nascimento || "_(será preenchido pelo portal via CPF)_";
           const chnConfirmMsg = `📋 *Dados extraídos da CNH:*\n\n👤 Nome: *${nome}*\n🆔 CPF: *${cpf}*\n🪪 RG: *${rg}*\n🎂 Nascimento: *${nasc}*\n\nEstá tudo correto?`;
           const sent = await sendButtons(remoteJid, chnConfirmMsg, [
             { id: "sim_doc", title: "✅ SIM" },
