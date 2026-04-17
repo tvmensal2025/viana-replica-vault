@@ -1210,13 +1210,60 @@ export async function executarAutomacao(customerId, options = {}) {
     await page.evaluate(() => window.scrollBy(0, 200));
     await delay(1500);
 
-    // ─── 11. Distribuidora ──────────────────────────────────────────────
-    // NÃO existe campo distribuidora no portal atual - é detectada automaticamente pelo CEP
+    // ─── 11. Distribuidora (MUI Select MANUAL — confirmado ao vivo 17/04/2026) ──
+    // O portal NÃO auto-detecta a distribuidora pelo CEP; o usuário precisa selecionar.
+    // Estratégia: encontrar o combobox cujo label/contexto contenha "Distribuidora",
+    // abrir, e selecionar a opção que case com customer.distribuidora (ou a 1ª como fallback).
     currentPhase = 'fase8-distribuidora';
-    console.log('\n📋 [8/16] Distribuidora: automática pelo CEP ✅');
+    console.log('\n📋 [8/16] Distribuidora (MUI Select)...');
     
-    await page.evaluate(() => window.scrollBy(0, 400));
-    await delay(2500);
+    await page.evaluate(() => window.scrollBy(0, 300));
+    await delay(1500);
+    
+    try {
+      const distCombo = await findComboboxByContext(/distribuidora/i);
+      if (distCombo) {
+        await distCombo.scrollIntoViewIfNeeded().catch(() => {});
+        await distCombo.click({ force: true });
+        await delay(800);
+        
+        const desejada = (data.distribuidora || '').trim();
+        let opcaoSelecionada = null;
+        
+        if (desejada) {
+          // Tentar match exato/parcial case-insensitive
+          const opt = page.locator(`role=option[name=/${desejada.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/i]`).first();
+          if (await opt.count() > 0 && await opt.isVisible().catch(() => false)) {
+            await opt.click({ force: true });
+            opcaoSelecionada = desejada;
+          }
+        }
+        
+        if (!opcaoSelecionada) {
+          // Fallback: primeira opção da lista
+          const firstOpt = page.locator('ul[role="listbox"] li[role="option"]').first();
+          if (await firstOpt.count() > 0) {
+            const txt = await firstOpt.textContent().catch(() => '');
+            await firstOpt.click({ force: true });
+            opcaoSelecionada = (txt || '').trim();
+          }
+        }
+        
+        if (opcaoSelecionada) {
+          console.log(`   ✅ Distribuidora selecionada: ${opcaoSelecionada}`);
+        } else {
+          console.warn('   ⚠️  Nenhuma opção de distribuidora foi selecionada');
+        }
+        await delay(1200);
+      } else {
+        console.log('   ℹ️  Combobox de distribuidora não encontrado — pode estar auto-detectado neste fluxo');
+      }
+    } catch (e) {
+      console.warn(`   ⚠️  Falha ao selecionar distribuidora: ${e.message}`);
+    }
+    
+    await page.evaluate(() => window.scrollBy(0, 300));
+    await delay(1500);
     await screenshot(page, customerId, '05-formulario-preenchido');
     
     // ─── 11.1 Possui placas solares instaladas? (default: Não) ────────────
