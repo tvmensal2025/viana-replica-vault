@@ -129,6 +129,80 @@ async function reactFill(page, selector, value) {
   return false;
 }
 
+// ─── waitForAutoFill: aguarda portal preencher Nome + DataNasc após CPF ────
+// O portal iGreen consulta a Receita Federal via CPF e auto-preenche esses
+// campos. NUNCA sobrescrever — eles são a fonte da verdade.
+async function waitForAutoFill(page, timeoutMs = 15000) {
+  const start = Date.now();
+  let result = { nome: '', nascimento: '' };
+  while (Date.now() - start < timeoutMs) {
+    try {
+      result = await page.evaluate(() => {
+        const inputs = Array.from(document.querySelectorAll('input'));
+        const findValue = (regex) => {
+          for (const input of inputs) {
+            const ph = (input.getAttribute('placeholder') || '').toLowerCase();
+            const name = (input.getAttribute('name') || '').toLowerCase();
+            const aria = (input.getAttribute('aria-label') || '').toLowerCase();
+            if (regex.test(ph) || regex.test(name) || regex.test(aria)) {
+              const v = (input).value || '';
+              if (v && v.trim().length > 1) return v.trim();
+            }
+          }
+          return '';
+        };
+        return {
+          nome: findValue(/(^|\s)nome|fullname|full[_-]?name|titular/i),
+          nascimento: findValue(/nascim|birth|nasc/i),
+        };
+      });
+      // Considerar preenchido quando nome (>= 5 chars) OU nasc (>= 8 chars) chegar
+      if ((result.nome && result.nome.length >= 5) || (result.nascimento && result.nascimento.replace(/\D/g, '').length >= 8)) {
+        return result;
+      }
+    } catch (_) { /* noop */ }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return result;
+}
+
+// ─── waitForFieldByPlaceholder: detecção via MutationObserver ────────────
+// Espera por um campo aparecer no DOM observando mutações em vez de só
+// fazer polling. Retorna true se encontrou, false se timeout.
+async function waitForFieldByPlaceholder(page, regex, timeoutMs = 15000) {
+  try {
+    const found = await page.evaluate(({ pattern, timeout }) => {
+      return new Promise((resolve) => {
+        const re = new RegExp(pattern, 'i');
+        const check = () => {
+          const inputs = Array.from(document.querySelectorAll('input'));
+          for (const input of inputs) {
+            const ph = input.getAttribute('placeholder') || '';
+            const name = input.getAttribute('name') || '';
+            const aria = input.getAttribute('aria-label') || '';
+            if ((re.test(ph) || re.test(name) || re.test(aria)) && (input).offsetParent !== null) {
+              return true;
+            }
+          }
+          return false;
+        };
+        if (check()) return resolve(true);
+        const observer = new MutationObserver(() => {
+          if (check()) {
+            observer.disconnect();
+            resolve(true);
+          }
+        });
+        observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+        setTimeout(() => { observer.disconnect(); resolve(false); }, timeout);
+      });
+    }, { pattern: regex.source, timeout: timeoutMs });
+    return found;
+  } catch (_) {
+    return false;
+  }
+}
+
 // ─── Controle global: apenas 1 browser por vez ───────────────────────────────
 let activeBrowser = null;
 
