@@ -605,7 +605,21 @@ Deno.serve(async (req) => {
           break;
         }
 
-        updates.electricity_bill_photo_url = fileUrl || "evolution-media:pending";
+        // 📦 Tentar upload imediato para MinIO (evita salvar data URL gigante no banco)
+        if (fileBase64) {
+          const mime = imageMessage?.mimetype || documentMessage?.mimetype || "application/octet-stream";
+          const minioUrl = await uploadMediaToMinio({
+            fileBase64,
+            mimeType: mime,
+            consultantFolder: consultorId,
+            customerName: customer.name || "cliente",
+            customerBirth: customer.data_nascimento,
+            kind: "conta",
+          });
+          updates.electricity_bill_photo_url = minioUrl || (fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending");
+        } else {
+          updates.electricity_bill_photo_url = fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending";
+        }
         updates.conversation_step = "processando_ocr_conta";
 
         await sendText(remoteJid, "✅ Conta recebida! ⏳ Analisando seus dados...\n\nAguarde alguns instantes...");
