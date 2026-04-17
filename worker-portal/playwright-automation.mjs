@@ -1693,9 +1693,12 @@ export async function executarAutomacao(customerId, options = {}) {
       }
     }
     
-    console.log(`   📊 Total docs enviados: ${docsEnviados}`);
+    console.log(`[FASE_UPLOAD_DOC] [SUMMARY] docsEnviados=${docsEnviados} (esperado=${isCNH ? 1 : 2})`);
     if (docsEnviados === 0) {
-      throw new Error('Nenhum documento pessoal foi enviado para o portal');
+      throw new Error('[FASE_UPLOAD_DOC] Nenhum documento pessoal foi enviado para o portal');
+    }
+    if (!isCNH && docsEnviados < 2) {
+      console.warn('[FASE_UPLOAD_DOC] [WARN] RG geralmente exige 2 arquivos (frente+verso). Seguindo, mas portal pode reclamar.');
     }
     await screenshot(page, customerId, '06-documentos-enviados');
     await delay(2000);
