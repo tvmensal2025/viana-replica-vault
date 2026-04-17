@@ -909,7 +909,21 @@ Deno.serve(async (req) => {
           break;
         }
 
-        updates.document_back_url = fileUrl || "evolution-media:pending";
+        // 📦 Tentar upload imediato para MinIO (verso do documento)
+        if (fileBase64) {
+          const mime = imageMessage?.mimetype || documentMessage?.mimetype || "application/octet-stream";
+          const minioUrl = await uploadMediaToMinio({
+            fileBase64,
+            mimeType: mime,
+            consultantFolder: consultorId,
+            customerName: customer.name || "cliente",
+            customerBirth: customer.data_nascimento,
+            kind: "doc_verso",
+          });
+          updates.document_back_url = minioUrl || (fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending");
+        } else {
+          updates.document_back_url = fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending";
+        }
 
         await sendText(remoteJid, "✅ Documento recebido! ⏳ Analisando...\n\nAguarde...");
 
