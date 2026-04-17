@@ -1125,16 +1125,15 @@ export async function executarAutomacao(customerId, options = {}) {
     console.log('\n📋 [9/16] Tipo de documento...');
     
     const tipoDoc = (data.documentType || 'RG').toUpperCase();
-    // Mapear para os textos exatos do dropdown MUI do portal
+    // Portal SÓ aceita "RG (Antigo)" e "RG (Novo)" — CNH não existe no dropdown!
+    // Mapeamento: CNH → RG (Novo), RG novo → RG (Novo), default → RG (Antigo)
     let opcaoTexto;
-    if (tipoDoc.includes('CNH')) {
-      opcaoTexto = 'CNH';
-    } else if (tipoDoc.includes('NOVO')) {
+    if (tipoDoc.includes('CNH') || tipoDoc.includes('NOVO')) {
       opcaoTexto = 'RG (Novo)';
     } else {
       opcaoTexto = 'RG (Antigo)';
     }
-    console.log(`   📋 Tipo desejado: ${opcaoTexto}`);
+    console.log(`   📋 Tipo desejado: ${opcaoTexto} (original: ${data.documentType})`);
     
     let tipoDocOk = false;
     
@@ -1246,9 +1245,13 @@ export async function executarAutomacao(customerId, options = {}) {
     
     let docsEnviados = 0;
     
-    // ESTRATÉGIA 0: inputs hidden conhecidos do portal atual
+    // ESTRATÉGIA 0: IDs REAIS validados live no portal (2026-04-17)
+    // Portal usa: #file_input_frente_documento_pessoal e #file_input_verso_documento_pessoal
+    // accept="image/*" — NÃO ACEITA PDF! Conversor pdf→jpg deve estar ativo
     if (docFrentePath) {
-      const frenteOk = await setFileDirectly(page.locator('#file-frente'), docFrentePath, 'Documento FRENTE enviado (#file-frente)')
+      const frenteOk = await setFileDirectly(page.locator('#file_input_frente_documento_pessoal'), docFrentePath, 'Documento FRENTE enviado (#file_input_frente_documento_pessoal)')
+        || await setFileDirectly(page.locator('input[name="frente_documento_pessoal"]'), docFrentePath, 'Documento FRENTE enviado (name)')
+        || await setFileDirectly(page.locator('#file-frente'), docFrentePath, 'Documento FRENTE enviado (legacy #file-frente)')
         || await setFileByLabelPattern(/frente/i, docFrentePath, 'Documento FRENTE enviado (label)');
       if (frenteOk) {
         docsEnviados++;
@@ -1256,17 +1259,19 @@ export async function executarAutomacao(customerId, options = {}) {
       }
     }
 
-    const isCNH = (data.documentType || '').toUpperCase().includes('CNH');
-    if (!isCNH && docVersoPath) {
-      const versoOk = await setFileDirectly(page.locator('#file-verso'), docVersoPath, 'Documento VERSO enviado (#file-verso)')
+    // RG sempre tem verso. CNH no portal é mapeado para RG (Novo) → também precisa verso
+    if (docVersoPath) {
+      const versoOk = await setFileDirectly(page.locator('#file_input_verso_documento_pessoal'), docVersoPath, 'Documento VERSO enviado (#file_input_verso_documento_pessoal)')
+        || await setFileDirectly(page.locator('input[name="verso_documento_pessoal"]'), docVersoPath, 'Documento VERSO enviado (name)')
+        || await setFileDirectly(page.locator('#file-verso'), docVersoPath, 'Documento VERSO enviado (legacy #file-verso)')
         || await setFileByLabelPattern(/verso/i, docVersoPath, 'Documento VERSO enviado (label)');
       if (versoOk) {
         docsEnviados++;
         await delay(2000);
       }
-    } else if (isCNH) {
-      console.log('   📋 Documento é CNH — verso não necessário ✅');
     }
+
+    const isCNH = false; // Portal não tem CNH — sempre tratar como RG (precisa verso)
 
     // ESTRATÉGIA 1: input[type="file"] direto (portal antigo)
     const allFileInputsCount = await page.locator('input[type="file"]').count();
