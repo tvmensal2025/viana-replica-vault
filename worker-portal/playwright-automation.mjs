@@ -37,6 +37,47 @@ async function reactFill(page, selector, value) {
   
   const selectorStr = typeof selector === 'string' ? selector : '(locator)';
   
+  // Detectar campos com máscara (telefone/celular/WhatsApp/CPF/CEP/data)
+  // Para esses, PULAR Tier 1 (que quebra a máscara MUI/react-imask) e ir direto para digitação real.
+  let isMasked = false;
+  try {
+    isMasked = await el.evaluate((input) => {
+      const ph = (input.getAttribute('placeholder') || '').toLowerCase();
+      const name = (input.getAttribute('name') || '').toLowerCase();
+      const type = (input.getAttribute('type') || '').toLowerCase();
+      const maskKeywords = ['whatsapp', 'celular', 'telefone', 'phone', 'cpf', 'cnpj', 'cep', 'data', 'nascimento'];
+      return type === 'tel'
+        || maskKeywords.some(k => ph.includes(k) || name.includes(k))
+        || !!input.getAttribute('data-mask')
+        || !!input.closest('.MuiInputBase-root')?.querySelector('[data-mask]');
+    }).catch(() => false);
+  } catch (_) { /* noop */ }
+  
+  if (isMasked) {
+    console.log(`   🎭 [reactFill] Campo com máscara detectado (${selectorStr}) — usando digitação real`);
+    try {
+      await el.click();
+      await el.fill('');
+      // Pequeno delay antes de digitar para a máscara estabilizar
+      await new Promise(r => setTimeout(r, 150));
+      await el.type(value, { delay: 90 });
+      // Disparar blur para acionar validação
+      await el.evaluate((input) => input.dispatchEvent(new Event('blur', { bubbles: true }))).catch(() => {});
+      const filled = await el.inputValue().catch(() => '');
+      const onlyDigitsFilled = filled.replace(/\D/g, '');
+      const onlyDigitsValue = String(value).replace(/\D/g, '');
+      if (onlyDigitsFilled === onlyDigitsValue) {
+        console.log(`   ✅ [reactFill MASK] ${selectorStr}: "${filled}" (alvo: "${value}")`);
+        return true;
+      }
+      console.log(`   ⚠️  [reactFill MASK] valor não bate. Atual: "${filled}" / esperado: "${value}"`);
+      return false;
+    } catch (e) {
+      console.log(`   ⚠️  [reactFill MASK] falhou: ${e.message}`);
+      return false;
+    }
+  }
+  
   // Tier 1: Reset React _valueTracker + native setter + dispatch events
   try {
     await el.evaluate((input, val) => {
