@@ -4,6 +4,11 @@ import { logStructured, fetchWithTimeout, fetchInsecure, withRetry, buscarCepPor
 import { getNextMissingStep, getReplyForStep, validarCPFDigitos } from "../_shared/conversation-helpers.ts";
 import { ocrContaEnergia, ocrDocumentoFrenteVerso } from "../_shared/ocr.ts";
 import { createEvolutionSender, parseEvolutionMessage, extractMediaUrl } from "../_shared/evolution-api.ts";
+import { checkAndMarkProcessed, logStepTransition, jsonLog, generateCorrelationId } from "../_shared/audit.ts";
+
+// Threshold mínimo de confiança para aceitar dados extraídos pelo OCR.
+// Abaixo disso, pedimos reenvio da imagem.
+const OCR_CONFIDENCE_THRESHOLD = 70;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -57,25 +62,10 @@ function isRateLimited(phone: string): boolean {
   return recent.length > RATE_LIMIT_MAX;
 }
 
-// ─── Deduplicação de mensagens (anti-duplicata) ──────────────────────
-const processedMessages = new Map<string, number>();
-const DEDUP_WINDOW_MS = 10_000; // 10 segundos
-
-function isDuplicate(messageId: string): boolean {
-  if (!messageId) return false;
-  const now = Date.now();
-  // Limpar entries antigas
-  if (processedMessages.size > 200) {
-    for (const [key, ts] of processedMessages) {
-      if (now - ts > 60_000) processedMessages.delete(key);
-    }
-  }
-  if (processedMessages.has(messageId) && now - processedMessages.get(messageId)! < DEDUP_WINDOW_MS) {
-    return true;
-  }
-  processedMessages.set(messageId, now);
-  return false;
-}
+// ─── Deduplicação de mensagens (PERSISTENTE via tabela webhook_message_dedup) ──
+// Substituiu o Map em memória anterior, que não funcionava em ambiente
+// horizontalmente escalado (cada execução tinha seu próprio map).
+// Agora a dedup é atômica via INSERT com ON CONFLICT.
 
 // ─── Cooldown de reconexão (evitar loop infinito) ────────────────────
 const reconnectCooldowns = new Map<string, number>();
@@ -219,10 +209,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ─── Deduplicação por messageId ────────────────────────────────
+    // ─── Deduplicação por messageId (persistente) ───────────────────
     const messageId = body.data?.key?.id || "";
-    if (isDuplicate(messageId)) {
-      console.log(`⏭️ Mensagem duplicada ignorada: ${messageId}`);
+    if (await checkAndMarkProcessed(supabase, messageId, instanceName)) {
+      jsonLog("info", "duplicate message ignored", { instance_name: instanceName, message_id: messageId });
       return new Response(JSON.stringify({ ok: true, msg: "duplicate" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -640,6 +630,23 @@ Deno.serve(async (req) => {
 
           if (ocrData.sucesso && ocrData.dados) {
             const d = ocrData.dados;
+            const confianca = typeof d.confianca === "number" ? d.confianca : 100;
+
+            // ─── Threshold de confiança ─────────────────────────────
+            if (confianca < OCR_CONFIDENCE_THRESHOLD) {
+              jsonLog("warn", "OCR conta abaixo do threshold", {
+                customer_id: customer.id,
+                confianca,
+                threshold: OCR_CONFIDENCE_THRESHOLD,
+              });
+              updates.conversation_step = "aguardando_conta";
+              reply =
+                `⚠️ Não consegui ler a conta com clareza suficiente (qualidade: ${confianca}%).\n\n` +
+                `📸 Por favor, envie uma *foto mais nítida e bem iluminada* da conta de energia.\n\n` +
+                `Dicas:\n• Use boa iluminação\n• Evite reflexos\n• Foco nos dados principais\n• Tire em ambiente claro`;
+              break;
+            }
+
             updates.name = d.nome || "";
             updates.address_street = d.endereco || "";
             updates.address_number = d.numero || "";
@@ -649,6 +656,7 @@ Deno.serve(async (req) => {
             updates.address_state = d.estado || "";
             updates.distribuidora = d.distribuidora || "";
             updates.numero_instalacao = d.numeroInstalacao || "";
+            updates.ocr_confianca = confianca;
             const valorParsed = d.valorConta ? parseFloat(d.valorConta) : 0;
             updates.electricity_bill_value = (valorParsed >= 30) ? valorParsed : 0;
 
@@ -1512,6 +1520,17 @@ Deno.serve(async (req) => {
       const { error: updateError } = await supabase.from("customers").update(updates).eq("id", customer.id).select();
       if (updateError) {
         console.error(`❌ ERRO ao salvar updates para ${customer.id}:`, updateError);
+      }
+
+      // ─── Log de transição de etapa (analytics de funil) ──────────
+      if (updates.conversation_step && updates.conversation_step !== step) {
+        await logStepTransition(supabase, {
+          customer_id: customer.id,
+          consultant_id: instanceData.consultant_id,
+          phone,
+          from_step: step,
+          to_step: updates.conversation_step,
+        });
       }
     }
 
