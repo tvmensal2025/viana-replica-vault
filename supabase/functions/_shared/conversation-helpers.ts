@@ -76,9 +76,6 @@ export function getNextMissingStep(c: any): string {
   // Todos preenchidos → mostrar botão Finalizar
   return "ask_finalizar";
 }
-  // Todos preenchidos → mostrar botão Finalizar
-  return "ask_finalizar";
-}
 
 /**
  * Retorna a mensagem para cada step
