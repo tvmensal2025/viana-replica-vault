@@ -72,7 +72,13 @@ export function getNextMissingStep(c: any): string {
   if (!c.electricity_bill_value || c.electricity_bill_value <= 0 || c.electricity_bill_value < 30) return "ask_bill_value";
   // Documentos (frente/verso) já foram coletados no fluxo principal
   if (!c.document_front_url) return "ask_doc_frente_manual";
-  if (!c.document_back_url && c.document_type !== "CNH") return "ask_doc_verso_manual";
+  // Verso só é exigido para RG. Normalizamos para suportar "CNH"/"cnh"/"Cnh" etc.
+  {
+    const dt = String(c.document_type || "").toLowerCase();
+    const isCnh = /cnh|habilita/.test(dt);
+    const verso = String(c.document_back_url || "").trim();
+    if (!isCnh && (!verso || verso === "nao_aplicavel")) return "ask_doc_verso_manual";
+  }
   // Todos preenchidos → mostrar botão Finalizar
   return "ask_finalizar";
 }

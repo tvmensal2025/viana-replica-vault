@@ -6,6 +6,7 @@ import { ocrContaEnergia, ocrDocumentoFrenteVerso } from "../_shared/ocr.ts";
 import { createEvolutionSender, parseEvolutionMessage, extractMediaUrl } from "../_shared/evolution-api.ts";
 import { checkAndMarkProcessed, logStepTransition, jsonLog, generateCorrelationId } from "../_shared/audit.ts";
 import { uploadBytesToMinio, base64ToBytes } from "../_shared/minio-upload.ts";
+import { normalizeDocumentType, isCNH, friendlyLabel } from "../_shared/document-type.ts";
 
 /**
  * Sobe uma mídia (base64 + mime) imediatamente para o MinIO e retorna a URL pública.
@@ -789,15 +790,15 @@ Deno.serve(async (req) => {
         const rgAntigo = resp === "tipo_rg_antigo" || resp === "2" || resp === "rg antigo";
         const cnh = resp === "tipo_cnh" || resp === "3" || resp === "cnh";
         if (rgNovo) {
-          updates.document_type = "RG (Novo)";
+          updates.document_type = "rg_novo"; // canônico
           updates.conversation_step = "aguardando_doc_frente";
           reply = "📄 *RG (Novo)*\n\n📸 Envie a *FRENTE do seu RG*.\n\nFormatos: JPG, PNG ou PDF";
         } else if (rgAntigo) {
-          updates.document_type = "RG (Antigo)";
+          updates.document_type = "rg_antigo"; // canônico
           updates.conversation_step = "aguardando_doc_frente";
           reply = "📄 *RG (Antigo)*\n\n📸 Envie a *FRENTE do seu RG*.\n\nFormatos: JPG, PNG ou PDF";
         } else if (cnh) {
-          updates.document_type = "CNH";
+          updates.document_type = "cnh"; // canônico
           updates.conversation_step = "aguardando_doc_frente";
           reply = "📄 *CNH*\n\n📸 Envie a *FRENTE da sua CNH*.\n\nFormatos: JPG, PNG ou PDF";
         } else {
@@ -814,13 +815,13 @@ Deno.serve(async (req) => {
       // ─── 4. FRENTE DO DOCUMENTO ──────────────────────────────────────
       case "aguardando_doc_frente": {
         if (!isFile) {
-          const tipo = customer.document_type || "documento";
-          const msgCNH = tipo === "CNH" ? "FRENTE da sua CNH" : "FRENTE do seu RG";
-          reply = `📸 Envie a *${msgCNH}*.\n\nFormatos: JPG, PNG ou PDF`;
+          const tipo = friendlyLabel(customer.document_type);
+          const msgDoc = isCNH(customer.document_type) ? "FRENTE da sua CNH" : `FRENTE do seu ${tipo}`;
+          reply = `📸 Envie a *${msgDoc}*.\n\nFormatos: JPG, PNG ou PDF`;
           break;
         }
 
-        // 📦 Tentar upload imediato para MinIO (frente do documento)
+        // 📦 Upload imediato para MinIO (frente do documento) — caminho único oficial
         if (fileBase64) {
           const mime = imageMessage?.mimetype || documentMessage?.mimetype || "application/octet-stream";
           const minioUrl = await uploadMediaToMinio({
@@ -832,20 +833,27 @@ Deno.serve(async (req) => {
             kind: "doc_frente",
           });
           updates.document_front_url = minioUrl || (fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending");
-          // Salvar base64 da frente para usar depois no OCR conjunto
-          updates.document_front_base64 = fileBase64;
+          // ⚠️ NÃO salvar `document_front_base64` no banco — é um payload gigante (~1MB)
+          // que estava causando lentidão e estouros. O OCR conjunto frente+verso para CNH
+          // não precisa porque CNH só processa a frente; para RG o verso é OCR'd quando
+          // chega e os campos faltantes são preenchidos pelo verso então.
         } else {
           updates.document_front_url = fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending";
         }
 
+        // Detecção de incoerência: cliente escolheu "RG" mas mandou CNH (ou vice-versa)
+        // Faremos OCR primeiro e, se detectarmos, corrigimos document_type antes do worker.
+        const tipoEscolhido = normalizeDocumentType(customer.document_type);
+
         // CNH só tem frente — pular verso
-        if (customer.document_type === "CNH") {
+        if (tipoEscolhido === "cnh") {
           updates.document_back_url = "nao_aplicavel";
+          updates.document_type = "cnh"; // garantir canônico no banco
 
           await sendText(remoteJid, "✅ CNH recebida! ⏳ Analisando...\n\nAguarde...");
 
           try {
-            const docFrenteUrl = fileUrl || "evolution-media:pending";
+            const docFrenteUrl = fileUrl || updates.document_front_url || "evolution-media:pending";
             console.log("📡 Chamando OCR documento CNH (apenas frente)");
 
             const ocrData = await ocrDocumentoFrenteVerso(
@@ -864,15 +872,13 @@ Deno.serve(async (req) => {
               if (d.nome) updates.name = d.nome;
               if (d.cpf) updates.cpf = d.cpf.replace(/\D/g, "");
               if (d.rg) updates.rg = d.rg;
-              // OCR retorna camelCase (dataNascimento, nomePai, nomeMae)
-              // CNH: só salva data se confiança for "alta". Senão deixa em branco para o portal preencher via CPF.
+              // CNH: só salva data se confiança "alta"; senão, deixa para o portal preencher via CPF.
               const dataConf = String(d.dataNascimentoConfianca || "").toLowerCase();
-              const dataConfiavel = d.dataNascimento && (dataConf === "alta" || (!dataConf && /cnh/i.test(customer.document_type || "") === false));
-              if (dataConfiavel) {
+              if (d.dataNascimento && dataConf === "alta") {
                 updates.data_nascimento = d.dataNascimento;
-                console.log(`✅ CNH: data nasc ${d.dataNascimento} aceita (confiança: ${dataConf || "n/a"})`);
+                console.log(`✅ CNH: data nasc ${d.dataNascimento} aceita (confiança alta)`);
               } else if (d.dataNascimento) {
-                console.warn(`⚠️ CNH: data nasc ${d.dataNascimento} NÃO salva (confiança: ${dataConf}). Será confirmada com cliente ou virá do portal via CPF.`);
+                console.warn(`⚠️ CNH: data nasc ${d.dataNascimento} NÃO salva (confiança ${dataConf || "n/a"}). Portal preencherá via CPF.`);
               }
               if (d.nomePai) updates.nome_pai = d.nomePai;
               if (d.nomeMae) updates.nome_mae = d.nomeMae;
@@ -948,20 +954,21 @@ Deno.serve(async (req) => {
         try {
           const docFrenteUrl = customer.document_front_url || updates.document_front_url;
           const docVersoUrl = updates.document_back_url || customer.document_back_url;
-          
-          // Recuperar base64 da frente (se foi salvo)
-          const frenteBase64 = customer.document_front_base64 || undefined;
 
-          console.log("📡 Chamando OCR documento (frente+verso)");
-          console.log(`📡 Frente base64: ${frenteBase64 ? 'SIM' : 'NÃO'}, Verso base64: ${fileBase64 ? 'SIM' : 'NÃO'}`);
+          // Não dependemos mais de `document_front_base64` no banco — o OCR do verso
+          // sozinho costuma trazer todos os dados que faltam (CPF, filiação, RG).
+          const frenteBase64: string | undefined = undefined;
+
+          console.log("📡 Chamando OCR documento (verso; frente já analisada se disponível)");
+          console.log(`📡 Frente base64 banco: NÃO (descontinuado), Verso base64: ${fileBase64 ? 'SIM' : 'NÃO'}`);
 
           const ocrData = await ocrDocumentoFrenteVerso(
             docFrenteUrl,
             docVersoUrl,
-            customer.document_type || "RG",
+            customer.document_type || "rg_antigo",
             GEMINI_API_KEY,
-            frenteBase64 || undefined,
-            undefined, // frenteMediaId (não temos mais)
+            frenteBase64,
+            undefined, // frenteMediaId
             fileBase64 || undefined // versoBase64
           );
           console.log("📊 OCR Doc resultado:", JSON.stringify(ocrData).substring(0, 400));
@@ -1591,21 +1598,11 @@ Deno.serve(async (req) => {
           console.log("⚠️ PORTAL_WORKER_URL ou WORKER_SECRET não configurados - worker-portal terá que pegar via polling");
         }
 
-        // ─── UPLOAD DOCUMENTOS PARA MINIO (fire-and-forget) ───
-        const supabaseUrlForMinio = Deno.env.get("SUPABASE_URL");
-        const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-        if (supabaseUrlForMinio && serviceRoleKey) {
-          fetchWithTimeout(`${supabaseUrlForMinio}/functions/v1/upload-documents-minio`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${serviceRoleKey}`,
-            },
-            body: JSON.stringify({ customer_id: customer.id }),
-            timeout: 25_000,
-          }).then(r => console.log(`📦 MinIO upload response: ${r.status}`))
-            .catch(err => console.error("⚠️ MinIO upload failed (non-blocking):", err?.message));
-        }
+        // ─── MinIO: upload já é feito imediatamente em `aguardando_doc_*` e
+        //     `aguardando_conta`. NÃO chamamos `upload-documents-minio` aqui
+        //     para evitar uploads duplicados / dependência da rede em hot-path.
+        //     A função `upload-documents-minio` continua disponível como
+        //     ferramenta de RECOVERY manual para reprocessar arquivos órfãos.
 
         for (const k of Object.keys(updates)) delete updates[k];
         reply = "";
