@@ -5,6 +5,38 @@ import { getNextMissingStep, getReplyForStep, validarCPFDigitos } from "../_shar
 import { ocrContaEnergia, ocrDocumentoFrenteVerso } from "../_shared/ocr.ts";
 import { createEvolutionSender, parseEvolutionMessage, extractMediaUrl } from "../_shared/evolution-api.ts";
 import { checkAndMarkProcessed, logStepTransition, jsonLog, generateCorrelationId } from "../_shared/audit.ts";
+import { uploadBytesToMinio, base64ToBytes } from "../_shared/minio-upload.ts";
+
+/**
+ * Sobe uma mídia (base64 + mime) imediatamente para o MinIO e retorna a URL pública.
+ * Se MinIO falhar, retorna null — o caller usa fallback ("evolution-media:pending").
+ * Isso impede que data URLs gigantes (1MB+) sejam salvos no banco.
+ */
+async function uploadMediaToMinio(opts: {
+  fileBase64: string;
+  mimeType: string;
+  consultantFolder: string;
+  customerName: string;
+  customerBirth?: string | null;
+  kind: "conta" | "doc_frente" | "doc_verso";
+}): Promise<string | null> {
+  try {
+    const bytes = base64ToBytes(opts.fileBase64);
+    const result = await uploadBytesToMinio({
+      bytes,
+      contentType: opts.mimeType || "application/octet-stream",
+      consultantFolder: opts.consultantFolder,
+      customerName: opts.customerName,
+      customerBirth: opts.customerBirth,
+      kind: opts.kind,
+    });
+    console.log(`📦✅ MinIO upload OK [${opts.kind}]: ${result.url}`);
+    return result.url;
+  } catch (err: any) {
+    console.error(`📦❌ MinIO upload falhou [${opts.kind}]:`, err?.message || err);
+    return null;
+  }
+}
 
 // Threshold mínimo de confiança para aceitar dados extraídos pelo OCR.
 // Abaixo disso, pedimos reenvio da imagem.
@@ -573,7 +605,21 @@ Deno.serve(async (req) => {
           break;
         }
 
-        updates.electricity_bill_photo_url = fileUrl || "evolution-media:pending";
+        // 📦 Tentar upload imediato para MinIO (evita salvar data URL gigante no banco)
+        if (fileBase64) {
+          const mime = imageMessage?.mimetype || documentMessage?.mimetype || "application/octet-stream";
+          const minioUrl = await uploadMediaToMinio({
+            fileBase64,
+            mimeType: mime,
+            consultantFolder: consultorId,
+            customerName: customer.name || "cliente",
+            customerBirth: customer.data_nascimento,
+            kind: "conta",
+          });
+          updates.electricity_bill_photo_url = minioUrl || (fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending");
+        } else {
+          updates.electricity_bill_photo_url = fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending";
+        }
         updates.conversation_step = "processando_ocr_conta";
 
         await sendText(remoteJid, "✅ Conta recebida! ⏳ Analisando seus dados...\n\nAguarde alguns instantes...");
@@ -774,11 +820,22 @@ Deno.serve(async (req) => {
           break;
         }
 
-        updates.document_front_url = fileUrl || "evolution-media:pending";
-        
-        // Salvar base64 da frente para usar depois no OCR conjunto
+        // 📦 Tentar upload imediato para MinIO (frente do documento)
         if (fileBase64) {
+          const mime = imageMessage?.mimetype || documentMessage?.mimetype || "application/octet-stream";
+          const minioUrl = await uploadMediaToMinio({
+            fileBase64,
+            mimeType: mime,
+            consultantFolder: consultorId,
+            customerName: customer.name || "cliente",
+            customerBirth: customer.data_nascimento,
+            kind: "doc_frente",
+          });
+          updates.document_front_url = minioUrl || (fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending");
+          // Salvar base64 da frente para usar depois no OCR conjunto
           updates.document_front_base64 = fileBase64;
+        } else {
+          updates.document_front_url = fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending";
         }
 
         // CNH só tem frente — pular verso
@@ -852,7 +909,21 @@ Deno.serve(async (req) => {
           break;
         }
 
-        updates.document_back_url = fileUrl || "evolution-media:pending";
+        // 📦 Tentar upload imediato para MinIO (verso do documento)
+        if (fileBase64) {
+          const mime = imageMessage?.mimetype || documentMessage?.mimetype || "application/octet-stream";
+          const minioUrl = await uploadMediaToMinio({
+            fileBase64,
+            mimeType: mime,
+            consultantFolder: consultorId,
+            customerName: customer.name || "cliente",
+            customerBirth: customer.data_nascimento,
+            kind: "doc_verso",
+          });
+          updates.document_back_url = minioUrl || (fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending");
+        } else {
+          updates.document_back_url = fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending";
+        }
 
         await sendText(remoteJid, "✅ Documento recebido! ⏳ Analisando...\n\nAguarde...");
 
@@ -1278,7 +1349,16 @@ Deno.serve(async (req) => {
           reply = "📸 Envie a *FRENTE do seu documento* (RG ou CNH)\n\nFormatos: JPG, PNG ou PDF";
           break;
         }
-        updates.document_front_url = fileUrl || "evolution-media:pending";
+        if (fileBase64) {
+          const mime = imageMessage?.mimetype || documentMessage?.mimetype || "application/octet-stream";
+          const minioUrl = await uploadMediaToMinio({
+            fileBase64, mimeType: mime, consultantFolder: consultorId,
+            customerName: customer.name || "cliente", customerBirth: customer.data_nascimento, kind: "doc_frente",
+          });
+          updates.document_front_url = minioUrl || (fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending");
+        } else {
+          updates.document_front_url = fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending";
+        }
         const merged = { ...customer, ...updates };
         const next = await autoResolveCepIfNeeded(merged, updates);
         updates.conversation_step = next;
@@ -1291,7 +1371,16 @@ Deno.serve(async (req) => {
           reply = "📸 Envie o *VERSO do seu documento*\n\nFormatos: JPG, PNG ou PDF";
           break;
         }
-        updates.document_back_url = fileUrl || "evolution-media:pending";
+        if (fileBase64) {
+          const mime = imageMessage?.mimetype || documentMessage?.mimetype || "application/octet-stream";
+          const minioUrl = await uploadMediaToMinio({
+            fileBase64, mimeType: mime, consultantFolder: consultorId,
+            customerName: customer.name || "cliente", customerBirth: customer.data_nascimento, kind: "doc_verso",
+          });
+          updates.document_back_url = minioUrl || (fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending");
+        } else {
+          updates.document_back_url = fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending";
+        }
         const merged = { ...customer, ...updates };
         const next = await autoResolveCepIfNeeded(merged, updates);
         updates.conversation_step = next;

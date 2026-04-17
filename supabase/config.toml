@@ -2,3 +2,6 @@ project_id = "zlzasfhcxcznaprrragl"
 
 [functions.evolution-webhook]
 verify_jwt = false
+
+[functions.upload-documents-minio]
+verify_jwt = false
