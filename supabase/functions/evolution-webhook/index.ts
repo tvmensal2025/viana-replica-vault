@@ -630,6 +630,23 @@ Deno.serve(async (req) => {
 
           if (ocrData.sucesso && ocrData.dados) {
             const d = ocrData.dados;
+            const confianca = typeof d.confianca === "number" ? d.confianca : 100;
+
+            // ─── Threshold de confiança ─────────────────────────────
+            if (confianca < OCR_CONFIDENCE_THRESHOLD) {
+              jsonLog("warn", "OCR conta abaixo do threshold", {
+                customer_id: customer.id,
+                confianca,
+                threshold: OCR_CONFIDENCE_THRESHOLD,
+              });
+              updates.conversation_step = "aguardando_conta";
+              reply =
+                `⚠️ Não consegui ler a conta com clareza suficiente (qualidade: ${confianca}%).\n\n` +
+                `📸 Por favor, envie uma *foto mais nítida e bem iluminada* da conta de energia.\n\n` +
+                `Dicas:\n• Use boa iluminação\n• Evite reflexos\n• Foco nos dados principais\n• Tire em ambiente claro`;
+              break;
+            }
+
             updates.name = d.nome || "";
             updates.address_street = d.endereco || "";
             updates.address_number = d.numero || "";
@@ -639,6 +656,7 @@ Deno.serve(async (req) => {
             updates.address_state = d.estado || "";
             updates.distribuidora = d.distribuidora || "";
             updates.numero_instalacao = d.numeroInstalacao || "";
+            updates.ocr_confianca = confianca;
             const valorParsed = d.valorConta ? parseFloat(d.valorConta) : 0;
             updates.electricity_bill_value = (valorParsed >= 30) ? valorParsed : 0;
 
