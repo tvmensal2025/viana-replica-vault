@@ -287,6 +287,27 @@ async function downloadWhapiMedia(mediaId, label) {
   return outPath;
 }
 
+// ─── Converter PDF para JPG (portal só aceita image/*) ──────────────────────
+async function convertPdfToJpg(pdfPath, label) {
+  try {
+    const { execSync } = await import('child_process');
+    const jpgPath = pdfPath.replace(/\.pdf$/i, '.jpg');
+    // pdftoppm vem do poppler-utils (já instalado no container playwright)
+    execSync(`pdftoppm -jpeg -r 150 -f 1 -l 1 "${pdfPath}" "${jpgPath.replace(/\.jpg$/, '')}" 2>/dev/null`, { stdio: 'ignore' });
+    // pdftoppm gera arquivo com sufixo -1.jpg
+    const generated = jpgPath.replace(/\.jpg$/, '-1.jpg');
+    if (existsSync(generated)) {
+      copyFileSync(generated, jpgPath);
+      console.log(`   🔄 ${label} convertido PDF→JPG: ${jpgPath}`);
+      return jpgPath;
+    }
+    if (existsSync(jpgPath)) return jpgPath;
+  } catch (e) {
+    console.warn(`   ⚠️  Conversão PDF→JPG falhou (${label}): ${e.message}`);
+  }
+  return pdfPath; // fallback: tenta original
+}
+
 // ─── Preparar arquivos de upload ──────────────────────────────────────────────
 async function prepararDocumento(url, label) {
   // Tratar URLs inválidas (nao_aplicavel, vazio, etc.)
@@ -300,7 +321,7 @@ async function prepararDocumento(url, label) {
       const mediaId = url.replace('whapi-media:', '').trim();
       const outPath = await downloadWhapiMedia(mediaId, label);
       console.log(`📄 ${label} baixado (Whapi): ${outPath}`);
-      return outPath;
+      return outPath.endsWith('.pdf') ? await convertPdfToJpg(outPath, label) : outPath;
     } catch (e) {
       console.warn(`⚠️  Erro ao baixar ${label} (Whapi): ${e.message}`);
     }
@@ -327,6 +348,10 @@ async function prepararDocumento(url, label) {
     
     if (outPath && existsSync(outPath)) {
       console.log(`📄 ${label} baixado: ${outPath}`);
+      // Portal só aceita imagem para documento pessoal — converter PDF
+      if (outPath.endsWith('.pdf') && (label === 'doc-frente' || label === 'doc-verso')) {
+        return await convertPdfToJpg(outPath, label);
+      }
       return outPath;
     }
   } catch (e) {
