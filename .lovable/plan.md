@@ -1,98 +1,69 @@
 
 
-## Análise do problema
+## Diagnóstico real (logs + CNH)
 
-O usuário relatou que quando o lead escolhe "RG" mas envia uma CNH (ou vice-versa), o worker:
-1. Não detecta a inconsistência
-2. Não tem mecanismo de "voltar" e corrigir o tipo de documento
-3. Trava sem conseguir avançar
+**Problemas observados nos logs:**
+1. ⏳ Campo "WhatsApp" demorou 6 tentativas (limite) para aparecer → frágil
+2. ⚠️ "Confirme seu celular" não foi encontrado → fallback ativado, validação pode falhar silenciosamente
+3. 🎂 OCR da CNH **extraiu data de nascimento errada** → bot salvou no `customers.data_nascimento` → worker pode tentar sobrescrever a data correta que o portal auto-preenche via CPF
 
-Vou inspecionar o código atual antes de propor o plano para garantir precisão.
+**Causa raiz da data errada:**
+- CNH tem data em layout não-padrão; Gemini às vezes confunde "Data de Emissão" com "Data de Nascimento"
+- Bot salva o que veio do OCR sem validar contra o CPF
+- Worker confia no banco em vez de confiar no auto-fill do portal (que vem da Receita Federal)
 
-### Fluxo correto definido pelo usuário (do 0 ao fim)
-1. Landing: CEP + Valor → "Calcular" → "Garantir meu desconto"
-2. CPF → auto-preenche Nome + Data Nascimento
-3. WhatsApp + Confirmação WhatsApp
-4. E-mail + Confirmação E-mail
-5. CEP auto-preenche Endereço/Bairro/Cidade/Estado
-6. Número + Complemento
-7. Distribuidora (MUI Select manual)
-8. Número da instalação
-9. Tipo documento (RG Antigo / RG Novo) — **CNH precisa ser tratada**
-10. Upload Frente + Verso (RG) **OU apenas Frente (CNH)**
-11. Procurador → "Não"
-12. Débito em aberto → "Não"
-13. Finalizar (pode disparar OTP)
+## Plano: "Sempre dá certo" — fluxo blindado
 
-### Pontos críticos a resolver
-- **Detecção automática do tipo real do documento** via OCR antes do upload (já temos OCR no sistema — `_shared/ocr.ts`)
-- **Auto-correção do MUI Select** quando o documento enviado não bate com o tipo selecionado pelo cliente no WhatsApp
-- **Mapeamento determinístico**: CNH → "RG (Novo)" no portal (já está na memória v5), mas precisa de **upload de apenas 1 lado** quando for CNH
-- **Mecanismo de retry inteligente** por etapa (não só global): se uma etapa falhar, tentar estratégia alternativa antes de marcar como erro
-- **Validação pós-preenchimento** de cada campo antes de avançar (ler o `value` real do input após digitar)
-- **Fallbacks defensivos** para cada MUI Select e cada radio (Procurador/Débito) usando múltiplos seletores
+### 1. Confiar no portal, não no OCR (data de nascimento)
+**Regra de ouro:** após digitar CPF, o portal consulta a Receita e auto-preenche **Nome + Data de Nascimento corretos**. O worker NUNCA deve sobrescrever esses campos. Hoje o código já não sobrescreve, mas vamos:
+- Adicionar `waitForAutoFill(['nome', 'nascimento'], timeout: 15s)` com polling do `value` real
+- Se auto-fill falhar (CPF inexistente na Receita), aí sim usar dados do banco como fallback
+- Logar no console: `📥 Portal auto-preencheu: Nome="..." DataNasc="..."` para auditoria
 
-## Plano de correção — "Fluxo à prova de erro"
+### 2. OCR de CNH com prompt reforçado anti-confusão
+Atualizar `buildPromptDocumento` para CNH com regras explícitas:
+- "Data de Nascimento" fica perto do nome, NÃO confundir com:
+  - "Data de Emissão" / "Data de Expedição"
+  - "Validade" / "Vencimento"  
+  - "1ª Habilitação"
+- Adicionar campo de validação: se data > hoje OU < 1920 → descartar
+- Pedir ao Gemini para devolver `dataNascimentoConfianca: "alta|media|baixa"` baseado em proximidade ao label "Nascimento"
 
-### Fase 1 — Detecção e normalização do documento (worker + bot)
-1. **OCR pré-upload no worker**: antes de fazer upload no portal, baixar `document_front_url` e rodar uma classificação rápida (já temos `_shared/ocr.ts` com Gemini). Detectar se é RG ou CNH lendo o cabeçalho do documento.
-2. **Auto-correção do tipo**: se o cliente disse "RG" mas a IA detectar "CNH" (ou vice-versa), o worker:
-   - Atualiza `customers.document_type` para o tipo correto
-   - Loga no `worker_run_logs` (ou status_history) a correção
-   - Continua o fluxo com o tipo corrigido — **nunca trava**
-3. **CNH = upload só da frente**: o worker pula o passo "verso" quando `document_type === 'cnh'` (já há lógica em `mem://validation/document-requirements`, garantir que o worker respeite isso).
+### 3. Bot WhatsApp: nunca confiar cegamente no OCR
+Quando OCR retorna data, **comparar com data esperada do CPF** (se houver consulta CPF→nascimento) ou pedir confirmação explícita ANTES de salvar:
+> "🎂 Detectei nascimento *15/03/1985*. Está correto? (1-Sim / 2-Não, digite a data correta)"
 
-### Fase 2 — Fluxo Playwright robusto (`worker-portal/playwright-automation.mjs`)
-Reescrever o fluxo em **etapas atômicas com retry individual** (3 tentativas cada, com estratégias diferentes):
+Se cliente disser não, marcar `data_nascimento_verified=false` e o worker IGNORA esse campo (deixa o portal preencher via CPF).
 
-```text
-[Etapa] → tenta seletor primário
-       ↓ falha
-       → tenta seletor alternativo (label / role / nth)
-       ↓ falha
-       → tenta digitação caractere-por-caractere + blur
-       ↓ falha
-       → screenshot + log estruturado + segue para próxima etapa não-bloqueante
-                                        OU aborta com motivo claro se for bloqueante
-```
+### 4. Worker robusto — eliminar timeouts apertados
+Refatorar a fase WhatsApp/Confirmação:
+- Aumentar tentativas: 6 → 12 e delay 2s → 1.5s (total 18s)
+- Antes de procurar campo, aguardar `domcontentloaded` + observar mutações do DOM (esperar input aparecer via MutationObserver)
+- Se "Confirme seu celular" não aparecer após digitar WhatsApp, **disparar blur+wait** e re-procurar (pode renderizar só após blur)
+- Trocar fallback silencioso por **erro hard** se confirmação não preencher → garante que não avança quebrado
 
-Etapas a refatorar com esse padrão:
-- `fillCEPLanding`, `fillValor`, `clickCalcular`, `clickGarantirDesconto`
-- `fillCPF` + `waitAutoFillNomeDataNasc` (poll por até 10s)
-- `fillWhatsApp` + `fillConfirmaWhatsApp` (validar dígitos iguais antes de avançar)
-- `fillEmail` + `fillConfirmaEmail`
-- `waitAutoFillEndereco` + `fillNumero` + `fillComplemento`
-- `selectDistribuidora` (MUI: abrir, buscar opção por regex case-insensitive, fallback 1ª opção)
-- `fillInstalacao`
-- `selectTipoDocumento` (mapa: `rg_antigo→"RG (Antigo)"`, `rg_novo|rg→"RG (Novo)"`, `cnh→"RG (Novo)"`)
-- `uploadFrente` + (`uploadVerso` apenas se RG)
-- `selectRadio('procurador', 'Não')`
-- `selectRadio('debito', 'Não')`
-- `clickFinalizar`
-- `waitOTP` (polling no Supabase com timeout 5min)
+### 5. Validação pós-fill universal
+Após cada campo crítico (CPF, WhatsApp, Email, CEP), ler `value` real e comparar:
+- Se diverge → retentar até 3x
+- Se ainda diverge → screenshot + log + NÃO avançar
 
-### Fase 3 — Validação final por etapa
-Após cada `fill`, ler `inputElement.evaluate(el => el.value)` e comparar com o esperado (apenas dígitos para campos com máscara). Se não bater, retentar a digitação. Isso elimina os casos em que a máscara React-IMask "comeu" caracteres.
+### 6. Telemetria mínima (sem nova tabela ainda)
+Padronizar logs do worker em formato estruturado: `[FASE_X] [STATUS] mensagem` para facilitar debug nos logs do Easypanel sem precisar criar `worker_run_logs` agora.
 
-### Fase 4 — Telemetria e observabilidade
-Criar tabela `worker_run_logs` (id, customer_id, run_id, stage, status, message, screenshot_url, created_at) e gravar 1 linha por etapa. Permite saber **exatamente** onde travou se acontecer.
+## Arquivos a alterar
 
-### Fase 5 — Atualização do bot WhatsApp
-- Quando o cliente mandar a foto, rodar OCR imediato e **avisar** ("Recebi sua CNH, vou usá-la, ok?") em vez de aceitar passivamente.
-- Pergunta de débito/procurador é assumida como "Não" por padrão (cliente não precisa responder no WhatsApp — worker já clica "Não").
+- `supabase/functions/_shared/ocr.ts` — prompt CNH reforçado + validação de data plausível
+- `supabase/functions/evolution-webhook/index.ts` — confirmação explícita da data antes de salvar
+- `worker-portal/playwright-automation.mjs`:
+  - `waitForAutoFill()` helper novo (polling de Nome+DataNasc após CPF)
+  - Fase WhatsApp: 12 tentativas + MutationObserver
+  - Confirme celular: hard-fail em vez de warn silencioso
+  - Validação pós-fill universal
+- `.lovable/memory/automation/portal-form-selectors.md` → v7 com regra "data nasc vem do portal via CPF, nunca sobrescrever"
 
-### Arquivos a alterar
-- `worker-portal/playwright-automation.mjs` — refatoração para etapas atômicas + retries individuais
-- `worker-portal/server.mjs` — gravação em `worker_run_logs`
-- `supabase/functions/_shared/ocr.ts` — novo helper `classifyDocumentType(url)` (RG/CNH)
-- `supabase/functions/whatsapp-bot/index.ts` — chamar classificação ao receber foto e auto-corrigir `document_type`
-- `supabase/migrations/<nova>.sql` — criar tabela `worker_run_logs` com RLS admin-only
-- `.lovable/memory/automation/portal-form-selectors.md` — atualizar para v6 com a regra "CNH = só frente, mapeia para RG (Novo)"
-
-### Garantias do plano
-- **Nunca trava por escolha errada do cliente**: OCR auto-detecta e corrige
-- **Nunca trava por máscara**: validação pós-fill com retry de digitação
-- **Nunca trava por MUI Select**: 3 estratégias de seleção + fallback
-- **Sempre observável**: `worker_run_logs` mostra etapa exata se falhar
-- **CNH tratada nativamente**: 1 upload só, mapeada para "RG (Novo)"
+## Garantias
+- ✅ Data de nascimento sempre correta (vem do portal via CPF, não do OCR)
+- ✅ Cliente confirma data quando OCR é usado isoladamente
+- ✅ WhatsApp/Confirmação não falha silenciosamente
+- ✅ Logs estruturados mostram fase exata se algo falhar
 
