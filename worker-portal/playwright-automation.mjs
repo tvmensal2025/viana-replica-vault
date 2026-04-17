@@ -540,6 +540,8 @@ function formatarDados(cliente) {
     possuiProcurador: cliente.possui_procurador || false,
     pdfProtegido: cliente.conta_pdf_protegida || false,
     debitosAberto: cliente.debitos_aberto || false,
+    distribuidoraLogin: cliente.distribuidora_login || '',
+    distribuidoraSenha: cliente.distribuidora_senha || '',
   };
 }
 
