@@ -6,14 +6,33 @@ import {
   getConnectionState,
   logoutInstance,
   deleteInstance,
-  setInstanceWebhook,
-  fetchInstances,
   EvolutionAuthError,
 } from "@/services/evolutionApi";
 import type { ConnectionStatus } from "@/types/whatsapp";
+import {
+  type OperationalHealth,
+  type ConnectionCheckState,
+  REL_LOGIN_MESSAGE,
+  MAX_CONSECUTIVE_TIMEOUTS,
+  MAX_RECOVERY_CYCLES_WITHOUT_SIGNAL,
+  DEGRADED_POLL_INTERVAL,
+  HEALTHY_POLL_INTERVAL,
+  logEntry,
+  sanitize,
+  getFixedInstanceName,
+  isNotFoundError,
+  isAuthError,
+  isRecoverableConnectionError,
+  isAlreadyConnectedError,
+  sleep,
+  withTimeout,
+  extractDiagnostic,
+  isTimeoutResponse,
+  isMissingState,
+} from "./whatsapp/whatsappHelpers";
+import { useWhatsAppInstanceDb } from "./whatsapp/useWhatsAppInstanceDb";
 
-// ─── Operational health states ───
-export type OperationalHealth = "healthy" | "degraded" | "recovering" | "needs_qr" | "reset_recommended" | "resetting";
+export type { OperationalHealth } from "./whatsapp/whatsappHelpers";
 
 interface UseWhatsAppReturn {
   connectionStatus: ConnectionStatus;
@@ -32,91 +51,6 @@ interface UseWhatsAppReturn {
   refreshQr: () => Promise<void>;
   safeReset: () => Promise<void>;
 }
-
-/* ── helpers ── */
-
-function logEntry(msg: string): string {
-  const ts = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-  return `[${ts}] ${msg}`;
-}
-
-function sanitize(message: string): string {
-  return message
-    .replace(/evolution api/gi, "serviço de conexão")
-    .replace(/evolution/gi, "serviço")
-    .replace(/^\[\d{3}\]\s*/, "")
-    .trim();
-}
-
-function getFixedInstanceName(consultantId: string): string {
-  const slug = consultantId.replace(/-/g, "").slice(0, 12);
-  return `igreen-${slug}`;
-}
-
-function isNotFoundError(message: string): boolean {
-  return /404|not found|does not exist|instance.*not|inst[âa]ncia.*n[ãa]o/i.test(message);
-}
-
-function isAuthError(err: unknown): err is EvolutionAuthError {
-  return err instanceof EvolutionAuthError;
-}
-
-function isRecoverableConnectionError(message: string): boolean {
-  return /timeout|connection closed|temporariamente|inst[áa]vel|erro de conex[ãa]o/i.test(message);
-}
-
-function isAlreadyConnectedError(message: string): boolean {
-  return /already.*(connected|open)|connection.*already|j[áa].*conectad|inst[âa]ncia.*(aberta|conectada)/i.test(message);
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const id = setTimeout(() => reject(new Error("timeout")), ms);
-    promise
-      .then((v) => { clearTimeout(id); resolve(v); })
-      .catch((e) => { clearTimeout(id); reject(e); });
-  });
-}
-
-// ─── Diagnostic response parsing ───
-interface DiagnosticInfo {
-  reason?: string;
-  recommendation?: string;
-  retryAfterMs?: number;
-  message?: string;
-}
-
-function extractDiagnostic(result: Record<string, unknown>): DiagnosticInfo | null {
-  if (result?.diagnostic && typeof result.diagnostic === "object") {
-    return result.diagnostic as DiagnosticInfo;
-  }
-  return null;
-}
-
-function isTimeoutResponse(result: Record<string, unknown>): boolean {
-  return result?.timeout === true;
-}
-
-function isMissingState(result: Record<string, unknown>): boolean {
-  return (result?.state === "missing") ||
-    (result?.diagnostic && (result.diagnostic as DiagnosticInfo).reason === "instance_not_found");
-}
-
-/* ── Core ── */
-
-type ConnectionCheckState = "open" | "close" | "connecting" | "unknown" | "missing";
-
-const REL_LOGIN_MESSAGE = "Sessão expirada. Faça login novamente.";
-
-// Circuit breaker constants
-const MAX_CONSECUTIVE_TIMEOUTS = 5;
-const MAX_RECOVERY_CYCLES_WITHOUT_SIGNAL = 3;
-const DEGRADED_POLL_INTERVAL = 30000;
-const HEALTHY_POLL_INTERVAL = 60000;
 
 export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("disconnected");
@@ -139,6 +73,9 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
   const timeoutCountRef = useRef(0);
   const healthRef = useRef<OperationalHealth>("healthy");
   const recoveryCyclesRef = useRef(0);
+
+  const { saveInstance, deleteInstanceDb, fetchAndSaveConnectedPhone, ensureWebhook } =
+    useWhatsAppInstanceDb(consultantId);
 
   const setStatus = useCallback((status: ConnectionStatus) => {
     statusRef.current = status;
@@ -219,43 +156,6 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
     addLog("🔄 Atualizando autenticação...");
   }, [addLog, setStatus, stopPolling]);
 
-  /* ── DB helpers ── */
-  const saveInstance = useCallback(async (name: string) => {
-    await supabase
-      .from("whatsapp_instances")
-      .upsert({ consultant_id: consultantId, instance_name: name }, { onConflict: "consultant_id" });
-  }, [consultantId]);
-
-  const fetchAndSaveConnectedPhone = useCallback(async (name: string) => {
-    try {
-      const instances = await fetchInstances();
-      const inst = instances?.find((instance) => {
-        const instanceName = instance?.instance?.instanceName ?? instance?.name;
-        return instanceName === name;
-      });
-      const ownerJid =
-        inst?.instance?.ownerJid ??
-        inst?.instance?.owner ??
-        inst?.ownerJid ??
-        inst?.owner ??
-        "";
-      const phone = typeof ownerJid === "string" ? ownerJid.replace(/@.*$/, "") : "";
-
-      if (phone) {
-        await supabase
-          .from("whatsapp_instances")
-          .update({ connected_phone: phone } as any)
-          .eq("consultant_id", consultantId);
-      }
-    } catch {
-      // Non-critical
-    }
-  }, [consultantId]);
-
-  const deleteInstanceDb = useCallback(async () => {
-    await supabase.from("whatsapp_instances").delete().eq("consultant_id", consultantId);
-  }, [consultantId]);
-
   const markConnected = useCallback(async (name: string, message?: string) => {
     graceCountRef.current = 0;
     resetTimeoutCounter();
@@ -275,15 +175,13 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       try {
         await saveInstance(name);
         instanceSavedRef.current = true;
-        // Ensure webhook is configured for this instance
-        setInstanceWebhook(name).catch(() => {/* non-critical */});
+        ensureWebhook(name);
       } catch {
         // Non-critical persistence failure
       }
     }
-    // Always try to fetch and save the connected phone number
     fetchAndSaveConnectedPhone(name).catch(() => {/* non-critical */});
-  }, [addLog, fetchAndSaveConnectedPhone, resetRecoveryCounter, resetTimeoutCounter, saveInstance, setHealth, setStatus]);
+  }, [addLog, ensureWebhook, fetchAndSaveConnectedPhone, resetRecoveryCounter, resetTimeoutCounter, saveInstance, setHealth, setStatus]);
 
   /* ── Check state with diagnostic parsing ── */
   const checkState = useCallback(async (name: string): Promise<ConnectionCheckState> => {
@@ -291,7 +189,6 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       const result = await withTimeout(getConnectionState(name), 15000) as Record<string, unknown>;
       if (!result) return "unknown";
 
-      // Check for diagnostic info from proxy
       if (isMissingState(result)) {
         return "missing";
       }
@@ -303,7 +200,6 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
         return "unknown";
       }
 
-      // Normal response
       resetTimeoutCounter();
       const state: string = (result as { state?: string })?.state ||
         ((result as { instance?: { state?: string } })?.instance?.state) || "close";
@@ -364,19 +260,16 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
 
   /* ── Level 2 recovery: multi-signal diagnosis ── */
   const multiSignalCheck = useCallback(async (name: string): Promise<ConnectionCheckState> => {
-    // First try connectionState
     const state1 = await checkState(name);
     if (state1 === "open" || state1 === "missing") return state1;
 
-    // If unknown/timeout, try connectInstance as second signal
     if (state1 === "unknown" && timeoutCountRef.current >= 2) {
       addLog("🔍 Verificando por sinal alternativo...");
       try {
         const resp = await withTimeout(connectInstance(name), 12000);
         if (resp?.base64) {
-          return "connecting"; // Instance exists, needs QR
+          return "connecting";
         }
-        // If connectInstance also times out / fails, truly degraded
         return "unknown";
       } catch (err) {
         if (isAuthError(err)) throw err;
@@ -397,7 +290,6 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
     const poll = async () => {
       if (!mountedRef.current) return;
 
-      // Circuit breaker: if too many timeouts, slow down polling
       if (timeoutCountRef.current >= MAX_CONSECUTIVE_TIMEOUTS) {
         if (healthRef.current !== "reset_recommended") {
           setHealth("reset_recommended");
@@ -421,7 +313,6 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
           return true;
         };
 
-        // Use multi-signal check when degraded
         const state = timeoutCountRef.current >= 2
           ? await multiSignalCheck(name)
           : await checkState(name);
@@ -782,17 +673,14 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
     addLog("🔄 Iniciando reset seguro da conexão...");
 
     try {
-      // Step 1: Logout (best-effort)
       addLog("1/4 — Encerrando sessão WhatsApp...");
       try { await withTimeout(logoutInstance(name), 10000); } catch { /* ok */ }
       await sleep(2000);
 
-      // Step 2: Delete instance on Evolution API (best-effort)
       addLog("2/4 — Removendo instância antiga...");
       try { await withTimeout(deleteInstance(name), 10000); } catch { /* ok */ }
       await sleep(2000);
 
-      // Step 3: Clear DB record
       addLog("3/4 — Limpando registros locais...");
       await deleteInstanceDb();
       instanceSavedRef.current = false;
@@ -800,7 +688,6 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       timeoutCountRef.current = 0;
       setConsecutiveTimeouts(0);
 
-      // Step 4: Recreate
       addLog("4/4 — Criando nova instância...");
       setInstanceName(name);
 
@@ -910,8 +797,6 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
           return;
         }
 
-        // If unknown (timeout) on init, don't immediately disconnect
-        // Try connectInstance as fallback signal
         if (state === "unknown") {
           addLog("⚠️ Servidor lento. Tentando recuperar...");
           setHealth("degraded");
