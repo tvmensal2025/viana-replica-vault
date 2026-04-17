@@ -5,6 +5,19 @@ import { getNextMissingStep, getReplyForStep, validarCPFDigitos } from "../_shar
 import { ocrContaEnergia, ocrDocumentoFrenteVerso } from "../_shared/ocr.ts";
 import { createEvolutionSender, parseEvolutionMessage, extractMediaUrl } from "../_shared/evolution-api.ts";
 import { checkAndMarkProcessed, logStepTransition, jsonLog, generateCorrelationId } from "../_shared/audit.ts";
+import { uploadBytesToMinio, base64ToBytes } from "../_shared/minio-upload.ts";
+
+/**
+ * Sobe uma mídia (base64 + mime) imediatamente para o MinIO e retorna a URL pública.
+ * Se MinIO falhar, retorna null e logamos — o caller usa fallback (ex: data URL).
+ * Isso impede que data URLs gigantes (1MB+) sejam salvos no banco.
+ */
+async function uploadMediaToMinio(opts: {
+  fileBase64: string;
+  mimeType: string;
+  consultantFolder: string;
+  customerName: string;
+  customerBirth
 
 // Threshold mínimo de confiança para aceitar dados extraídos pelo OCR.
 // Abaixo disso, pedimos reenvio da imagem.
