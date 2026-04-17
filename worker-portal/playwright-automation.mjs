@@ -287,6 +287,27 @@ async function downloadWhapiMedia(mediaId, label) {
   return outPath;
 }
 
+// ─── Converter PDF para JPG (portal só aceita image/*) ──────────────────────
+async function convertPdfToJpg(pdfPath, label) {
+  try {
+    const { execSync } = await import('child_process');
+    const jpgPath = pdfPath.replace(/\.pdf$/i, '.jpg');
+    // pdftoppm vem do poppler-utils (já instalado no container playwright)
+    execSync(`pdftoppm -jpeg -r 150 -f 1 -l 1 "${pdfPath}" "${jpgPath.replace(/\.jpg$/, '')}" 2>/dev/null`, { stdio: 'ignore' });
+    // pdftoppm gera arquivo com sufixo -1.jpg
+    const generated = jpgPath.replace(/\.jpg$/, '-1.jpg');
+    if (existsSync(generated)) {
+      copyFileSync(generated, jpgPath);
+      console.log(`   🔄 ${label} convertido PDF→JPG: ${jpgPath}`);
+      return jpgPath;
+    }
+    if (existsSync(jpgPath)) return jpgPath;
+  } catch (e) {
+    console.warn(`   ⚠️  Conversão PDF→JPG falhou (${label}): ${e.message}`);
+  }
+  return pdfPath; // fallback: tenta original
+}
+
 // ─── Preparar arquivos de upload ──────────────────────────────────────────────
 async function prepararDocumento(url, label) {
   // Tratar URLs inválidas (nao_aplicavel, vazio, etc.)
@@ -300,7 +321,7 @@ async function prepararDocumento(url, label) {
       const mediaId = url.replace('whapi-media:', '').trim();
       const outPath = await downloadWhapiMedia(mediaId, label);
       console.log(`📄 ${label} baixado (Whapi): ${outPath}`);
-      return outPath;
+      return outPath.endsWith('.pdf') ? await convertPdfToJpg(outPath, label) : outPath;
     } catch (e) {
       console.warn(`⚠️  Erro ao baixar ${label} (Whapi): ${e.message}`);
     }
@@ -327,6 +348,10 @@ async function prepararDocumento(url, label) {
     
     if (outPath && existsSync(outPath)) {
       console.log(`📄 ${label} baixado: ${outPath}`);
+      // Portal só aceita imagem para documento pessoal — converter PDF
+      if (outPath.endsWith('.pdf') && (label === 'doc-frente' || label === 'doc-verso')) {
+        return await convertPdfToJpg(outPath, label);
+      }
       return outPath;
     }
   } catch (e) {
@@ -1125,16 +1150,15 @@ export async function executarAutomacao(customerId, options = {}) {
     console.log('\n📋 [9/16] Tipo de documento...');
     
     const tipoDoc = (data.documentType || 'RG').toUpperCase();
-    // Mapear para os textos exatos do dropdown MUI do portal
+    // Portal SÓ aceita "RG (Antigo)" e "RG (Novo)" — CNH não existe no dropdown!
+    // Mapeamento: CNH → RG (Novo), RG novo → RG (Novo), default → RG (Antigo)
     let opcaoTexto;
-    if (tipoDoc.includes('CNH')) {
-      opcaoTexto = 'CNH';
-    } else if (tipoDoc.includes('NOVO')) {
+    if (tipoDoc.includes('CNH') || tipoDoc.includes('NOVO')) {
       opcaoTexto = 'RG (Novo)';
     } else {
       opcaoTexto = 'RG (Antigo)';
     }
-    console.log(`   📋 Tipo desejado: ${opcaoTexto}`);
+    console.log(`   📋 Tipo desejado: ${opcaoTexto} (original: ${data.documentType})`);
     
     let tipoDocOk = false;
     
@@ -1246,9 +1270,13 @@ export async function executarAutomacao(customerId, options = {}) {
     
     let docsEnviados = 0;
     
-    // ESTRATÉGIA 0: inputs hidden conhecidos do portal atual
+    // ESTRATÉGIA 0: IDs REAIS validados live no portal (2026-04-17)
+    // Portal usa: #file_input_frente_documento_pessoal e #file_input_verso_documento_pessoal
+    // accept="image/*" — NÃO ACEITA PDF! Conversor pdf→jpg deve estar ativo
     if (docFrentePath) {
-      const frenteOk = await setFileDirectly(page.locator('#file-frente'), docFrentePath, 'Documento FRENTE enviado (#file-frente)')
+      const frenteOk = await setFileDirectly(page.locator('#file_input_frente_documento_pessoal'), docFrentePath, 'Documento FRENTE enviado (#file_input_frente_documento_pessoal)')
+        || await setFileDirectly(page.locator('input[name="frente_documento_pessoal"]'), docFrentePath, 'Documento FRENTE enviado (name)')
+        || await setFileDirectly(page.locator('#file-frente'), docFrentePath, 'Documento FRENTE enviado (legacy #file-frente)')
         || await setFileByLabelPattern(/frente/i, docFrentePath, 'Documento FRENTE enviado (label)');
       if (frenteOk) {
         docsEnviados++;
@@ -1256,17 +1284,19 @@ export async function executarAutomacao(customerId, options = {}) {
       }
     }
 
-    const isCNH = (data.documentType || '').toUpperCase().includes('CNH');
-    if (!isCNH && docVersoPath) {
-      const versoOk = await setFileDirectly(page.locator('#file-verso'), docVersoPath, 'Documento VERSO enviado (#file-verso)')
+    // RG sempre tem verso. CNH no portal é mapeado para RG (Novo) → também precisa verso
+    if (docVersoPath) {
+      const versoOk = await setFileDirectly(page.locator('#file_input_verso_documento_pessoal'), docVersoPath, 'Documento VERSO enviado (#file_input_verso_documento_pessoal)')
+        || await setFileDirectly(page.locator('input[name="verso_documento_pessoal"]'), docVersoPath, 'Documento VERSO enviado (name)')
+        || await setFileDirectly(page.locator('#file-verso'), docVersoPath, 'Documento VERSO enviado (legacy #file-verso)')
         || await setFileByLabelPattern(/verso/i, docVersoPath, 'Documento VERSO enviado (label)');
       if (versoOk) {
         docsEnviados++;
         await delay(2000);
       }
-    } else if (isCNH) {
-      console.log('   📋 Documento é CNH — verso não necessário ✅');
     }
+
+    const isCNH = false; // Portal não tem CNH — sempre tratar como RG (precisa verso)
 
     // ESTRATÉGIA 1: input[type="file"] direto (portal antigo)
     const allFileInputsCount = await page.locator('input[type="file"]').count();
