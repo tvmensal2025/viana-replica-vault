@@ -540,6 +540,8 @@ function formatarDados(cliente) {
     possuiProcurador: cliente.possui_procurador || false,
     pdfProtegido: cliente.conta_pdf_protegida || false,
     debitosAberto: cliente.debitos_aberto || false,
+    distribuidoraLogin: cliente.distribuidora_login || '',
+    distribuidoraSenha: cliente.distribuidora_senha || '',
   };
 }
 
@@ -1144,6 +1146,66 @@ export async function executarAutomacao(customerId, options = {}) {
     await page.evaluate(() => window.scrollBy(0, 400));
     await delay(2500);
     await screenshot(page, customerId, '05-formulario-preenchido');
+    
+    // ─── 11.1 Login/Senha Distribuidora (CONDICIONAL — alguns estados/dist) ───
+    // Ex: SP/CPFL Santa Cruz EXIGE login+senha do site da distribuidora
+    currentPhase = 'fase8b-credenciais-distribuidora';
+    try {
+      const loginDistField = page.locator('input[placeholder*="Login da distribuidora" i]').first();
+      const senhaDistField = page.locator('input[placeholder*="Senha da distribuidora" i]').first();
+      const hasLoginDist = await loginDistField.count() > 0 && await loginDistField.isVisible().catch(() => false);
+      const hasSenhaDist = await senhaDistField.count() > 0 && await senhaDistField.isVisible().catch(() => false);
+      
+      if (hasLoginDist || hasSenhaDist) {
+        console.log('   🔐 Portal exige credenciais da distribuidora (login/senha)');
+        const loginVal = data.distribuidoraLogin || cliente.distribuidora_login || '';
+        const senhaVal = data.distribuidoraSenha || cliente.distribuidora_senha || '';
+        
+        if (!loginVal || !senhaVal) {
+          // Marcar lead como aguardando credenciais e abortar
+          console.warn('   ⚠️  Cliente NÃO possui credenciais da distribuidora — abortando');
+          await supabase.from('customers').update({
+            status: 'awaiting_distributor_credentials',
+            error_message: 'Distribuidora exige login/senha do site oficial. Solicitar ao cliente.'
+          }).eq('id', customerId);
+          await screenshot(page, customerId, '05a-credenciais-FALTANDO');
+          throw new Error('AWAITING_DISTRIBUTOR_CREDENTIALS');
+        }
+        
+        if (hasLoginDist) await reactFill(page, 'input[placeholder*="Login da distribuidora" i]', loginVal);
+        if (hasSenhaDist) await reactFill(page, 'input[placeholder*="Senha da distribuidora" i]', senhaVal);
+        console.log('   ✅ Credenciais distribuidora preenchidas');
+        await delay(1500);
+      } else {
+        console.log('   ℹ️  Distribuidora não requer credenciais');
+      }
+    } catch (e) {
+      if (e.message === 'AWAITING_DISTRIBUTOR_CREDENTIALS') throw e;
+      console.warn(`   ⚠️  Erro ao verificar credenciais distribuidora: ${e.message}`);
+    }
+    
+    // ─── 11.2 Possui placas solares instaladas? (default: Não) ────────────
+    currentPhase = 'fase8c-placas-solares';
+    try {
+      const placasLabel = page.getByText(/Possui placas solares instaladas/i).first();
+      if (await placasLabel.count() > 0 && await placasLabel.isVisible().catch(() => false)) {
+        console.log('   ☀️  Pergunta "Possui placas solares" detectada — selecionando "Não"');
+        // Tentar radio "Não" (mais seguro como default)
+        const radioNao = page.locator('label:has-text("Não") input[type="radio"], input[type="radio"][value="nao" i], input[type="radio"][value="false" i]').first();
+        if (await radioNao.count() > 0) {
+          await radioNao.check({ force: true }).catch(async () => {
+            await page.locator('label:has-text("Não")').first().click({ force: true }).catch(() => {});
+          });
+          console.log('   ✅ Placas solares: Não');
+        }
+        await delay(1000);
+      }
+    } catch (e) {
+      console.warn(`   ⚠️  Pergunta placas solares: ${e.message}`);
+    }
+    
+    await page.evaluate(() => window.scrollBy(0, 300));
+    await delay(1500);
     
     // ─── 12. Tipo de Documento (MUI Dropdown) ───────────────────────────
     currentPhase = 'tipo-documento';
