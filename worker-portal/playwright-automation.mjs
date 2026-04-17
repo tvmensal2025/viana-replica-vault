@@ -915,7 +915,20 @@ export async function executarAutomacao(customerId, options = {}) {
     // Aguardar auto-preenchimento do portal (Nome + Data de Nascimento vêm da Receita)
     await delay(5000);
     await screenshot(page, customerId, '04-apos-cpf');
-    
+
+    // ─── 6a. AGUARDAR AUTO-FILL DA RECEITA (Nome + DataNasc) ──────────────
+    // REGRA DE OURO: o portal consulta a Receita Federal via CPF e auto-preenche
+    // Nome e Data de Nascimento. Esses valores SÃO A FONTE DA VERDADE — nunca
+    // sobrescrever com dados do banco/OCR (que podem estar errados).
+    currentPhase = 'fase3b-autofill';
+    console.log('   ⏳ [AUTO-FILL] Aguardando portal preencher Nome + DataNasc via Receita...');
+    const autofill = await waitForAutoFill(page, 18000);
+    if (autofill.nome || autofill.nascimento) {
+      console.log(`   📥 [AUTO-FILL] Portal preencheu: Nome="${autofill.nome || '(vazio)'}" DataNasc="${autofill.nascimento || '(vazio)'}"`);
+    } else {
+      console.warn('   ⚠️  [AUTO-FILL] Portal NÃO auto-preencheu (CPF talvez sem registro na Receita). Worker continuará.');
+    }
+
     // ─── 6b. TRATAR CADASTRO EXISTENTE ────────────────────────────────────
     currentPhase = 'cadastro-existente';
     const novoCadastroBtn = page.locator('button:has-text("Continuar com um novo cadastro"), button:has-text("novo cadastro")');
@@ -935,19 +948,27 @@ export async function executarAutomacao(customerId, options = {}) {
     // AMBOS são obrigatórios e devem receber o MESMO valor.
     currentPhase = 'fase4-whatsapp';
     console.log('\n📋 [4/16] WhatsApp + Confirmação...');
-    
-    // Aguardar campo WhatsApp aparecer (renderiza após auto-fill do CPF)
+
+    // Aguardar campo WhatsApp aparecer via MutationObserver + polling (12 tentativas, 1.5s = 18s total)
+    const whatsappAppeared = await waitForFieldByPlaceholder(page, /whatsapp/i, 18000);
+    if (whatsappAppeared) {
+      console.log('   ✅ Campo WhatsApp detectado');
+    } else {
+      console.log('   ⏳ MutationObserver não detectou — usando polling clássico');
+    }
+
     let phoneField = byPHPartial('WhatsApp');
     let phoneVisible = false;
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 12; i++) {
       try {
-        await phoneField.waitFor({ state: 'visible', timeout: 5000 });
+        await phoneField.waitFor({ state: 'visible', timeout: 1500 });
         phoneVisible = true;
         break;
       } catch (_) {
-        console.log(`   ⏳ Aguardando campo WhatsApp aparecer (tentativa ${i + 1}/6)...`);
+        console.log(`   ⏳ Aguardando campo WhatsApp aparecer (tentativa ${i + 1}/12)...`);
         await page.evaluate(() => window.scrollBy(0, 200));
-        await delay(2000);
+        await delay(1500);
+        phoneField = byPHPartial('WhatsApp');
       }
     }
     
@@ -960,21 +981,25 @@ export async function executarAutomacao(customerId, options = {}) {
         await fillRequiredField(phoneFallback, data.whatsapp, 'WhatsApp', 'digits');
       } else {
         await screenshot(page, customerId, 'ERROR-whatsapp-nao-encontrado');
-        throw new Error('Campo WhatsApp não encontrado no portal (após 6 tentativas)');
+        throw new Error('Campo WhatsApp não encontrado no portal (após 12 tentativas + MutationObserver)');
       }
     }
-    await delay(800);
-    
-    // Confirmar celular - OBRIGATÓRIO
+    // Disparar blur para forçar render do campo de confirmação
+    await page.evaluate(() => { (document.activeElement)?.dispatchEvent(new Event('blur', { bubbles: true })); }).catch(() => {});
+    await delay(1200);
+
+    // Confirmar celular - OBRIGATÓRIO (HARD-FAIL se não encontrar)
     let confirmPhone = byPHPartial('Confirme seu celular');
     let confirmPhoneFound = false;
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 8; i++) {
       if (await confirmPhone.count() > 0 && await confirmPhone.isVisible().catch(() => false)) {
         confirmPhoneFound = true;
         break;
       }
-      console.log(`   ⏳ Aguardando "Confirme seu celular" (tentativa ${i + 1}/4)...`);
-      await page.evaluate(() => window.scrollBy(0, 200));
+      console.log(`   ⏳ Aguardando "Confirme seu celular" (tentativa ${i + 1}/8)...`);
+      // Re-disparar blur no campo WhatsApp para forçar render
+      try { await phoneField.evaluate((el) => el.dispatchEvent(new Event('blur', { bubbles: true }))); } catch (_) {}
+      await page.evaluate(() => window.scrollBy(0, 150));
       await delay(1500);
       confirmPhone = byPHPartial('Confirme seu celular');
     }
@@ -988,8 +1013,8 @@ export async function executarAutomacao(customerId, options = {}) {
       if (cnt >= 2) {
         await fillRequiredField(allPhoneInputs.nth(1), data.whatsapp, 'Confirmação WhatsApp (fallback)', 'digits');
       } else {
-        console.warn('   ⚠️  Campo "Confirme seu celular" não encontrado - pode causar erro de validação');
-        await screenshot(page, customerId, 'WARN-confirme-celular-nao-encontrado');
+        await screenshot(page, customerId, 'ERROR-confirme-celular-nao-encontrado');
+        throw new Error('Campo "Confirme seu celular" não apareceu no portal (8 tentativas após blur). Não posso avançar sem confirmar — o portal exigiria validação.');
       }
     }
     await delay(2500);
