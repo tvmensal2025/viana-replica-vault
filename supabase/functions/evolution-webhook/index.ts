@@ -4,6 +4,11 @@ import { logStructured, fetchWithTimeout, fetchInsecure, withRetry, buscarCepPor
 import { getNextMissingStep, getReplyForStep, validarCPFDigitos } from "../_shared/conversation-helpers.ts";
 import { ocrContaEnergia, ocrDocumentoFrenteVerso } from "../_shared/ocr.ts";
 import { createEvolutionSender, parseEvolutionMessage, extractMediaUrl } from "../_shared/evolution-api.ts";
+import { checkAndMarkProcessed, logStepTransition, jsonLog, generateCorrelationId } from "../_shared/audit.ts";
+
+// Threshold mínimo de confiança para aceitar dados extraídos pelo OCR.
+// Abaixo disso, pedimos reenvio da imagem.
+const OCR_CONFIDENCE_THRESHOLD = 70;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
