@@ -1,23 +1,28 @@
 ---
 name: portal-form-selectors
-description: Mapeamento real do portal digital.igreenenergy.com.br - formulário PROGRESSIVO com campos mascarados que exigem digitação real
+description: Mapeamento real do portal digital.igreenenergy.com.br - formulário PROGRESSIVO; Distribuidora e Tipo Documento são MUI Selects MANUAIS
 type: feature
 ---
 
-Mapeamento confirmado ao vivo (v4 — 17/04/2026) do portal `https://digital.igreenenergy.com.br/?id={consultor_id}&sendcontract=true`:
+Mapeamento confirmado ao vivo (v5 — 17/04/2026, validado end-to-end com CPF de teste 111.444.777-35) do portal `https://digital.igreenenergy.com.br/?id={consultor_id}&sendcontract=true`:
 
-**Landing**: CEP (`placeholder="CEP"`) + Valor da conta (`placeholder` começa com `R$`) → botão "Calcular" → revela botão verde **"Garantir meu desconto"** que avança para o formulário.
+**Landing**: CEP (`placeholder="CEP"`) + Valor da conta (`placeholder` começa com `R$`) → "Calcular" → revela botão verde **"Garantir meu desconto"** que avança para o formulário.
 
 **Fluxo PROGRESSIVO** (campos só aparecem após o anterior validar):
-1. **CPF ou CNPJ** (`placeholder="CPF ou CNPJ"`) — auto-preenche **Nome completo** (`placeholder="Nome completo"`) e **Data de Nascimento** (`placeholder="Data de Nascimento"`) via consulta externa após ~3-5s.
-2. **Número do seu WhatsApp** (`placeholder="Número do seu WhatsApp"`) — máscara `(00) 00000-0000`. Aceita **11 dígitos sem +55** (formata automaticamente).
-3. **Confirme seu celular** (`placeholder="Confirme seu celular"`) — OBRIGATÓRIO, deve ser idêntico em dígitos. Erro mostrado: `"Celular diferente do fornecido."`
-4. **E-mail** + **Confirme seu E-mail** — mesma regra de duplicação.
-5. **CEP** auto-preenche endereço (rua, bairro, cidade, estado).
-6. Distribuidora detectada automaticamente — **NÃO PEDE login/senha**.
-7. Pergunta sobre placas solares (radio `Sim`/`Não` — default `Não`).
-8. Uploads: documento frente/verso + conta de energia (apenas IMG/JPG/PNG para docs pessoais; PDF aceito para conta).
+1. **CPF ou CNPJ** (`placeholder="CPF ou CNPJ"`) — auto-preenche **Nome completo** e **Data de Nascimento** via consulta externa em ~3-5s.
+2. **Número do seu WhatsApp** — máscara `(00) 00000-0000`, aceita 11 dígitos sem +55.
+3. **Confirme seu celular** — OBRIGATÓRIO, idêntico em dígitos. Erro: `"Celular diferente do fornecido."`.
+4. **E-mail** + **Confirme seu E-mail** — mesma regra.
+5. **CEP** já vem pré-preenchido da landing → auto-preenche **Endereço**, **Bairro**, **Cidade**, **Estado**.
+6. **Número** (do endereço) — manual.
+7. **Distribuidora de energia** — ⚠️ **MUI Select MANUAL**, NÃO é auto-detectada pelo CEP. Lista de opções (CPFL, etc.). Worker deve abrir o combobox e selecionar via `customer.distribuidora` ou usar a 1ª opção como fallback.
+8. **Número da instalação** — campo texto obrigatório (7-12 dígitos, "Seu Código" da conta de luz).
+9. **Tipo documento** — ⚠️ **MUI Select MANUAL** com apenas duas opções: `RG (Antigo)` e `RG (Novo)`. CNH não existe → mapear CNH → "RG (Novo)".
+10. **Documento pessoal**: upload Frente + Verso (apenas IMG/JPG/PNG).
+11. (depois) Pergunta sobre placas solares (radio `Sim`/`Não` — default `Não`) e upload da conta de energia (PDF aceito).
 
-**BUG CRÍTICO IDENTIFICADO** (corrigido em v4): Campos com máscara MUI/react-imask (telefone, CPF, CNPJ, CEP, data) **não aceitam** `_valueTracker.setValue()` direto — a máscara não é acionada e o valor é silenciosamente rejeitado pela validação interna. O `reactFill` agora detecta esses campos via placeholder/name/type e usa **digitação caractere-por-caractere com `delay: 90ms`** + dispatch de `blur` para acionar validação.
+**BUG CRÍTICO** (corrigido em v4): Campos com máscara MUI/react-imask (telefone, CPF, CNPJ, CEP, data) não aceitam `_valueTracker.setValue()` direto — usar **digitação caractere-por-caractere com `delay: 90ms`** + dispatch de `blur`.
 
-**Validação de valor**: `matchesExpected(actual, expected, 'digits')` compara apenas dígitos, então `(11) 98765-4321` casa com `11987654321`.
+**Validação de valor**: `matchesExpected(actual, expected, 'digits')` compara apenas dígitos.
+
+**CORREÇÃO v5 vs v4**: A versão anterior afirmava erroneamente que distribuidora era auto-detectada e que login/senha podiam aparecer. **Confirmado em 17/04/2026**: para SP/CPFL não há login/senha, mas a distribuidora **DEVE** ser selecionada manualmente.
