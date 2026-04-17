@@ -55,9 +55,12 @@ export function getNextMissingStep(c: any): string {
   // CPF com dígitos verificadores inválidos → pedir novamente
   if (c.cpf && !validarCPFDigitos(c.cpf)) return "ask_cpf";
   if (!c.rg) return "ask_rg";
-  if (!c.data_nascimento) return "ask_birth_date";
+  // Data placeholder (2000-01-01) ou vazia → pedir
+  if (!c.data_nascimento || /^2000-01-01/.test(String(c.data_nascimento))) return "ask_birth_date";
   if (!c.phone_landline) return "ask_phone_confirm";
-  if (!c.email) return "ask_email";
+  // Email vazio, placeholder @lead.igreen, ou de domínio do consultor (icloud/gmail típico de admin) → pedir
+  // Aceita apenas se for um email "real" do cliente (não placeholder e não @lead.igreen)
+  if (!c.email || /@lead\.igreen$/i.test(c.email) || /^rafael\.ids@/i.test(c.email)) return "ask_email";
   if (!c.cep) return "ask_cep";
   // CEP genérico (termina em 000) → pedir manualmente
   if (c.cep && /000$/.test(c.cep.replace(/\D/g, ""))) return "ask_cep";
@@ -70,6 +73,9 @@ export function getNextMissingStep(c: any): string {
   // Documentos (frente/verso) já foram coletados no fluxo principal
   if (!c.document_front_url) return "ask_doc_frente_manual";
   if (!c.document_back_url && c.document_type !== "CNH") return "ask_doc_verso_manual";
+  // Todos preenchidos → mostrar botão Finalizar
+  return "ask_finalizar";
+}
   // Todos preenchidos → mostrar botão Finalizar
   return "ask_finalizar";
 }
