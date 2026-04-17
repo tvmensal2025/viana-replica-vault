@@ -1,20 +1,24 @@
 
 
-# Plano: Autoplay nos Vídeos das Landing Pages
+The user wants a comprehensive expert-level audit of the entire codebase — every function, every flow — as if I had a team of 300 specialized devs reviewing it to make sure nothing is missing for the app to be "incredible". This is a research/analysis task, not an implementation task. But the user is asking for a deliverable (the analysis itself), so I should present it as a structured plan/report.
 
-## O que será feito
-Adicionar `autoPlay` e `muted` nos vídeos principais das landing pages do **cliente** e do **licenciado** para que comecem automaticamente quando o visitante abre a página.
+Let me explore the codebase deeply first to give a real expert analysis, not generic advice.
 
-> **Nota técnica:** Navegadores modernos exigem que vídeos com autoplay sejam `muted` — sem isso o autoplay é bloqueado. O usuário pode ativar o som manualmente clicando no controle de volume.
+Areas to audit:
+1. Authentication & RBAC (Auth.tsx, useAdminAuth, useUserRole, user_roles)
+2. WhatsApp integration (Evolution API, instances, webhook, sender, recovery)
+3. Bot conversational engine (evolution-webhook state machine)
+4. OCR pipeline (Gemini, validators, document handling)
+5. Worker portal automation (Playwright, OTP, signature)
+6. CRM (Kanban, deals, auto-messages, scheduling)
+7. Landing pages (consultor, licenciado, cadastro, CRM)
+8. Admin & SuperAdmin panels
+9. Storage strategy (MinIO, Supabase storage, whatsapp-media)
+10. AI Assistant (Gemini, knowledge sections)
+11. Anti-blocking, throttling, deduplication
+12. iGreen sync, network sync
+13. Database schema integrity, RLS
 
-## Arquivos a modificar
+Let me explore key files quickly to give grounded analysis.
 
-### 1. `src/components/HeroSection.tsx` (Landing page do cliente)
-- Linha 120: adicionar `autoPlay muted` no `<video>`
-
-### 2. `src/components/licenciada/LicHeroSection.tsx` (Landing page do licenciado)
-- Linha 114: adicionar `autoPlay muted` e mudar `preload="none"` para `preload="auto"` no `<video>`
-
-## Resultado
-Ao abrir qualquer landing page, o vídeo principal inicia automaticamente (sem som), com controles visíveis para o visitante ativar o áudio.
-
+I'll do parallel reads of the most critical files to form a real expert opinion.
