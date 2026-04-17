@@ -1521,6 +1521,17 @@ Deno.serve(async (req) => {
       if (updateError) {
         console.error(`❌ ERRO ao salvar updates para ${customer.id}:`, updateError);
       }
+
+      // ─── Log de transição de etapa (analytics de funil) ──────────
+      if (updates.conversation_step && updates.conversation_step !== step) {
+        await logStepTransition(supabase, {
+          customer_id: customer.id,
+          consultant_id: instanceData.consultant_id,
+          phone,
+          from_step: step,
+          to_step: updates.conversation_step,
+        });
+      }
     }
 
     // ─── Enviar reply ─────────────────────────────────────────────────
