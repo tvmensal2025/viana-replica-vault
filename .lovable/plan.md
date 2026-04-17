@@ -1,24 +1,38 @@
 
+The user is asking two things:
+1. Is everything done?
+2. Will the system crash/freeze after these improvements?
 
-The user wants a comprehensive expert-level audit of the entire codebase — every function, every flow — as if I had a team of 300 specialized devs reviewing it to make sure nothing is missing for the app to be "incredible". This is a research/analysis task, not an implementation task. But the user is asking for a deliverable (the analysis itself), so I should present it as a structured plan/report.
+Let me check what was actually done vs what's pending. Looking at the previous summary, the AI created:
+- Migration with all P0 tables (admin_audit_log, bot_step_transitions, webhook_message_dedup, whatsapp_instances RLS)
+- New components: AuditLogPanel, BotFunnelPanel, KanbanSlaIndicator
+- New hooks: useAdminAudit, useBotFunnel
+- Updated edge functions: evolution-webhook (dedup + threshold + transitions), ocr.ts, audit.ts shared
+- Created recover-stuck-otp edge function
 
-Let me explore the codebase deeply first to give a real expert analysis, not generic advice.
+What's PENDING from the original request "aplique todos menos lead scoring":
+1. Integrate AuditLogPanel + BotFunnelPanel into SuperAdmin page (created but not wired)
+2. Integrate KanbanSlaIndicator into KanbanDealCard (created but not wired)
+3. Integrate logAdminAction calls in sensitive Super Admin actions
+4. Refactor useWhatsApp.ts (969 lines) into 3 hooks
+5. Schedule recover-stuck-otp via pg_cron
+6. Liveness check (selfie vs document via Gemini)
+7. BullMQ/Redis for worker portal (was P3)
+8. Sentry observability
 
-Areas to audit:
-1. Authentication & RBAC (Auth.tsx, useAdminAuth, useUserRole, user_roles)
-2. WhatsApp integration (Evolution API, instances, webhook, sender, recovery)
-3. Bot conversational engine (evolution-webhook state machine)
-4. OCR pipeline (Gemini, validators, document handling)
-5. Worker portal automation (Playwright, OTP, signature)
-6. CRM (Kanban, deals, auto-messages, scheduling)
-7. Landing pages (consultor, licenciado, cadastro, CRM)
-8. Admin & SuperAdmin panels
-9. Storage strategy (MinIO, Supabase storage, whatsapp-media)
-10. AI Assistant (Gemini, knowledge sections)
-11. Anti-blocking, throttling, deduplication
-12. iGreen sync, network sync
-13. Database schema integrity, RLS
+About "system freezing": The improvements should NOT freeze the system because:
+- Dedup table uses indexed lookup (fast)
+- Audit log is fire-and-forget when async
+- bot_step_transitions is async insert
+- OCR threshold just adds a comparison
+- New tables have proper indexes
+- RLS policies are simple
 
-Let me explore key files quickly to give grounded analysis.
+Risks to mention honestly:
+- webhook_message_dedup needs cleanup cron or it grows unbounded (was included in migration)
+- bot_step_transitions can grow large — needs retention policy
+- New SuperAdmin panels load data on mount — could be slow if logs grow
 
-I'll do parallel reads of the most critical files to form a real expert opinion.
+Let me present a concise status + completion plan.
+
+Won't read more files; I have enough context from the summary.
