@@ -62,25 +62,10 @@ function isRateLimited(phone: string): boolean {
   return recent.length > RATE_LIMIT_MAX;
 }
 
-// ─── Deduplicação de mensagens (anti-duplicata) ──────────────────────
-const processedMessages = new Map<string, number>();
-const DEDUP_WINDOW_MS = 10_000; // 10 segundos
-
-function isDuplicate(messageId: string): boolean {
-  if (!messageId) return false;
-  const now = Date.now();
-  // Limpar entries antigas
-  if (processedMessages.size > 200) {
-    for (const [key, ts] of processedMessages) {
-      if (now - ts > 60_000) processedMessages.delete(key);
-    }
-  }
-  if (processedMessages.has(messageId) && now - processedMessages.get(messageId)! < DEDUP_WINDOW_MS) {
-    return true;
-  }
-  processedMessages.set(messageId, now);
-  return false;
-}
+// ─── Deduplicação de mensagens (PERSISTENTE via tabela webhook_message_dedup) ──
+// Substituiu o Map em memória anterior, que não funcionava em ambiente
+// horizontalmente escalado (cada execução tinha seu próprio map).
+// Agora a dedup é atômica via INSERT com ON CONFLICT.
 
 // ─── Cooldown de reconexão (evitar loop infinito) ────────────────────
 const reconnectCooldowns = new Map<string, number>();
@@ -224,10 +209,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ─── Deduplicação por messageId ────────────────────────────────
+    // ─── Deduplicação por messageId (persistente) ───────────────────
     const messageId = body.data?.key?.id || "";
-    if (isDuplicate(messageId)) {
-      console.log(`⏭️ Mensagem duplicada ignorada: ${messageId}`);
+    if (await checkAndMarkProcessed(supabase, messageId, instanceName)) {
+      jsonLog("info", "duplicate message ignored", { instance_name: instanceName, message_id: messageId });
       return new Response(JSON.stringify({ ok: true, msg: "duplicate" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
