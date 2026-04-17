@@ -1349,7 +1349,16 @@ Deno.serve(async (req) => {
           reply = "📸 Envie a *FRENTE do seu documento* (RG ou CNH)\n\nFormatos: JPG, PNG ou PDF";
           break;
         }
-        updates.document_front_url = fileUrl || "evolution-media:pending";
+        if (fileBase64) {
+          const mime = imageMessage?.mimetype || documentMessage?.mimetype || "application/octet-stream";
+          const minioUrl = await uploadMediaToMinio({
+            fileBase64, mimeType: mime, consultantFolder: consultorId,
+            customerName: customer.name || "cliente", customerBirth: customer.data_nascimento, kind: "doc_frente",
+          });
+          updates.document_front_url = minioUrl || (fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending");
+        } else {
+          updates.document_front_url = fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending";
+        }
         const merged = { ...customer, ...updates };
         const next = await autoResolveCepIfNeeded(merged, updates);
         updates.conversation_step = next;
@@ -1362,7 +1371,16 @@ Deno.serve(async (req) => {
           reply = "📸 Envie o *VERSO do seu documento*\n\nFormatos: JPG, PNG ou PDF";
           break;
         }
-        updates.document_back_url = fileUrl || "evolution-media:pending";
+        if (fileBase64) {
+          const mime = imageMessage?.mimetype || documentMessage?.mimetype || "application/octet-stream";
+          const minioUrl = await uploadMediaToMinio({
+            fileBase64, mimeType: mime, consultantFolder: consultorId,
+            customerName: customer.name || "cliente", customerBirth: customer.data_nascimento, kind: "doc_verso",
+          });
+          updates.document_back_url = minioUrl || (fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending");
+        } else {
+          updates.document_back_url = fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending";
+        }
         const merged = { ...customer, ...updates };
         const next = await autoResolveCepIfNeeded(merged, updates);
         updates.conversation_step = next;
