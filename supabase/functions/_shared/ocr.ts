@@ -169,7 +169,12 @@ Se não encontrar um campo, use "". NÃO invente dados.`;
     if (dados.numeroInstalacao) { const n = dados.numeroInstalacao.replace(/\D/g, ""); dados.numeroInstalacao = (n.length >= 7 && n.length <= 12) ? n : ""; }
     if (dados.valorConta) { const v = parseFloat(String(dados.valorConta).replace(/[^\d.,]/g, "").replace(",", ".")); dados.valorConta = (!isNaN(v) && v > 0) ? v.toFixed(2) : ""; }
 
-    console.log("✅ OCR Conta OK:", JSON.stringify(dados).substring(0, 400));
+    // Score de confiança: % de campos críticos preenchidos.
+    const criticos = [dados.nome, dados.endereco, dados.cidade, dados.estado, dados.distribuidora, dados.valorConta];
+    const preenchidos = criticos.filter((v: any) => v && String(v).trim().length > 0).length;
+    dados.confianca = Math.round((preenchidos / criticos.length) * 100);
+
+    console.log(`✅ OCR Conta OK (confiança ${dados.confianca}%):`, JSON.stringify(dados).substring(0, 400));
     return { sucesso: true, dados };
   } catch (e: any) {
     console.error("❌ OCR Conta erro:", e.message || e);
@@ -303,7 +308,12 @@ export async function ocrDocumento(imagemUrl: string | null, geminiApiKey: strin
     if (dados.dataNascimento) dados.dataNascimento = validarDataNascimento(dados.dataNascimento);
     if (dados.nome) dados.nome = validarNomeOCR(dados.nome);
 
-    console.log("✅ OCR Doc OK:", JSON.stringify(dados).substring(0, 400));
+    // Score de confiança: campos críticos do documento (nome, cpf, rg, nascimento)
+    const criticos = [dados.nome, dados.cpf, dados.rg, dados.dataNascimento];
+    const preenchidos = criticos.filter((v: any) => v && String(v).trim().length > 0).length;
+    dados.confianca = Math.round((preenchidos / criticos.length) * 100);
+
+    console.log(`✅ OCR Doc OK (confiança ${dados.confianca}%):`, JSON.stringify(dados).substring(0, 400));
     return { sucesso: true, dados };
   } catch (e: any) {
     console.error("❌ OCR Doc erro:", e.message || e);
