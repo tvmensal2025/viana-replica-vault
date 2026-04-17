@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_audit_log: {
+        Row: {
+          action: string
+          admin_user_id: string
+          created_at: string
+          id: string
+          metadata: Json | null
+          target_id: string | null
+          target_type: string | null
+        }
+        Insert: {
+          action: string
+          admin_user_id: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          target_id?: string | null
+          target_type?: string | null
+        }
+        Update: {
+          action?: string
+          admin_user_id?: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          target_id?: string | null
+          target_type?: string | null
+        }
+        Relationships: []
+      }
       ai_knowledge_sections: {
         Row: {
           content: string
@@ -41,6 +71,39 @@ export type Database = {
           position?: number
           title?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      bot_step_transitions: {
+        Row: {
+          consultant_id: string | null
+          created_at: string
+          customer_id: string | null
+          duration_ms: number | null
+          from_step: string | null
+          id: string
+          phone: string | null
+          to_step: string
+        }
+        Insert: {
+          consultant_id?: string | null
+          created_at?: string
+          customer_id?: string | null
+          duration_ms?: number | null
+          from_step?: string | null
+          id?: string
+          phone?: string | null
+          to_step: string
+        }
+        Update: {
+          consultant_id?: string | null
+          created_at?: string
+          customer_id?: string | null
+          duration_ms?: number | null
+          from_step?: string | null
+          id?: string
+          phone?: string | null
+          to_step?: string
         }
         Relationships: []
       }
@@ -928,6 +991,24 @@ export type Database = {
         }
         Relationships: []
       }
+      webhook_message_dedup: {
+        Row: {
+          instance_name: string
+          message_id: string
+          processed_at: string
+        }
+        Insert: {
+          instance_name: string
+          message_id: string
+          processed_at?: string
+        }
+        Update: {
+          instance_name?: string
+          message_id?: string
+          processed_at?: string
+        }
+        Relationships: []
+      }
       whatsapp_instances: {
         Row: {
           connected_phone: string | null
@@ -1014,6 +1095,21 @@ export type Database = {
           },
         ]
       }
+      whatsapp_instances_public: {
+        Row: {
+          connected_phone: string | null
+          instance_name: string | null
+        }
+        Insert: {
+          connected_phone?: string | null
+          instance_name?: string | null
+        }
+        Update: {
+          connected_phone?: string | null
+          instance_name?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       get_coverage_summary: {
@@ -1031,6 +1127,15 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      log_admin_action: {
+        Args: {
+          _action: string
+          _metadata?: Json
+          _target_id?: string
+          _target_type?: string
+        }
+        Returns: string
       }
     }
     Enums: {
