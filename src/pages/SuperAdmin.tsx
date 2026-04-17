@@ -16,7 +16,10 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AIKnowledgePanel } from "@/components/superadmin/AIKnowledgePanel";
 import { CrmAnalyticsTab } from "@/components/superadmin/CrmAnalyticsTab";
+import { AuditLogPanel } from "@/components/superadmin/AuditLogPanel";
+import { BotFunnelPanel } from "@/components/superadmin/BotFunnelPanel";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { logAdminAction } from "@/hooks/useAdminAudit";
 
 interface WhatsAppMetrics {
   hasInstance: boolean;
@@ -49,7 +52,7 @@ const SuperAdmin = () => {
   const [loadingData, setLoadingData] = useState(true);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [resettingId, setResettingId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"consultores" | "ia" | "crm">("consultores");
+  const [activeTab, setActiveTab] = useState<"consultores" | "ia" | "crm" | "auditoria" | "funil">("consultores");
   const [searchTerm, setSearchTerm] = useState("");
   const accessDeniedToastShownRef = useRef(false);
   const { isAdmin, loading: roleLoading } = useUserRole(userId);
@@ -165,6 +168,12 @@ const SuperAdmin = () => {
     } else {
       setConsultants(prev => prev.map(c => c.id === consultantId ? { ...c, approved: !currentApproved } : c));
       toast({ title: !currentApproved ? "✅ Consultor aprovado!" : "❌ Acesso revogado" });
+      logAdminAction(
+        !currentApproved ? "approve_consultant" : "reject_consultant",
+        "consultant",
+        consultantId,
+        { previous_approved: currentApproved },
+      );
     }
     setTogglingId(null);
   };
@@ -178,6 +187,7 @@ const SuperAdmin = () => {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       toast({ title: "✅ Email de redefinição enviado!", description: `Link enviado para ${data?.email || consultantName}` });
+      logAdminAction("reset_password", "consultant", consultantId, { email: data?.email });
     } catch (err: any) {
       toast({ title: "Erro ao resetar senha", description: err.message || "Erro desconhecido", variant: "destructive" });
     }
@@ -218,6 +228,8 @@ const SuperAdmin = () => {
   const tabs = [
     { id: "consultores" as const, label: "Consultores", icon: Users, count: consultants.length },
     { id: "crm" as const, label: "CRM Analytics", icon: BarChart3 },
+    { id: "funil" as const, label: "Funil do Bot", icon: Activity },
+    { id: "auditoria" as const, label: "Auditoria", icon: Shield },
     { id: "ia" as const, label: "IA / Conhecimento", icon: Brain },
   ];
 
@@ -467,6 +479,8 @@ const SuperAdmin = () => {
         )}
 
         {activeTab === "crm" && <CrmAnalyticsTab />}
+        {activeTab === "funil" && <BotFunnelPanel />}
+        {activeTab === "auditoria" && <AuditLogPanel />}
         {activeTab === "ia" && <AIKnowledgePanel />}
       </main>
     </div>

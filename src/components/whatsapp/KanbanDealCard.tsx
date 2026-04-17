@@ -1,5 +1,6 @@
 import { GripVertical, User, Pencil, Trash2, MoreVertical } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { KanbanSlaIndicator } from "./KanbanSlaIndicator";
 import type { Tables } from "@/integrations/supabase/types";
 
 type CrmDealRow = Tables<"crm_deals">;
@@ -34,6 +35,9 @@ export function KanbanDealCard({ deal, onDragStart, onEdit, onDelete }: KanbanDe
           <span className="text-[10px] text-muted-foreground truncate block sensitive-phone">
             {deal.remote_jid?.split("@")[0] || "Sem contato"}
           </span>
+          <div className="mt-1">
+            <KanbanSlaIndicator enteredAt={deal.updated_at || deal.created_at} />
+          </div>
           {deal.approved_at && (
             <p className="text-[9px] text-emerald-500/80 mt-1">
               ✓ {new Date(deal.approved_at).toLocaleDateString("pt-BR")}
