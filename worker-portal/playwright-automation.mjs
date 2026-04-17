@@ -651,11 +651,30 @@ function formatarDados(cliente) {
     })(),
     electricity_bill_value: cliente.electricity_bill_value || 300,
     dataNascimento: cliente.data_nascimento,
-    documentType: cliente.document_type || 'RG (Antigo)',
+    // Normalizar document_type (aceita "CNH"/"cnh"/"RG (Novo)"/"rg_novo"/etc.)
+    documentType: normalizeDocType(cliente.document_type),
     possuiProcurador: cliente.possui_procurador || false,
     pdfProtegido: cliente.conta_pdf_protegida || false,
     debitosAberto: cliente.debitos_aberto || false,
   };
+}
+
+// ─── Normalização ÚNICA de document_type (espelha _shared/document-type.ts) ──
+// Valores canônicos: "cnh" | "rg_novo" | "rg_antigo".
+function normalizeDocType(input) {
+  const raw = String(input || '').trim().toLowerCase();
+  if (!raw) return 'rg_antigo';
+  if (/cnh|habilita/.test(raw)) return 'cnh';
+  if (/novo/.test(raw)) return 'rg_novo';
+  if (/antigo|rg/.test(raw)) return 'rg_antigo';
+  return 'rg_antigo';
+}
+
+// Texto exato da opção no MUI Select do portal igreen.
+function portalDocLabel(canonical) {
+  if (canonical === 'cnh') return 'CNH';
+  if (canonical === 'rg_novo') return 'RG (Novo)';
+  return 'RG (Antigo)';
 }
 
 // ─── Screenshot helper ────────────────────────────────────────────────────────
@@ -1391,32 +1410,22 @@ export async function executarAutomacao(customerId, options = {}) {
     // ─── 12. Tipo de Documento (MUI Dropdown) ───────────────────────────
     currentPhase = 'tipo-documento';
     console.log('\n📋 [9/16] Tipo de documento...');
-    
-    const tipoDoc = (data.documentType || 'RG').toUpperCase();
-    // Portal SÓ aceita "RG (Antigo)" e "RG (Novo)" — CNH não existe no dropdown!
-    // Mapeamento: CNH → RG (Novo), RG novo → RG (Novo), default → RG (Antigo)
-    let opcaoTexto;
-    if (tipoDoc.includes('CNH') || tipoDoc.includes('NOVO')) {
-      opcaoTexto = 'RG (Novo)';
-    } else {
-      opcaoTexto = 'RG (Antigo)';
-    }
-    console.log(`   📋 Tipo desejado: ${opcaoTexto} (original: ${data.documentType})`);
-    
+
+    // `data.documentType` JÁ vem normalizado em "cnh" | "rg_novo" | "rg_antigo"
+    const tipoDocCanonical = normalizeDocType(data.documentType);
+    const opcaoTexto = portalDocLabel(tipoDocCanonical); // "CNH" | "RG (Novo)" | "RG (Antigo)"
+    const isCNH = tipoDocCanonical === 'cnh';
+    console.log(`[FASE_DOC_TYPE] [INPUT] canonical="${tipoDocCanonical}" → portal="${opcaoTexto}" (CNH=${isCNH})`);
+
     let tipoDocOk = false;
-    
+
     // Portal usa MUI Select (dropdown customizado com div, não <select>)
     const muiTriggers = [
-      // MUI Select com classe específica
       '.MuiSelect-select',
-      // Combobox/listbox ARIA
       '[role="combobox"]',
       '[aria-haspopup="listbox"]',
-      // Select nativo escondido que pode estar presente
       'select',
-      // Label + div wrapper para tipo documento
       'div:has-text("Tipo documento"):not(:has(div:has-text("Tipo documento")))',
-      // Input com placeholder de tipo
       'input[placeholder*="tipo" i]',
     ];
 
@@ -1425,7 +1434,7 @@ export async function executarAutomacao(customerId, options = {}) {
       muiTriggers.unshift('[data-picked-combobox="tipo-documento"]');
       await comboByContext.evaluate((el) => el.setAttribute('data-picked-combobox', 'tipo-documento')).catch(() => {});
     }
-    
+
     for (const sel of muiTriggers) {
       if (tipoDocOk) break;
       try {
@@ -1434,51 +1443,51 @@ export async function executarAutomacao(customerId, options = {}) {
           // Checar se é um <select> nativo
           const tagName = await el.evaluate(e => e.tagName).catch(() => '');
           if (tagName === 'SELECT') {
-            // Select nativo: usar selectOption
             await el.selectOption({ label: opcaoTexto }).catch(async () => {
-              // Tentar por value parcial
               const options = await el.locator('option').allTextContents();
-              const match = options.find(o => o.includes('CNH') || o.includes(opcaoTexto));
-              if (match) {
-                await el.selectOption({ label: match });
-              }
+              const match = options.find(o => o.trim() === opcaoTexto || o.includes(opcaoTexto));
+              if (match) await el.selectOption({ label: match });
             });
-            console.log(`   ✅ Tipo documento (select nativo): ${opcaoTexto}`);
+            console.log(`[FASE_DOC_TYPE] [OK] select nativo → "${opcaoTexto}"`);
             tipoDocOk = true;
             break;
           }
-          
+
           // MUI Select: clicar para abrir dropdown
           await el.click({ timeout: 5000 });
           await delay(1000);
-          
-          // MUI abre um popover/menu com role="listbox" ou ul com li items
-          // Tentar múltiplos seletores para as opções
+
+          // MUI: a lista pode renderizar fora da árvore → usar seletores globais
+          // Importante: para CNH precisamos do match EXATO porque "CNH" pode aparecer
+          // em "RG (Novo) - CNH" em algum portal customizado. Tentamos exato primeiro.
           const optionSelectors = [
+            `li[role="option"]:text-is("${opcaoTexto}")`,
+            `li:text-is("${opcaoTexto}")`,
+            `[role="option"]:text-is("${opcaoTexto}")`,
             `li:has-text("${opcaoTexto}")`,
             `[role="option"]:has-text("${opcaoTexto}")`,
             `.MuiMenuItem-root:has-text("${opcaoTexto}")`,
             `ul li:has-text("${opcaoTexto}")`,
           ];
-          
+
           let optionClicked = false;
           for (const optSel of optionSelectors) {
             const opt = page.locator(optSel).first();
             if (await opt.count() > 0 && await opt.isVisible().catch(() => false)) {
               await opt.click({ timeout: 5000 });
-              console.log(`   ✅ Tipo documento: ${opcaoTexto}`);
+              console.log(`[FASE_DOC_TYPE] [OK] MUI option "${opcaoTexto}"`);
               tipoDocOk = true;
               optionClicked = true;
               break;
             }
           }
-          
+
           if (!optionClicked) {
-            // Tentar texto parcial
+            // Tentar texto parcial — APENAS se não for ambíguo
             const optAlt = page.getByText(opcaoTexto, { exact: false }).first();
             if (await optAlt.count() > 0 && await optAlt.isVisible().catch(() => false)) {
               await optAlt.click({ timeout: 5000 });
-              console.log(`   ✅ Tipo documento (alt): ${opcaoTexto}`);
+              console.log(`[FASE_DOC_TYPE] [OK-ALT] "${opcaoTexto}"`);
               tipoDocOk = true;
             } else {
               await page.keyboard.press('Escape').catch(() => {});
@@ -1487,32 +1496,50 @@ export async function executarAutomacao(customerId, options = {}) {
         }
       } catch (_) {}
     }
-    
+
     if (!tipoDocOk) {
-      console.warn('   ⚠️  Tipo documento não selecionado');
+      console.warn('[FASE_DOC_TYPE] [FAIL] Tipo documento não selecionado');
       await screenshot(page, customerId, '05b-tipo-doc-FALHOU');
-      // Dump HTML para diagnóstico
       try {
         const html = await page.content();
         const htmlPath = join(SCREENSHOTS_DIR, `${customerId}-05b-tipo-doc-FALHOU-${Date.now()}.html`);
         writeFileSync(htmlPath, html);
         console.log('   📄 HTML dump salvo para diagnóstico');
       } catch (_) {}
-      throw new Error(`Tipo de documento não pôde ser selecionado: ${opcaoTexto}`);
+      throw new Error(`[FASE_DOC_TYPE] Tipo de documento "${opcaoTexto}" não pôde ser selecionado`);
     }
-    await delay(1500);
 
-    // ─── 13. UPLOAD: Documentos pessoais (frente + verso) ────────────────
+    // Após selecionar o tipo, o portal mostra/esconde o campo verso.
+    // Validamos visualmente: para CNH NÃO deve haver input de verso visível;
+    // para RG, deve haver. Se não bater, screenshot e log mas seguimos
+    // (o portal pode renderizar tarde).
+    await delay(1500);
+    try {
+      const versoVisible = await page
+        .locator('#file_input_verso_documento_pessoal, input[name="verso_documento_pessoal"]')
+        .first()
+        .isVisible()
+        .catch(() => false);
+      if (isCNH && versoVisible) {
+        console.warn('[FASE_DOC_TYPE] [WARN] Selecionou CNH mas campo verso ainda visível — portal pode estar travado');
+      } else if (!isCNH && !versoVisible) {
+        console.warn('[FASE_DOC_TYPE] [WARN] Selecionou RG mas campo verso NÃO visível — aguardando portal renderizar...');
+        await delay(2000);
+      }
+      console.log(`[FASE_DOC_TYPE] [STATE] versoVisible=${versoVisible} (esperado=${!isCNH})`);
+    } catch (_) {}
+
+    // ─── 13. UPLOAD: Documentos pessoais (frente + verso quando RG) ────────
     currentPhase = 'upload-documentos';
     console.log('\n📋 [10/16] Upload documentos pessoais...');
     await delay(2000);
-    
+
     // Scroll para revelar seção de upload
     await page.evaluate(() => window.scrollBy(0, 400));
     await delay(2000);
-    
+
     let docsEnviados = 0;
-    
+
     // ESTRATÉGIA 0: IDs REAIS validados live no portal (2026-04-17)
     // Portal usa: #file_input_frente_documento_pessoal e #file_input_verso_documento_pessoal
     // accept="image/*" — NÃO ACEITA PDF! Conversor pdf→jpg deve estar ativo
@@ -1523,23 +1550,29 @@ export async function executarAutomacao(customerId, options = {}) {
         || await setFileByLabelPattern(/frente/i, docFrentePath, 'Documento FRENTE enviado (label)');
       if (frenteOk) {
         docsEnviados++;
+        console.log('[FASE_UPLOAD_DOC] [OK] frente enviada');
         await delay(2000);
+      } else {
+        console.warn('[FASE_UPLOAD_DOC] [WARN] frente não enviada via IDs/labels conhecidos');
       }
     }
 
-    // RG sempre tem verso. CNH no portal é mapeado para RG (Novo) → também precisa verso
-    if (docVersoPath) {
+    // VERSO: somente quando NÃO é CNH
+    if (!isCNH && docVersoPath) {
       const versoOk = await setFileDirectly(page.locator('#file_input_verso_documento_pessoal'), docVersoPath, 'Documento VERSO enviado (#file_input_verso_documento_pessoal)')
         || await setFileDirectly(page.locator('input[name="verso_documento_pessoal"]'), docVersoPath, 'Documento VERSO enviado (name)')
         || await setFileDirectly(page.locator('#file-verso'), docVersoPath, 'Documento VERSO enviado (legacy #file-verso)')
         || await setFileByLabelPattern(/verso/i, docVersoPath, 'Documento VERSO enviado (label)');
       if (versoOk) {
         docsEnviados++;
+        console.log('[FASE_UPLOAD_DOC] [OK] verso enviado');
         await delay(2000);
+      } else {
+        console.warn('[FASE_UPLOAD_DOC] [WARN] verso não enviado via IDs/labels conhecidos');
       }
+    } else if (isCNH) {
+      console.log('[FASE_UPLOAD_DOC] [SKIP] CNH — não precisa de verso');
     }
-
-    const isCNH = false; // Portal não tem CNH — sempre tratar como RG (precisa verso)
 
     // ESTRATÉGIA 1: input[type="file"] direto (portal antigo)
     const allFileInputsCount = await page.locator('input[type="file"]').count();
