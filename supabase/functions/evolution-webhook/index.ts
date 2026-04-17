@@ -807,9 +807,10 @@ Deno.serve(async (req) => {
               if (d.nome) updates.name = d.nome;
               if (d.cpf) updates.cpf = d.cpf.replace(/\D/g, "");
               if (d.rg) updates.rg = d.rg;
-              if (d.data_nascimento) updates.data_nascimento = d.data_nascimento;
-              if (d.nome_pai) updates.nome_pai = d.nome_pai;
-              if (d.nome_mae) updates.nome_mae = d.nome_mae;
+              // OCR retorna camelCase (dataNascimento, nomePai, nomeMae)
+              if (d.dataNascimento) updates.data_nascimento = d.dataNascimento;
+              if (d.nomePai) updates.nome_pai = d.nomePai;
+              if (d.nomeMae) updates.nome_mae = d.nomeMae;
             }
           } catch (e) {
             console.error("❌ OCR CNH falhou:", e);
