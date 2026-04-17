@@ -317,7 +317,33 @@ export async function ocrDocumento(imagemUrl: string | null, geminiApiKey: strin
       const rgDig = dados.rg.replace(/\D/g, "");
       dados.rg = normalizarRG(dados.rg) || (rgDig.length >= 7 && rgDig.length <= 12 ? rgDig : "");
     }
-    if (dados.dataNascimento) dados.dataNascimento = validarDataNascimento(dados.dataNascimento);
+    if (dados.dataNascimento) {
+      const validada = validarDataNascimento(dados.dataNascimento);
+      // Validação de plausibilidade extra: ano entre 1920 e (hoje - 17 anos)
+      if (validada) {
+        const m = validada.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        if (m) {
+          const year = parseInt(m[3], 10);
+          const maxYear = new Date().getFullYear() - 17;
+          if (year < 1920 || year > maxYear) {
+            console.warn(`⚠️ Data nasc fora do plausível (${year}): descartando`);
+            dados.dataNascimento = "";
+            dados.dataNascimentoConfianca = "baixa";
+          } else {
+            dados.dataNascimento = validada;
+          }
+        } else {
+          dados.dataNascimento = validada;
+        }
+      } else {
+        dados.dataNascimento = "";
+      }
+    }
+    // Para CNH, se confiança não veio do modelo, marcar como "media" por padrão
+    const isCNH = /cnh/i.test(tipo);
+    if (isCNH && dados.dataNascimento && !dados.dataNascimentoConfianca) {
+      dados.dataNascimentoConfianca = "media";
+    }
     if (dados.nome) dados.nome = validarNomeOCR(dados.nome);
 
     // Score de confiança: campos críticos do documento (nome, cpf, rg, nascimento)
