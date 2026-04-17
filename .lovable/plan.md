@@ -1,69 +1,140 @@
 
+Objetivo: fazer uma auditoria corretiva do fluxo inteiro para que o cadastro chegue ao fim com comportamento previsível, mesmo quando o cliente erra documento, envia mídia ruim ou o portal muda timing.
 
-## Diagnóstico real (logs + CNH)
+1. Diagnóstico principal encontrado no código atual
+- Há divergência grave entre os módulos:
+  - `worker-portal/playwright-automation.mjs` ainda assume que o portal não tem CNH, mapeia CNH para `RG (Novo)` e tenta enviar verso.
+  - `evolution-webhook/index.ts` já trata CNH como opção real e pula verso.
+  - A memória do portal também está inconsistente.
+- O fluxo de storage está duplicado:
+  - o webhook já tenta subir arquivos direto ao MinIO;
+  - no final ele chama `upload-documents-minio` de novo em paralelo;
+  - os logs mostram timeout de conexão com o host do MinIO, então o sistema pode “achar” que salvou sem ter salvo tudo.
+- Ainda existe risco de persistir dado pesado/desnecessário no banco (`document_front_base64`).
+- O worker e o bot não compartilham uma regra única de `document_type`, então CNH/RG varia por texto e casing.
+- O worker está mais frágil no trecho final do portal do que no início: tipo de documento, uploads, radios “Não”, upload da conta, submit e checagem final.
 
-**Problemas observados nos logs:**
-1. ⏳ Campo "WhatsApp" demorou 6 tentativas (limite) para aparecer → frágil
-2. ⚠️ "Confirme seu celular" não foi encontrado → fallback ativado, validação pode falhar silenciosamente
-3. 🎂 OCR da CNH **extraiu data de nascimento errada** → bot salvou no `customers.data_nascimento` → worker pode tentar sobrescrever a data correta que o portal auto-preenche via CPF
+2. Plano de auditoria e correção
+Fase A — Unificar a verdade do fluxo
+- Criar uma única convenção de tipo de documento:
+  - `cnh`
+  - `rg_novo`
+  - `rg_antigo`
+- Normalizar isso no webhook, validação e worker.
+- Atualizar a memória do portal para refletir o comportamento real atual.
+- Eliminar qualquer comentário/lógica antiga dizendo que CNH vira RG.
 
-**Causa raiz da data errada:**
-- CNH tem data em layout não-padrão; Gemini às vezes confunde "Data de Emissão" com "Data de Nascimento"
-- Bot salva o que veio do OCR sem validar contra o CPF
-- Worker confia no banco em vez de confiar no auto-fill do portal (que vem da Receita Federal)
+Fase B — Corrigir o gargalo mais crítico: documento
+- No `worker-portal/playwright-automation.mjs`:
+  - selecionar `CNH` quando for CNH;
+  - enviar só frente para CNH;
+  - enviar frente + verso apenas para RG;
+  - validar visualmente que o portal ocultou/mostrou o campo correto antes de continuar.
+- No `evolution-webhook/index.ts`:
+  - se o cliente escolher RG e mandar CNH, detectar incoerência e corrigir o `document_type` antes do worker;
+  - se OCR não tiver confiança suficiente, pedir correção sem travar o funil.
 
-## Plano: "Sempre dá certo" — fluxo blindado
+Fase C — Blindar data de nascimento
+- Manter a regra: portal via CPF é a fonte da verdade.
+- O worker nunca sobrescreve nome/data quando o portal auto-preenche.
+- O webhook só salva data da CNH quando a confiança for alta.
+- Se a data vier ambígua, marcar como pendente e deixar o portal preencher.
 
-### 1. Confiar no portal, não no OCR (data de nascimento)
-**Regra de ouro:** após digitar CPF, o portal consulta a Receita e auto-preenche **Nome + Data de Nascimento corretos**. O worker NUNCA deve sobrescrever esses campos. Hoje o código já não sobrescreve, mas vamos:
-- Adicionar `waitForAutoFill(['nome', 'nascimento'], timeout: 15s)` com polling do `value` real
-- Se auto-fill falhar (CPF inexistente na Receita), aí sim usar dados do banco como fallback
-- Logar no console: `📥 Portal auto-preencheu: Nome="..." DataNasc="..."` para auditoria
+Fase D — Resolver storage/MinIO de verdade
+- Escolher um único caminho oficial:
+  - preferencialmente upload imediato no webhook;
+  - `upload-documents-minio` vira reprocessamento/manual recovery, não caminho principal.
+- Remover a dependência operacional do segundo upload “fire-and-forget” no final do fluxo.
+- Parar de salvar base64 bruto no banco quando não for estritamente necessário.
+- Adicionar logs claros por arquivo:
+  - conta
+  - doc_frente
+  - doc_verso
+  - status final do upload
+- Se MinIO falhar, registrar status explícito no cliente em vez de silêncio.
 
-### 2. OCR de CNH com prompt reforçado anti-confusão
-Atualizar `buildPromptDocumento` para CNH com regras explícitas:
-- "Data de Nascimento" fica perto do nome, NÃO confundir com:
-  - "Data de Emissão" / "Data de Expedição"
-  - "Validade" / "Vencimento"  
-  - "1ª Habilitação"
-- Adicionar campo de validação: se data > hoje OU < 1920 → descartar
-- Pedir ao Gemini para devolver `dataNascimentoConfianca: "alta|media|baixa"` baseado em proximidade ao label "Nascimento"
+Fase E — Tornar o worker determinístico no portal
+- Refatorar o worker em etapas pequenas com validação obrigatória após cada uma:
+  - landing
+  - CPF
+  - auto-fill
+  - WhatsApp
+  - confirmação WhatsApp
+  - email
+  - confirmação email
+  - número
+  - complemento
+  - distribuidora
+  - instalação
+  - placas solares = não
+  - tipo documento
+  - upload documento
+  - procurador = não
+  - débito = não
+  - upload conta
+  - finalizar
+  - OTP/link final
+- Cada etapa deve:
+  - localizar
+  - preencher/clicar
+  - reler valor/estado
+  - retentar
+  - falhar com erro explícito e screenshot se não confirmar
 
-### 3. Bot WhatsApp: nunca confiar cegamente no OCR
-Quando OCR retorna data, **comparar com data esperada do CPF** (se houver consulta CPF→nascimento) ou pedir confirmação explícita ANTES de salvar:
-> "🎂 Detectei nascimento *15/03/1985*. Está correto? (1-Sim / 2-Não, digite a data correta)"
+Fase F — Corrigir regras de validação cruzada
+- `validateCustomerForPortal` e `getNextMissingStep` devem usar a mesma normalização de documento.
+- CNH nunca exige verso.
+- RG sempre exige verso.
+- O sistema não pode mandar o cliente para passo errado por diferença de texto (`CNH`, `cnh`, `RG (Novo)` etc.).
 
-Se cliente disser não, marcar `data_nascimento_verified=false` e o worker IGNORA esse campo (deixa o portal preencher via CPF).
+Fase G — Observabilidade real
+- Padronizar logs estruturados por fase no webhook e no worker.
+- Registrar:
+  - fase
+  - entrada esperada
+  - valor lido do portal
+  - número de tentativas
+  - motivo da falha
+  - URL/arquivo envolvido
+- Se necessário na implementação, criar uma tabela de logs operacionais do worker para auditoria histórica.
 
-### 4. Worker robusto — eliminar timeouts apertados
-Refatorar a fase WhatsApp/Confirmação:
-- Aumentar tentativas: 6 → 12 e delay 2s → 1.5s (total 18s)
-- Antes de procurar campo, aguardar `domcontentloaded` + observar mutações do DOM (esperar input aparecer via MutationObserver)
-- Se "Confirme seu celular" não aparecer após digitar WhatsApp, **disparar blur+wait** e re-procurar (pode renderizar só após blur)
-- Trocar fallback silencioso por **erro hard** se confirmação não preencher → garante que não avança quebrado
+3. Arquivos que precisam entrar na auditoria
+- `worker-portal/playwright-automation.mjs`
+- `worker-portal/server.mjs`
+- `supabase/functions/evolution-webhook/index.ts`
+- `supabase/functions/_shared/ocr.ts`
+- `supabase/functions/_shared/validators.ts`
+- `supabase/functions/upload-documents-minio/index.ts`
+- `supabase/functions/_shared/minio-upload.ts`
+- memória do portal em `mem://automation/portal-form-selectors`
 
-### 5. Validação pós-fill universal
-Após cada campo crítico (CPF, WhatsApp, Email, CEP), ler `value` real e comparar:
-- Se diverge → retentar até 3x
-- Se ainda diverge → screenshot + log + NÃO avançar
+4. Resultado esperado após a correção
+- O cliente pode errar RG/CNH e o sistema corrige sem travar.
+- CNH nunca pede verso.
+- Data de nascimento não vem errada do OCR.
+- Uploads ficam salvos de forma consistente.
+- O worker para exatamente na fase que falhou, com motivo claro.
+- O cadastro consegue ir até OTP/assinatura/finalização com muito menos retrabalho.
 
-### 6. Telemetria mínima (sem nova tabela ainda)
-Padronizar logs do worker em formato estruturado: `[FASE_X] [STATUS] mensagem` para facilitar debug nos logs do Easypanel sem precisar criar `worker_run_logs` agora.
+5. Ordem de implementação recomendada
+1. Unificar `document_type` em todo o sistema.
+2. Corrigir worker para CNH real no portal.
+3. Consolidar estratégia única de MinIO.
+4. Remover base64 persistido desnecessário.
+5. Refatorar validações por etapa no worker.
+6. Padronizar logs e auditoria.
+7. Rodar teste completo ponta a ponta com:
+   - RG correto
+   - CNH correta
+   - cliente escolhendo RG e enviando CNH
+   - falha simulada de MinIO
+   - CPF com auto-fill normal
 
-## Arquivos a alterar
+6. Detalhes técnicos importantes
+- Há evidência concreta de timeout de rede para o MinIO; isso precisa ser tratado como falha de infraestrutura e também de código, porque hoje o fluxo não torna isso visível o suficiente.
+- O worker atual ainda contém lógica antiga de CNH; isso provavelmente é uma das causas centrais de “nunca chega ao final”.
+- O uso de fallback de credencial no `worker-portal/server.mjs` merece revisão, porque mistura chave publishable com cenário que precisa ser confiável.
+- A memória do portal está desatualizada em pelo menos um ponto crítico, então a implementação deve começar alinhando código + memória + comportamento real.
 
-- `supabase/functions/_shared/ocr.ts` — prompt CNH reforçado + validação de data plausível
-- `supabase/functions/evolution-webhook/index.ts` — confirmação explícita da data antes de salvar
-- `worker-portal/playwright-automation.mjs`:
-  - `waitForAutoFill()` helper novo (polling de Nome+DataNasc após CPF)
-  - Fase WhatsApp: 12 tentativas + MutationObserver
-  - Confirme celular: hard-fail em vez de warn silencioso
-  - Validação pós-fill universal
-- `.lovable/memory/automation/portal-form-selectors.md` → v7 com regra "data nasc vem do portal via CPF, nunca sobrescrever"
-
-## Garantias
-- ✅ Data de nascimento sempre correta (vem do portal via CPF, não do OCR)
-- ✅ Cliente confirma data quando OCR é usado isoladamente
-- ✅ WhatsApp/Confirmação não falha silenciosamente
-- ✅ Logs estruturados mostram fase exata se algo falhar
-
+Resumo executivo
+Hoje o maior problema não é um bug isolado: é inconsistência entre webhook, worker, OCR, validação e storage. O plano correto é auditar e alinhar essas camadas primeiro, depois endurecer o worker com validação por etapa e uma única estratégia de upload. Isso é o que vai transformar o cadastro em um fluxo realmente estável.
