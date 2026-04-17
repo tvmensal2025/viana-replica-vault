@@ -820,11 +820,22 @@ Deno.serve(async (req) => {
           break;
         }
 
-        updates.document_front_url = fileUrl || "evolution-media:pending";
-        
-        // Salvar base64 da frente para usar depois no OCR conjunto
+        // 📦 Tentar upload imediato para MinIO (frente do documento)
         if (fileBase64) {
+          const mime = imageMessage?.mimetype || documentMessage?.mimetype || "application/octet-stream";
+          const minioUrl = await uploadMediaToMinio({
+            fileBase64,
+            mimeType: mime,
+            consultantFolder: consultorId,
+            customerName: customer.name || "cliente",
+            customerBirth: customer.data_nascimento,
+            kind: "doc_frente",
+          });
+          updates.document_front_url = minioUrl || (fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending");
+          // Salvar base64 da frente para usar depois no OCR conjunto
           updates.document_front_base64 = fileBase64;
+        } else {
+          updates.document_front_url = fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending";
         }
 
         // CNH só tem frente — pular verso
