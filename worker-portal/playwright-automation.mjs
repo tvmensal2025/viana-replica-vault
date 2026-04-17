@@ -540,8 +540,6 @@ function formatarDados(cliente) {
     possuiProcurador: cliente.possui_procurador || false,
     pdfProtegido: cliente.conta_pdf_protegida || false,
     debitosAberto: cliente.debitos_aberto || false,
-    distribuidoraLogin: cliente.distribuidora_login || '',
-    distribuidoraSenha: cliente.distribuidora_senha || '',
   };
 }
 
@@ -889,36 +887,69 @@ export async function executarAutomacao(customerId, options = {}) {
     }
     
     // ─── 7. WhatsApp ─────────────────────────────────────────────────────
+    // CONFIRMADO via mapeamento ao vivo (17/04/2026):
+    // Após CPF auto-preencher Nome+DataNasc, aparecem 2 campos:
+    //   - "Número do seu WhatsApp" (placeholder)
+    //   - "Confirme seu celular"   (placeholder)
+    // AMBOS são obrigatórios e devem receber o MESMO valor.
     currentPhase = 'fase4-whatsapp';
-    console.log('\n📋 [4/16] WhatsApp...');
+    console.log('\n📋 [4/16] WhatsApp + Confirmação...');
     
-    // Portal usa placeholder="Número do seu WhatsApp"
+    // Aguardar campo WhatsApp aparecer (renderiza após auto-fill do CPF)
     let phoneField = byPHPartial('WhatsApp');
-    try {
-      await phoneField.waitFor({ state: 'visible', timeout: 15000 });
-    } catch (_) {
-      await page.evaluate(() => window.scrollBy(0, 300));
-      await delay(1500);
+    let phoneVisible = false;
+    for (let i = 0; i < 6; i++) {
+      try {
+        await phoneField.waitFor({ state: 'visible', timeout: 5000 });
+        phoneVisible = true;
+        break;
+      } catch (_) {
+        console.log(`   ⏳ Aguardando campo WhatsApp aparecer (tentativa ${i + 1}/6)...`);
+        await page.evaluate(() => window.scrollBy(0, 200));
+        await delay(2000);
+      }
     }
     
-    if (await phoneField.count() > 0 && await phoneField.isVisible().catch(() => false)) {
+    if (phoneVisible && await phoneField.count() > 0) {
       await fillRequiredField(phoneField, data.whatsapp, 'WhatsApp', 'digits');
     } else {
       // Fallback name-based
-      const phoneFallback = page.locator('input[name="phone"]').first();
-      if (await phoneFallback.count() > 0) {
+      const phoneFallback = page.locator('input[name="phone"], input[name*="whats" i], input[type="tel"]').first();
+      if (await phoneFallback.count() > 0 && await phoneFallback.isVisible().catch(() => false)) {
         await fillRequiredField(phoneFallback, data.whatsapp, 'WhatsApp', 'digits');
       } else {
-        throw new Error('Campo WhatsApp não encontrado no portal');
+        await screenshot(page, customerId, 'ERROR-whatsapp-nao-encontrado');
+        throw new Error('Campo WhatsApp não encontrado no portal (após 6 tentativas)');
       }
     }
-    await delay(500);
+    await delay(800);
     
-    // Confirmar celular
+    // Confirmar celular - OBRIGATÓRIO
     let confirmPhone = byPHPartial('Confirme seu celular');
-    if (await confirmPhone.count() === 0) confirmPhone = byPHPartial('phoneConfirm');
-    if (await confirmPhone.count() > 0 && await confirmPhone.isVisible().catch(() => false)) {
+    let confirmPhoneFound = false;
+    for (let i = 0; i < 4; i++) {
+      if (await confirmPhone.count() > 0 && await confirmPhone.isVisible().catch(() => false)) {
+        confirmPhoneFound = true;
+        break;
+      }
+      console.log(`   ⏳ Aguardando "Confirme seu celular" (tentativa ${i + 1}/4)...`);
+      await page.evaluate(() => window.scrollBy(0, 200));
+      await delay(1500);
+      confirmPhone = byPHPartial('Confirme seu celular');
+    }
+    
+    if (confirmPhoneFound) {
       await fillRequiredField(confirmPhone, data.whatsapp, 'Confirmação WhatsApp', 'digits');
+    } else {
+      // Fallback: 2º input tel/whatsapp na página
+      const allPhoneInputs = page.locator('input[type="tel"], input[placeholder*="celular" i], input[placeholder*="WhatsApp" i]');
+      const cnt = await allPhoneInputs.count();
+      if (cnt >= 2) {
+        await fillRequiredField(allPhoneInputs.nth(1), data.whatsapp, 'Confirmação WhatsApp (fallback)', 'digits');
+      } else {
+        console.warn('   ⚠️  Campo "Confirme seu celular" não encontrado - pode causar erro de validação');
+        await screenshot(page, customerId, 'WARN-confirme-celular-nao-encontrado');
+      }
     }
     await delay(2500);
     
@@ -1147,44 +1178,7 @@ export async function executarAutomacao(customerId, options = {}) {
     await delay(2500);
     await screenshot(page, customerId, '05-formulario-preenchido');
     
-    // ─── 11.1 Login/Senha Distribuidora (CONDICIONAL — alguns estados/dist) ───
-    // Ex: SP/CPFL Santa Cruz EXIGE login+senha do site da distribuidora
-    currentPhase = 'fase8b-credenciais-distribuidora';
-    try {
-      const loginDistField = page.locator('input[placeholder*="Login da distribuidora" i]').first();
-      const senhaDistField = page.locator('input[placeholder*="Senha da distribuidora" i]').first();
-      const hasLoginDist = await loginDistField.count() > 0 && await loginDistField.isVisible().catch(() => false);
-      const hasSenhaDist = await senhaDistField.count() > 0 && await senhaDistField.isVisible().catch(() => false);
-      
-      if (hasLoginDist || hasSenhaDist) {
-        console.log('   🔐 Portal exige credenciais da distribuidora (login/senha)');
-        const loginVal = data.distribuidoraLogin || cliente.distribuidora_login || '';
-        const senhaVal = data.distribuidoraSenha || cliente.distribuidora_senha || '';
-        
-        if (!loginVal || !senhaVal) {
-          // Marcar lead como aguardando credenciais e abortar
-          console.warn('   ⚠️  Cliente NÃO possui credenciais da distribuidora — abortando');
-          await supabase.from('customers').update({
-            status: 'awaiting_distributor_credentials',
-            error_message: 'Distribuidora exige login/senha do site oficial. Solicitar ao cliente.'
-          }).eq('id', customerId);
-          await screenshot(page, customerId, '05a-credenciais-FALTANDO');
-          throw new Error('AWAITING_DISTRIBUTOR_CREDENTIALS');
-        }
-        
-        if (hasLoginDist) await reactFill(page, 'input[placeholder*="Login da distribuidora" i]', loginVal);
-        if (hasSenhaDist) await reactFill(page, 'input[placeholder*="Senha da distribuidora" i]', senhaVal);
-        console.log('   ✅ Credenciais distribuidora preenchidas');
-        await delay(1500);
-      } else {
-        console.log('   ℹ️  Distribuidora não requer credenciais');
-      }
-    } catch (e) {
-      if (e.message === 'AWAITING_DISTRIBUTOR_CREDENTIALS') throw e;
-      console.warn(`   ⚠️  Erro ao verificar credenciais distribuidora: ${e.message}`);
-    }
-    
-    // ─── 11.2 Possui placas solares instaladas? (default: Não) ────────────
+    // ─── 11.1 Possui placas solares instaladas? (default: Não) ────────────
     currentPhase = 'fase8c-placas-solares';
     try {
       const placasLabel = page.getByText(/Possui placas solares instaladas/i).first();
