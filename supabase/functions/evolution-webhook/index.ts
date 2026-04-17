@@ -9,7 +9,7 @@ import { uploadBytesToMinio, base64ToBytes } from "../_shared/minio-upload.ts";
 
 /**
  * Sobe uma mídia (base64 + mime) imediatamente para o MinIO e retorna a URL pública.
- * Se MinIO falhar, retorna null e logamos — o caller usa fallback (ex: data URL).
+ * Se MinIO falhar, retorna null — o caller usa fallback ("evolution-media:pending").
  * Isso impede que data URLs gigantes (1MB+) sejam salvos no banco.
  */
 async function uploadMediaToMinio(opts: {
@@ -17,7 +17,26 @@ async function uploadMediaToMinio(opts: {
   mimeType: string;
   consultantFolder: string;
   customerName: string;
-  customerBirth
+  customerBirth?: string | null;
+  kind: "conta" | "doc_frente" | "doc_verso";
+}): Promise<string | null> {
+  try {
+    const bytes = base64ToBytes(opts.fileBase64);
+    const result = await uploadBytesToMinio({
+      bytes,
+      contentType: opts.mimeType || "application/octet-stream",
+      consultantFolder: opts.consultantFolder,
+      customerName: opts.customerName,
+      customerBirth: opts.customerBirth,
+      kind: opts.kind,
+    });
+    console.log(`📦✅ MinIO upload OK [${opts.kind}]: ${result.url}`);
+    return result.url;
+  } catch (err: any) {
+    console.error(`📦❌ MinIO upload falhou [${opts.kind}]:`, err?.message || err);
+    return null;
+  }
+}
 
 // Threshold mínimo de confiança para aceitar dados extraídos pelo OCR.
 // Abaixo disso, pedimos reenvio da imagem.
