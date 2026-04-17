@@ -681,6 +681,93 @@ export async function executarAutomacao(customerId, options = {}) {
       }
       return false;
     };
+    const normalizeText = (value) => String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+    const normalizeDigits = (value) => String(value || '').replace(/\D+/g, '');
+    const readValue = async (locator) => locator.inputValue().catch(async () => locator.evaluate((el) => el.value || '').catch(() => ''));
+    const matchesExpected = (actual, expected, mode = 'text') => {
+      if (mode === 'digits') {
+        const actualDigits = normalizeDigits(actual);
+        const expectedDigits = normalizeDigits(expected);
+        return Boolean(actualDigits) && Boolean(expectedDigits) && (actualDigits === expectedDigits || actualDigits.endsWith(expectedDigits) || expectedDigits.endsWith(actualDigits));
+      }
+      return normalizeText(actual) === normalizeText(expected);
+    };
+    const scanVisibleInputs = async (predicate) => {
+      const fields = await page.locator('input, textarea, select').all();
+      for (const field of fields) {
+        const visible = await field.isVisible().catch(() => false);
+        if (!visible) continue;
+        const meta = await field.evaluate((el) => {
+          const root = el.closest('.MuiFormControl-root,[class*="MuiFormControl"],label') || el.parentElement?.parentElement?.parentElement || el.parentElement?.parentElement || el.parentElement;
+          return {
+            placeholder: el.getAttribute('placeholder') || '',
+            name: el.getAttribute('name') || '',
+            id: el.getAttribute('id') || '',
+            ariaLabel: el.getAttribute('aria-label') || '',
+            type: el.getAttribute('type') || '',
+            context: root?.textContent || '',
+          };
+        }).catch(() => null);
+        if (meta && predicate(meta)) return field;
+      }
+      return null;
+    };
+    const fillRequiredField = async (locator, value, label, mode = 'text') => {
+      if (!locator || await locator.count() === 0 || !await locator.isVisible().catch(() => false)) {
+        throw new Error(`Campo obrigatório não encontrado no portal: ${label}`);
+      }
+      const target = locator.first();
+      await target.scrollIntoViewIfNeeded().catch(() => {});
+      const stringValue = String(value ?? '');
+      const filled = await reactFill(page, target, stringValue);
+      if (!filled) {
+        await target.click();
+        await target.fill('');
+        await target.type(stringValue, { delay: 80 });
+      }
+      await delay(300);
+      const current = await readValue(target);
+      if (!matchesExpected(current, stringValue, mode)) {
+        throw new Error(`Falha ao preencher ${label}. Valor atual no portal: "${current}"`);
+      }
+      console.log(`   ✅ ${label}: ${stringValue}`);
+      return target;
+    };
+    const setFileDirectly = async (locator, filePath, label) => {
+      if (!filePath || !locator || await locator.count() === 0) return false;
+      await locator.first().setInputFiles(filePath);
+      console.log(`   ✅ ${label}`);
+      return true;
+    };
+    const setFileByLabelPattern = async (pattern, filePath, label) => {
+      if (!filePath) return false;
+      const labels = await page.locator('label').all();
+      for (const item of labels) {
+        const text = await item.textContent().catch(() => '');
+        if (!pattern.test(text || '')) continue;
+        const inputId = await item.getAttribute('for').catch(() => null);
+        if (!inputId) continue;
+        const input = page.locator(`#${inputId}`).first();
+        if (await input.count() === 0) continue;
+        await input.setInputFiles(filePath);
+        console.log(`   ✅ ${label}`);
+        return true;
+      }
+      return false;
+    };
+    const findComboboxByContext = async (pattern) => {
+      const combos = await page.locator('[role="combobox"], .MuiSelect-select, select').all();
+      for (const combo of combos) {
+        const visible = await combo.isVisible().catch(() => false);
+        if (!visible) continue;
+        const context = await combo.evaluate((el) => {
+          const root = el.closest('.MuiFormControl-root,[class*="MuiFormControl"]') || el.parentElement?.parentElement?.parentElement || el.parentElement?.parentElement || el.parentElement;
+          return root?.textContent || '';
+        }).catch(() => '');
+        if (pattern.test(context)) return combo;
+      }
+      return null;
+    };
 
     // ─── 4. FASE 1: CEP + Valor ──────────────────────────────────────────
     currentPhase = 'fase1-cep';
@@ -788,17 +875,14 @@ export async function executarAutomacao(customerId, options = {}) {
     }
     
     if (await phoneField.count() > 0 && await phoneField.isVisible().catch(() => false)) {
-      await phoneField.click();
-      await phoneField.type(data.whatsapp, { delay: 100 });
-      console.log(`   ✅ WhatsApp: ${data.whatsapp}`);
+      await fillRequiredField(phoneField, data.whatsapp, 'WhatsApp', 'digits');
     } else {
       // Fallback name-based
       const phoneFallback = page.locator('input[name="phone"]').first();
       if (await phoneFallback.count() > 0) {
-        await phoneFallback.type(data.whatsapp, { delay: 100 });
-        console.log(`   ✅ WhatsApp (fallback): ${data.whatsapp}`);
+        await fillRequiredField(phoneFallback, data.whatsapp, 'WhatsApp', 'digits');
       } else {
-        console.warn('   ⚠️  Campo WhatsApp não encontrado');
+        throw new Error('Campo WhatsApp não encontrado no portal');
       }
     }
     await delay(500);
@@ -807,9 +891,7 @@ export async function executarAutomacao(customerId, options = {}) {
     let confirmPhone = byPHPartial('Confirme seu celular');
     if (await confirmPhone.count() === 0) confirmPhone = byPHPartial('phoneConfirm');
     if (await confirmPhone.count() > 0 && await confirmPhone.isVisible().catch(() => false)) {
-      await confirmPhone.click();
-      await confirmPhone.type(data.whatsapp, { delay: 100 });
-      console.log('   ✅ Confirmar WhatsApp');
+      await fillRequiredField(confirmPhone, data.whatsapp, 'Confirmação WhatsApp', 'digits');
     }
     await delay(2500);
     
@@ -820,14 +902,13 @@ export async function executarAutomacao(customerId, options = {}) {
     // Portal usa placeholder="E-mail"
     const emailField = byPH('E-mail');
     if (await emailField.count() > 0) {
-      await emailField.click();
-      await emailField.type(data.email, { delay: 50 });
-      console.log(`   ✅ Email: ${data.email}`);
+      await fillRequiredField(emailField, data.email, 'Email');
     } else {
       const emailFallback = page.locator('input[name="email"], input[placeholder*="email" i]').first();
       if (await emailFallback.count() > 0) {
-        await reactFill(page, emailFallback, data.email);
-        console.log(`   ✅ Email (fallback): ${data.email}`);
+        await fillRequiredField(emailFallback, data.email, 'Email');
+      } else {
+        throw new Error('Campo Email não encontrado no portal');
       }
     }
     await delay(500);
@@ -836,9 +917,9 @@ export async function executarAutomacao(customerId, options = {}) {
     let confirmEmail = byPH('Confirme seu E-mail');
     if (await confirmEmail.count() === 0) confirmEmail = byPHPartial('Confirme seu E-mail');
     if (await confirmEmail.count() > 0) {
-      await confirmEmail.click();
-      await confirmEmail.type(data.email, { delay: 50 });
-      console.log('   ✅ Confirmar email');
+      await fillRequiredField(confirmEmail, data.email, 'Confirmação Email');
+    } else {
+      throw new Error('Campo de confirmação de email não encontrado no portal');
     }
     await delay(2500);
     
@@ -897,17 +978,11 @@ export async function executarAutomacao(customerId, options = {}) {
     
     // Tentativa 4: buscar todos inputs visíveis e filtrar
     if (!numField) {
-      const allInputsForNum = await page.locator('input:visible').all();
-      for (const inp of allInputsForNum) {
-        const ph = (await inp.getAttribute('placeholder').catch(() => '') || '').trim();
-        const name = (await inp.getAttribute('name').catch(() => '') || '').trim();
-        const ariaLabel = (await inp.getAttribute('aria-label').catch(() => '') || '').trim();
-        if (ph === 'Número' || name === 'number' || name === 'addressNumber' || ariaLabel === 'Número') {
-          numField = inp;
-          console.log('   📍 Campo Número encontrado via scan de inputs');
-          break;
-        }
-      }
+      numField = await scanVisibleInputs((meta) => {
+        const haystack = `${meta.placeholder} ${meta.name} ${meta.ariaLabel} ${meta.context}`;
+        return /número/i.test(haystack) && !/instalação|whatsapp|celular/i.test(haystack);
+      });
+      if (numField) console.log('   📍 Campo Número encontrado via scan contextual');
     }
     
     // Tentativa 5: esperar mais e tentar de novo
@@ -930,12 +1005,9 @@ export async function executarAutomacao(customerId, options = {}) {
     }
     
     if (numField) {
-      await numField.click();
-      await numField.fill('');
-      await numField.type(data.numeroEndereco || '100', { delay: 80 });
-      console.log(`   ✅ Número endereço: ${data.numeroEndereco || '100'}`);
+      await fillRequiredField(numField, data.numeroEndereco || '100', 'Número endereço');
     } else {
-      console.warn('   ⚠️  Campo Número endereço não encontrado');
+      throw new Error('Campo Número endereço não encontrado no portal');
     }
     
     // Complemento
@@ -1007,6 +1079,14 @@ export async function executarAutomacao(customerId, options = {}) {
           instField = instName;
         }
       }
+
+      if (!instField) {
+        instField = await scanVisibleInputs((meta) => {
+          const haystack = `${meta.placeholder} ${meta.name} ${meta.ariaLabel} ${meta.context}`;
+          return /instalação|código/i.test(haystack) && !/whatsapp|celular/i.test(haystack);
+        });
+        if (instField) console.log('   📍 Campo instalação encontrado via scan contextual');
+      }
       
       // Aguardar visibilidade com timeout
       if (!instField) {
@@ -1021,12 +1101,9 @@ export async function executarAutomacao(customerId, options = {}) {
       }
       
       if (instField) {
-        await instField.click();
-        await instField.fill('');
-        await instField.type(data.numeroInstalacao, { delay: 80 });
-        console.log(`   ✅ Instalação: ${data.numeroInstalacao}`);
+        await fillRequiredField(instField, data.numeroInstalacao, 'Número da instalação', 'digits');
       } else {
-        console.warn('   ⚠️  Campo instalação não encontrado');
+        throw new Error('Campo número da instalação não encontrado no portal');
       }
       await delay(1500);
     }
@@ -1075,6 +1152,12 @@ export async function executarAutomacao(customerId, options = {}) {
       // Input com placeholder de tipo
       'input[placeholder*="tipo" i]',
     ];
+
+    const comboByContext = await findComboboxByContext(/tipo\s*documento/i);
+    if (comboByContext) {
+      muiTriggers.unshift('[data-picked-combobox="tipo-documento"]');
+      await comboByContext.evaluate((el) => el.setAttribute('data-picked-combobox', 'tipo-documento')).catch(() => {});
+    }
     
     for (const sel of muiTriggers) {
       if (tipoDocOk) break;
@@ -1139,7 +1222,7 @@ export async function executarAutomacao(customerId, options = {}) {
     }
     
     if (!tipoDocOk) {
-      console.warn('   ⚠️  Tipo documento não selecionado - usando default do portal');
+      console.warn('   ⚠️  Tipo documento não selecionado');
       await screenshot(page, customerId, '05b-tipo-doc-FALHOU');
       // Dump HTML para diagnóstico
       try {
@@ -1148,6 +1231,7 @@ export async function executarAutomacao(customerId, options = {}) {
         writeFileSync(htmlPath, html);
         console.log('   📄 HTML dump salvo para diagnóstico');
       } catch (_) {}
+      throw new Error(`Tipo de documento não pôde ser selecionado: ${opcaoTexto}`);
     }
     await delay(1500);
 
@@ -1162,11 +1246,33 @@ export async function executarAutomacao(customerId, options = {}) {
     
     let docsEnviados = 0;
     
+    // ESTRATÉGIA 0: inputs hidden conhecidos do portal atual
+    if (docFrentePath) {
+      const frenteOk = await setFileDirectly(page.locator('#file-frente'), docFrentePath, 'Documento FRENTE enviado (#file-frente)')
+        || await setFileByLabelPattern(/frente/i, docFrentePath, 'Documento FRENTE enviado (label)');
+      if (frenteOk) {
+        docsEnviados++;
+        await delay(2000);
+      }
+    }
+
+    const isCNH = (data.documentType || '').toUpperCase().includes('CNH');
+    if (!isCNH && docVersoPath) {
+      const versoOk = await setFileDirectly(page.locator('#file-verso'), docVersoPath, 'Documento VERSO enviado (#file-verso)')
+        || await setFileByLabelPattern(/verso/i, docVersoPath, 'Documento VERSO enviado (label)');
+      if (versoOk) {
+        docsEnviados++;
+        await delay(2000);
+      }
+    } else if (isCNH) {
+      console.log('   📋 Documento é CNH — verso não necessário ✅');
+    }
+
     // ESTRATÉGIA 1: input[type="file"] direto (portal antigo)
     const allFileInputsCount = await page.locator('input[type="file"]').count();
     console.log(`   📊 ${allFileInputsCount} input(s) file encontrado(s)`);
     
-    if (allFileInputsCount >= 1 && docFrentePath) {
+    if (docsEnviados === 0 && allFileInputsCount >= 1 && docFrentePath) {
       try {
         await page.locator('input[type="file"]').first().setInputFiles(docFrentePath);
         console.log('   ✅ Documento FRENTE enviado (input file)');
@@ -1175,7 +1281,7 @@ export async function executarAutomacao(customerId, options = {}) {
       } catch (e) {
         console.warn(`   ⚠️  Doc frente (input): ${e.message}`);
       }
-      if (allFileInputsCount >= 2 && docVersoPath) {
+      if (!isCNH && allFileInputsCount >= 2 && docVersoPath) {
         try {
           await page.locator('input[type="file"]').nth(1).setInputFiles(docVersoPath);
           console.log('   ✅ Documento VERSO enviado (input file)');
@@ -1222,7 +1328,6 @@ export async function executarAutomacao(customerId, options = {}) {
       }
       
       // Upload VERSO — SOMENTE se documento NÃO é CNH (CNH só tem Frente)
-      const isCNH = (data.documentType || '').toUpperCase().includes('CNH');
       if (!isCNH && docVersoPath && docsEnviados > 0) {
         console.log('   📋 Documento é RG — enviando verso...');
         await delay(1500);
@@ -1283,6 +1388,9 @@ export async function executarAutomacao(customerId, options = {}) {
     }
     
     console.log(`   📊 Total docs enviados: ${docsEnviados}`);
+    if (docsEnviados === 0) {
+      throw new Error('Nenhum documento pessoal foi enviado para o portal');
+    }
     await screenshot(page, customerId, '06-documentos-enviados');
     await delay(2000);
     
@@ -1366,12 +1474,16 @@ export async function executarAutomacao(customerId, options = {}) {
     
     let contaEnviada = false;
     
+    // ESTRATÉGIA 0: inputs/labels conhecidos da conta
+    contaEnviada = await setFileDirectly(page.locator('#file-conta, #file-fatura, #file-bill'), contaPath, 'Conta enviada (input conhecido)')
+      || await setFileByLabelPattern(/conta|fatura/i, contaPath, 'Conta enviada (label)');
+
     // ESTRATÉGIA 1: input[type="file"] disponível
     const allFileInputs = await page.locator('input[type="file"]').all();
     console.log(`   📊 Total inputs file agora: ${allFileInputs.length}`);
     
     // A conta é geralmente o último ou 3º input file
-    if (allFileInputs.length >= 3) {
+    if (!contaEnviada && allFileInputs.length >= 3) {
       try {
         await allFileInputs[2].setInputFiles(contaPath);
         console.log('   ✅ Conta enviada (3º input)');
@@ -1422,7 +1534,10 @@ export async function executarAutomacao(customerId, options = {}) {
       }
     }
     
-    if (!contaEnviada) console.warn('   ⚠️  Conta de energia NÃO enviada');
+    if (!contaEnviada) {
+      console.warn('   ⚠️  Conta de energia NÃO enviada');
+      throw new Error('Conta de energia não foi enviada para o portal');
+    }
     await screenshot(page, customerId, '08-conta-enviada');
     await delay(2500);
 
@@ -1454,8 +1569,12 @@ export async function executarAutomacao(customerId, options = {}) {
       try {
         const type = await inp.getAttribute('type') || 'text';
         if (type === 'file' || type === 'radio' || type === 'checkbox' || type === 'hidden') continue;
+        const disabled = await inp.isDisabled().catch(() => false);
+        const readonly = await inp.getAttribute('readonly').catch(() => null);
+        if (disabled || readonly !== null) continue;
         const val = await inp.inputValue().catch(() => '');
         const ph = await inp.getAttribute('placeholder') || '';
+        if (/complemento/i.test(ph)) continue;
         if (!val || val.trim() === '') {
           console.log(`   ❌ Campo vazio: "${ph}"`);
           camposVazios++;
@@ -1465,6 +1584,7 @@ export async function executarAutomacao(customerId, options = {}) {
     
     if (camposVazios > 0) {
       console.log(`   ⚠️  ${camposVazios} campo(s) vazio(s)`);
+      throw new Error(`Ainda há ${camposVazios} campo(s) obrigatório(s) vazio(s) no portal`);
     } else {
       console.log('   ✅ Todos os campos preenchidos');
     }
@@ -1505,6 +1625,7 @@ export async function executarAutomacao(customerId, options = {}) {
       
       if (!finalizarClicado) {
         console.warn('   ⚠️  Nenhum botão de submit encontrado');
+        throw new Error('Botão Finalizar/Enviar não encontrado no portal');
       }
     }
 
@@ -1616,12 +1737,11 @@ export async function executarAutomacao(customerId, options = {}) {
         // Enviar link via WhatsApp
         await sendFacialLinkToCustomer(customerId, facialLink);
         await atualizarStatus(customerId, 'awaiting_signature');
-      } else if (/assinatura|contrato|sucesso|cadastro realizado/i.test(finalPageText)) {
+      } else if (/assinatura|contrato|sucesso|cadastro realizado|cadastro finalizado/i.test(finalPageText)) {
         console.log('   🎉 Cadastro finalizado com sucesso (sem link facial detectado)');
         await atualizarStatus(customerId, 'portal_submitted');
       } else {
-        console.log('   ⚠️  Nenhum link facial encontrado - marcando como enviado');
-        await atualizarStatus(customerId, 'portal_submitted');
+        throw new Error('Portal não confirmou envio do formulário após clicar em Finalizar');
       }
       
       const pageUrl = page.url();
@@ -1654,13 +1774,7 @@ export async function executarAutomacao(customerId, options = {}) {
       return { success: true, duration: parseFloat(duration), manualSubmit: true };
     }
 
-    // Finalizar não encontrado: marcar enviado e deixar página aberta
-    console.warn('   ⚠️  Finalizar não encontrado - deixando página aberta');
-    await atualizarStatus(customerId, 'portal_submitted');
-    activeBrowser = null;
-    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-    console.log(`\n✅ Automação encerrada. Tempo: ${duration}s`);
-    return { success: true, duration: parseFloat(duration), manualSubmit: false };
+    throw new Error('Fluxo terminou sem submit real do portal');
 
   } catch (error) {
     console.error(`\n❌ ERRO na automação (fase: ${currentPhase}):`, error.message);

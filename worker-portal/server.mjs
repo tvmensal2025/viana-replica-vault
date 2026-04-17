@@ -133,10 +133,32 @@ async function processNextInQueue() {
 
     // SOLUÇÃO 2: Usa import estático (top-level) - UMA instância do módulo
     const result = await executarAutomacao(currentJob.customer_id, currentJob.options);
+    if (!result?.success) {
+      throw new Error(result?.error || 'Automação terminou sem sucesso explícito');
+    }
+
+    const supabase = getSupabase();
+    let finalStatus = null;
+    if (supabase) {
+      const { data: customerStatus } = await supabase
+        .from('customers')
+        .select('status, error_message')
+        .eq('id', currentJob.customer_id)
+        .single();
+      finalStatus = customerStatus?.status || null;
+      if (!finalStatus || ['portal_submitting', 'automation_failed'].includes(finalStatus)) {
+        throw new Error(`Automação não concluiu o lead no banco. Status final: ${finalStatus || 'desconhecido'}${customerStatus?.error_message ? ` | ${customerStatus.error_message}` : ''}`);
+      }
+    }
     
     processedCount++;
     retryTracker.delete(currentJob.customer_id); // Sucesso: limpar contador
-    pushActivity('job_finished', currentJob.customer_id, 'Finalizar clicado - página iGreen deixada aberta');
+    const successMessage = finalStatus === 'awaiting_otp'
+      ? 'OTP detectado e aguardando confirmação'
+      : finalStatus === 'awaiting_signature'
+        ? 'Cadastro enviado e link de assinatura gerado'
+        : 'Cadastro enviado com sucesso ao portal';
+    pushActivity('job_finished', currentJob.customer_id, successMessage);
     console.log(`✅ FILA: Lead ${currentJob.customer_id} processado com sucesso! (Total: ${processedCount})`);
     if (result?.pageUrl) {
       await sendLinkToCustomer(currentJob.customer_id, result.pageUrl);
