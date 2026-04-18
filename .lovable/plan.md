@@ -1,88 +1,110 @@
 
 
-## Diagnóstico real dos logs
+## Análise profunda do bug "WhatsApp não digita"
 
-Os logs mostram **3 problemas críticos** que fazem o cadastro nunca chegar ao final:
+### Sintoma nos logs
+```
+⏳ MutationObserver não detectou — usando polling clássico
+⏳ Aguardando campo WhatsApp aparecer (tentativa 1/12)...
+... (12 tentativas = 30s perdidos)
+✅ [reactFill MASK] (locator): "(11) 98900-0650"
+⏳ Aguardando "Confirme seu celular" (tentativa 1/8)
+... (8 tentativas = 40s perdidos)
+❌ Hard fail
+```
 
-### 1. MinIO está OFFLINE (rede inacessível)
-```
-📦❌ MinIO upload falhou [doc_frente]: Connection timed out
-   ⚠️  RG frente: fetch failed
-   ⚠️  Conta de luz: fetch failed
-```
-- O host `igreen-minio.b099mi.easypanel.host` está com timeout TCP de fora do Easypanel
-- Resultado: webhook salva `document_front_url = "evolution-media:pending"` (placeholder, não URL real)
-- Worker tenta baixar `"evolution-media:pending"` → `fetch failed` → usa `fixtures/documento.jpg` (genérico!)
-- **O cadastro fica usando documento fake** mesmo com OCR perfeito
+O campo **APARECE e é preenchido** (linha "✅ reactFill MASK"), mas:
+1. Demora 30s pra detectar (polling de 2.5s × 12)
+2. Depois espera campo "Confirme celular" que **não existe mais** no portal
+3. A v9 prometeu soft-warn mas o código no VPS ainda é v8
 
-### 2. Worker NÃO recebe Base64 do banco
-- Webhook descontinuou `document_front_base64` (mudança da v8)
-- Mas worker ainda tenta `fetch(document_front_url)` que é `"evolution-media:pending"`
-- Não há fallback para reconstruir via Evolution API
+### Causas raiz (análise por campo)
 
-### 3. Campo "Confirme seu celular" travando o fluxo
-```
-⏳ Aguardando "Confirme seu celular" (tentativa 8/8)...
-❌ Campo "Confirme seu celular" não apareceu no portal
-```
-- Portal mudou comportamento — **não pede mais confirmação de celular**
-- Worker dá hard-fail e re-enfileira para sempre (loop infinito)
+**Campo CPF** — OK, funciona (auto-fill da Receita responde)
 
-### 4. Bonus: PDF→JPG falhando
-```
-⚠️ Conversão PDF→JPG falhou: pdftoppm
-```
-- Container do worker não tem `poppler-utils` instalado
+**Campo Nome** — quebrado silenciosamente. Log: `Nome="(vazio)"`. O portal preencheu DataNasc mas Nome veio vazio. Worker não valida e segue.
+
+**Campo WhatsApp** — funciona mas com latência absurda:
+- MutationObserver falha porque o portal usa React Portal/Suspense (campo não nasce no DOM principal)
+- Polling com `page.locator('input[placeholder*="WhatsApp"]')` é lento
+- Solução: detectar via `waitForFunction` com query mais flexível (placeholder OU label OU name) + reduzir intervalo para 500ms
+
+**Campo "Confirme celular"** — não existe mais no portal v2026:
+- Worker no VPS ainda tem código v8 (8 tentativas hard-fail)
+- O patch v9 está no repositório mas o **container não foi rebuildado**
+- Confirmar: `docker exec worker grep -n "Confirme seu celular" playwright-automation.mjs`
+
+**Campo Email** — log mostra "[5/16] Email" mas sem confirmação de preenchimento — provavelmente também travou
+
+**Campo Endereço/Número** — `⚠️ Campo Número endereço não encontrado` — selector quebrado
+
+**Campo Instalação** — `⚠️ Campo instalação não encontrado` — selector quebrado
+
+**Tipo Documento** — `⚠️ Tipo documento não selecionado` — MUI Select muda DOM, selector velho
+
+**Upload arquivos** — `0 input(s) file encontrado(s)` — portal usa input file dentro de Shadow DOM ou via dropzone custom
+
+### O verdadeiro problema raiz
+
+**O worker no Easypanel está rodando código v8 antigo.** Todos os patches v9 (poppler, soft-warn confirme celular, hierarquia base64, etc) estão no Git mas o container nunca foi rebuildado/redeployed.
+
+Prova: log mostra "tentativa 8/8" + "fixtures/documento.jpg" + "Conversão PDF→JPG falhou" — exatamente os bugs que a v9 corrigiu.
 
 ---
 
-## Plano de correção
+## Plano de ação
 
-### Fase 1 — Arrumar storage (URGENTE)
-- **Webhook**: quando MinIO falhar, salvar Base64 direto no banco temporariamente (`document_front_base64`, `bill_base64`) com flag `media_storage = 'inline'`
-- **Worker**: prioridade de leitura: 
-  1. URL pública do MinIO (se válida)
-  2. `document_front_base64` do banco (fallback)
-  3. Re-baixar via Evolution API usando `media_message_id` salvo
-  4. NUNCA usar `fixtures/` como fallback silencioso — falhar explicitamente
-- Adicionar coluna `media_message_id` em customers para reprocessar via Evolution
+### Etapa 1 — Forçar rebuild do worker (CRÍTICO)
+Adicionar `/debug/version` endpoint no worker que retorna:
+```json
+{ "git_sha": "...", "playwright_version": "...", "has_poppler": true/false, "patch_v9": true/false }
+```
+Usuário acessa essa URL → confirma se v9 está ativa → se não, força redeploy no Easypanel.
 
-### Fase 2 — Tornar "Confirme celular" opcional
-- Reduzir tentativas de 8 para 4 (12s total)
-- Se não aparecer, **logar warning e seguir** (não hard-fail)
-- Validar via OTP/SMS depois — o portal hoje confirma via SMS, não via campo duplicado
+### Etapa 2 — Re-mapear TODOS os selectors do portal
+O portal mudou (versão atual diferente da memória). Precisa ir lá com Playwright recorder e capturar:
+- Selector real do campo WhatsApp
+- Selector real do campo Email/Confirme Email
+- Selector real do Número endereço
+- Selector real do Número instalação
+- Selector real do MUI Select de Tipo Documento (3 opções)
+- Selector real dos input file (provavelmente atrás de dropzone)
+- Como clicar no Finalizar
 
-### Fase 3 — Worker fail-fast em documento fake
-- Se `documento.jpg` for o `fixtures/` genérico, abortar ANTES de abrir browser
-- Marcar status `awaiting_document_resend` e pedir cliente reenviar via WhatsApp
+### Etapa 3 — Reescrever fase WhatsApp com detecção rápida
+- Trocar polling de 2.5s por `waitForFunction` com 500ms
+- Buscar por **múltiplos critérios em OR**: placeholder, label, name, type=tel
+- Se Confirme celular não aparece em 8s → seguir (soft-warn já existe na v9)
 
-### Fase 4 — Adicionar poppler-utils ao Dockerfile
-- `apt-get install -y poppler-utils` no `worker-portal/Dockerfile`
-- Permite converter PDF→JPG quando portal não aceita PDF
+### Etapa 4 — Validar Nome obrigatório
+- Se Nome ficar vazio após CPF → tentar preencher manualmente do banco
+- Se ainda vazio → abortar com `awaiting_cpf_review` (não seguir com nome em branco)
 
-### Fase 5 — Reset do lead travado
-- Limpar `recentlyProcessed` para o customer atual (4586e30b)
-- Permitir reprocessamento imediato após correções
+### Etapa 5 — Diagnóstico em tempo real
+Tabela `worker_phase_logs(customer_id, phase, status, timestamp, screenshot_url)` + painel no /super-admin mostrando exatamente onde cada lead travou, com link pro screenshot da fase.
+
+### Etapa 6 — Endpoint de re-scan do portal
+`POST /worker/portal-introspect` — abre o portal headed (via noVNC), navega até cada fase, dump do DOM, retorna lista de selectors candidatos. Roda 1x por dia para detectar mudanças do portal automaticamente.
 
 ---
 
 ## Arquivos a alterar
 
-- `supabase/functions/evolution-webhook/index.ts` — fallback Base64 quando MinIO falha + salvar `media_message_id`
-- `worker-portal/playwright-automation.mjs`:
-  - Hierarquia de busca de mídia (URL → Base64 → Evolution API)
-  - "Confirme celular" vira soft-warn em vez de hard-fail
-  - Detectar fixtures e abortar
-- `worker-portal/Dockerfile` — adicionar `poppler-utils`
-- Migration: adicionar `media_message_id`, `bill_message_id`, `media_storage` em customers
+- `worker-portal/server.mjs` — endpoints `/debug/version` e `/worker/portal-introspect`
+- `worker-portal/playwright-automation.mjs` — selectors v10, validação de nome, detecção rápida WhatsApp
+- `worker-portal/Dockerfile` — adicionar `LABEL version=v10` para forçar rebuild
+- Migration: tabela `worker_phase_logs`
+- `src/components/superadmin/WorkerPhaseTimeline.tsx` (novo) — timeline visual
+- `src/pages/SuperAdmin.tsx` — adicionar aba "Worker Phases"
 
 ---
 
 ## Resultado esperado
 
-- ✅ Documento real chega no portal mesmo com MinIO offline
-- ✅ Cadastro avança sem travar em "Confirme celular"
-- ✅ PDF é convertido corretamente
-- ✅ Sistema falha explicitamente (não silenciosamente) quando dado é inválido
-- ✅ Cliente atual (CELIO) pode ser reprocessado imediatamente
+- ✅ Confirmação imediata se worker está rodando v9 ou v8
+- ✅ Selectors atualizados para o portal atual (não memória de 2 semanas atrás)
+- ✅ Campo WhatsApp detectado em <2s, não 30s
+- ✅ "Confirme celular" não trava mais o fluxo
+- ✅ Nome vazio vira erro explícito, não silencioso
+- ✅ Super Admin vê em tempo real qual fase quebrou e screenshot
 
