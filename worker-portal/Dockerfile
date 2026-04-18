@@ -1,10 +1,10 @@
 # Dockerfile para Worker VPS - Portal iGreen
-# VERSÃO 10.4 - 2026-04-18 (escape de ids React + confirmação celular obrigatória)
+# VERSÃO 11.0 - 2026-04-18 (zero-erro: email-duplicado fallback, instalação-duplicada detect, distribuidora soft)
 
 FROM node:20-bookworm-slim
 
-LABEL version="v10.4-2026.04.18"
-LABEL changelog="react-id-attr-selector,confirme-celular-obrigatorio,placeholder-hardening"
+LABEL version="v11.0-2026.04.18"
+LABEL changelog="email-duplicate-fallback,installation-duplicate-detect,distribuidora-soft,cnh-skip-verso"
 
 # Instalar dependências do sistema para Playwright + VNC + noVNC
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -38,7 +38,7 @@ ENV NODE_ENV=production
 ENV PORT=3100
 ENV HEADLESS=1
 ENV DISPLAY=:99
-ENV WORKER_VERSION=v10.4-2026.04.18
+ENV WORKER_VERSION=v11.0-2026.04.18
 
 # Expor portas: 3100 (API) + 6080 (noVNC web)
 EXPOSE 3100 6080
