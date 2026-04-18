@@ -1250,17 +1250,19 @@ export async function executarAutomacao(customerId, options = {}) {
       }
     }
     // Aguardar auto-preenchimento do portal (Nome + Data de Nascimento vêm da Receita)
-    await delay(5000);
+    // Reduzido de 5s→1s: o waitForAutoFill abaixo já faz polling adaptativo de até 10s
+    await delay(1000);
     await screenshot(page, customerId, '04-apos-cpf');
 
     // ─── 6a. AGUARDAR AUTO-FILL DA RECEITA (Nome + DataNasc) ──────────────
     // REGRA DE OURO: o portal consulta a Receita Federal via CPF e auto-preenche
     // Nome e Data de Nascimento. Esses valores SÃO A FONTE DA VERDADE — nunca
     // sobrescrever com dados do banco/OCR (que podem estar errados).
+    // Timeout reduzido de 18s→10s: na prática a Receita responde em 2-4s.
     currentPhase = 'fase3b-autofill';
     await logPhase(customerId, 'fase3b-autofill', 'started');
     console.log('   ⏳ [AUTO-FILL] Aguardando portal preencher Nome + DataNasc via Receita...');
-    const autofill = await waitForAutoFill(page, 18000);
+    const autofill = await waitForAutoFill(page, 10000);
     if (autofill.nome || autofill.nascimento) {
       console.log(`   📥 [AUTO-FILL] Portal preencheu: Nome="${autofill.nome || '(vazio)'}" DataNasc="${autofill.nascimento || '(vazio)'}"`);
       await logPhase(customerId, 'fase3b-autofill', 'ok', { message: `Nome="${autofill.nome || ''}" DataNasc="${autofill.nascimento || ''}"` });
@@ -1268,6 +1270,9 @@ export async function executarAutomacao(customerId, options = {}) {
       console.warn('   ⚠️  [AUTO-FILL] Portal NÃO auto-preencheu (CPF talvez sem registro na Receita). Worker continuará.');
       await logPhase(customerId, 'fase3b-autofill', 'warn', { message: 'Receita não retornou dados' });
     }
+    // ⏸️  Aguardar React estabilizar após autofill antes de buscar próximo campo
+    // (o portal re-renderiza o form quando a Receita responde)
+    await delay(1200);
 
     // ─── 6a-bis. VALIDAR NOME (crítico v10.1) ───────────────────────────
     currentPhase = 'fase3c-nome-validation';
