@@ -1,68 +1,58 @@
 ---
-name: portal-form-selectors
-description: Mapeamento real do portal igreen + hierarquia de mídia (URL→Base64→Evolution→fail) + "Confirme celular" agora é OPCIONAL (soft-warn). document_type canônico cnh|rg_novo|rg_antigo. CNH só frente.
+name: Portal iGreen Form Selectors Map (validado live 2026-04-18 v4)
+description: Mapeamento completo do portal digital.igreenenergy.com.br validado live em 2026-04-18. Formulário PROGRESSIVO. CPF auto-preenche Nome+DataNasc. CEP NÃO auto-preenche endereço (manual). Distribuidora é dropdown filtrado pelo CEP (5 opções típicas). Estado é combobox MUI. Após Distribuidora aparece "Número da instalação". Todos os inputs usam placeholder exato (sem name/id estável).
 type: feature
 ---
 
-# Portal iGreen — Selectors e Comportamento Real (v9 — 18/04/2026)
+## Portal URL
+`https://digital.igreenenergy.com.br/?id={CONSULTOR_ID}&sendcontract=true`
 
-## Landing
-CEP (`placeholder="CEP"`) + Valor (placeholder começa com `R$`) → "Calcular" → "Garantir meu desconto".
+## ⚠️ REGRAS CRÍTICAS (validadas live 2026-04-18 v4)
 
-## Fluxo PROGRESSIVO (campos só aparecem após o anterior validar)
-1. **CPF/CNPJ** — auto-preenche **Nome + Data Nasc** via Receita (3-18s). Worker **NUNCA sobrescreve**.
-2. **Número do WhatsApp** — máscara `(00) 00000-0000`. Worker tenta 12x (1.5s) + MutationObserver.
-3. **Confirme seu celular** — ⚠️ **OPCIONAL desde v9**. Worker tenta 4x (~8s); se não aparecer, **soft-warn e segue** (portal valida via SMS depois). Não é mais hard-fail.
-4. **E-mail** + Confirme E-mail.
-5. **CEP** — auto-preenche endereço.
-6. **Número** + Complemento.
-7. **Distribuidora** — MUI Select manual.
-8. **Número da instalação** — 7-12 dígitos.
-9. **Tipo documento** — MUI Select com 3 opções literais:
-   - `RG (Antigo)` / `RG (Novo)` / `CNH`
-10. **Documento pessoal**:
-    - **CNH** → SÓ frente (portal esconde verso).
-    - **RG** → Frente + Verso obrigatórios.
-    - Apenas IMG/JPG/PNG (PDFs convertidos via `pdftoppm`).
-11. Placas (Não), conta (PDF aceito), procurador (Não), débito (Não), Finalizar.
+1. **ETAPA 0 OBRIGATÓRIA**: Simulador (CEP+Valor+Calcular+Garantir desconto) ANTES do formulário real
+2. Formulário PROGRESSIVO: blocos só aparecem após validação anterior
+3. **CPF auto-preenche Nome+DataNasc** via Receita — NÃO sobrescrever
+4. **CEP NÃO auto-preenche endereço** — Endereço/Número/Bairro/Cidade são MANUAIS
+5. **Estado é combobox MUI** (não input texto) — opções "Sao Paulo", etc.
+6. **Distribuidora é dropdown FILTRADO pelo CEP** — geralmente 5 opções (ex: CPFL, CPFL Piratininga, CPFL Santa Cruz, Elektro, Energisa Sul Sudeste para SP interior)
+7. **"Número da instalação" só aparece APÓS escolher Distribuidora**
+8. **Tipo documento = combobox MUI** (aparece após Número da instalação)
+9. **Todos inputs usam placeholder EXATO** — sem id/name estáveis (React 18 useId gera ":r5:" etc.)
+10. **WhatsApp + Confirme celular** e **E-mail + Confirme E-mail**: AMBOS obrigatórios, mesmo valor
 
-## REGRA — document_type CANÔNICO
-Banco e código usam APENAS: `cnh` | `rg_novo` | `rg_antigo`.
-Helpers em `_shared/document-type.ts` (webhook) e `normalizeDocType()` (worker).
-**Nunca** comparar string crua (`=== "CNH"`).
+## Sequência Validada Live (CELIO TAVARES, CEP 13350000)
 
-## REGRA — Data Nascimento
-- Portal via CPF é fonte da verdade.
-- Webhook só salva data da CNH se `dataNascimentoConfianca === "alta"`.
+### Página 1: Simulação
+- `input[placeholder="CEP"]` → "13350000"
+- `input[placeholder="Valor da conta"]` → "301,01" (BR format)
+- `button:has-text("Calcular")` → revela `button:has-text("Garantir meu desconto")`
+- Clicar "Garantir meu desconto" → vai ao formulário
 
-## REGRA — Hierarquia de Mídia (v9)
-Worker `prepararDocumento`/`prepararContaEnergia` busca em ordem:
-1. URL HTTP do MinIO (timeout 15s)
-2. data: URL Base64 já no campo `*_url`
-3. `customers.document_front_base64` / `customers.bill_base64` (fallback inline)
-4. Re-baixar via Evolution API (`customers.media_message_id` / `bill_message_id`) com `chat/getBase64FromMediaMessage`
-5. **doc-frente**: ABORT → status `awaiting_document_resend` → cliente reenvia. **doc-verso/conta**: placeholder mínimo aceito.
+### Página 2: Formulário Progressivo (ordem real validada)
+1. `input[placeholder="CPF ou CNPJ"]` — digitar CPF → auto-preenche Nome+DataNasc
+2. `input[placeholder="Nome completo"]` — AUTO (NÃO tocar)
+3. `input[placeholder="Data de Nascimento"]` — AUTO (NÃO tocar)
+4. `input[placeholder="Número do seu WhatsApp"]` — digitar (máscara aplica "(11) 98900-0650")
+5. `input[placeholder="Confirme seu celular"]` — digitar mesmo valor
+6. `input[placeholder="E-mail"]` — digitar
+7. `input[placeholder="Confirme seu E-mail"]` — digitar mesmo valor
+8. `input[placeholder="CEP"]` — vem auto da etapa 1
+9. `input[placeholder="Endereço"]` — MANUAL
+10. `input[placeholder="Número"]` — MANUAL (do endereço)
+11. `input[placeholder="Bairro"]` — MANUAL
+12. `input[placeholder="Cidade"]` — MANUAL
+13. **Combobox MUI Estado** — `[role="combobox"]` com label "Estado", opções com nomes sem acento ("Sao Paulo")
+14. `input[placeholder="Complemento"]` — opcional
+15. **Combobox MUI Distribuidora de energia** — abrir, escolher 1ª opção compatível (ex: "CPFL")
+16. `input[placeholder="Número da instalação"]` — aparece DEPOIS de escolher distribuidora
+17. **Combobox MUI Tipo documento** — aparece DEPOIS da instalação ("RG (Antigo)" / "RG (Novo)")
+18. Uploads (`#file_input_frente_documento_pessoal`, `#file_input_verso_documento_pessoal`)
+19. Conta de energia (PDF)
+20. Botão "Finalizar" → dispara OTP
 
-**Nunca** usar `fixtures/documento.jpg` como fallback silencioso para frente.
-
-## REGRA — Storage no Webhook
-- Caminho oficial: upload imediato MinIO em `evolution-webhook`.
-- Se MinIO falhar:
-  - Salva Base64 inline em `document_front_base64`/`bill_base64`
-  - Salva `media_message_id`/`bill_message_id` (id da msg WhatsApp)
-  - Marca `media_storage = 'inline'`
-- `upload-documents-minio` é apenas recovery manual.
-
-## Conversão PDF → JPG
-Container do worker tem `poppler-utils`. Para `doc-frente`/`doc-verso` PDF → JPG via `pdftoppm -jpeg -r 150 -f 1 -l 1`.
-
-## BUG CRÍTICO (resolvido)
-Campos com máscara MUI/react-imask (tel, CPF, CEP, data): digitação caractere-por-caractere com `delay: 90ms` + `blur`. `_valueTracker.setValue()` não funciona.
-
-## MUDANÇAS v9 vs v8
-- ✅ "Confirme celular" virou OPCIONAL (soft-warn em vez de hard-fail).
-- ✅ Hierarquia de mídia URL→Base64→Evolution→fail-fast implementada.
-- ✅ Webhook salva Base64 inline + messageId quando MinIO offline.
-- ✅ Worker NUNCA usa fixture genérica para doc-frente — aborta com `awaiting_document_resend`.
-- ✅ Dockerfile do worker passou a instalar `poppler-utils`.
-- ✅ Novas colunas: `media_message_id`, `bill_message_id`, `bill_base64`, `media_storage`.
+## Estratégia de Seletores (Worker)
+- **PRIMÁRIO**: `page.locator('input[placeholder="EXATO"]').first()` com escape de aspas
+- **NUNCA usar `#id`** — React 18 gera IDs com `:` (ex: `:r5:`) que quebram CSS selectors. Usar `[id="..."]` se precisar
+- **Comboboxes**: clicar no `[role="combobox"]` cujo contexto contenha o label, depois clicar no `li[role="option"]` correspondente
+- **Estado**: enviar nome SEM acento ("Sao Paulo", não "São Paulo")
+- **Distribuidora**: a lista é pré-filtrada pelo CEP — fallback seguro = primeira opção
