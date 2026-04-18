@@ -1,5 +1,7 @@
 # Dockerfile para Worker VPS - Portal iGreen
-# VERSÃO 10.0 - COM noVNC para visualização remota do navegador
+# VERSÃO 10.1 - 2026-04-18 (force rebuild: phase-logger + WhatsApp fast detect + nome validation)
+LABEL version="v10.1-2026.04.18"
+LABEL changelog="phase-logger,wa-fast-detect,nome-validation,confirme-celular-soft"
 
 FROM node:20-bookworm-slim
 
@@ -26,6 +28,7 @@ RUN npx playwright install chromium
 # Copiar código
 COPY server.mjs ./
 COPY playwright-automation.mjs ./
+COPY phase-logger.mjs ./
 COPY start.sh ./
 RUN chmod +x start.sh
 
@@ -34,6 +37,7 @@ ENV NODE_ENV=production
 ENV PORT=3100
 ENV HEADLESS=1
 ENV DISPLAY=:99
+ENV WORKER_VERSION=v10.1-2026.04.18
 
 # Expor portas: 3100 (API) + 6080 (noVNC web)
 EXPOSE 3100 6080

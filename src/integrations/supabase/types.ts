@@ -1045,6 +1045,48 @@ export type Database = {
         }
         Relationships: []
       }
+      worker_phase_logs: {
+        Row: {
+          attempt: number | null
+          created_at: string
+          customer_id: string | null
+          duration_ms: number | null
+          id: string
+          message: string | null
+          phase: string
+          screenshot_url: string | null
+          selector_used: string | null
+          status: string
+          worker_version: string | null
+        }
+        Insert: {
+          attempt?: number | null
+          created_at?: string
+          customer_id?: string | null
+          duration_ms?: number | null
+          id?: string
+          message?: string | null
+          phase: string
+          screenshot_url?: string | null
+          selector_used?: string | null
+          status?: string
+          worker_version?: string | null
+        }
+        Update: {
+          attempt?: number | null
+          created_at?: string
+          customer_id?: string | null
+          duration_ms?: number | null
+          id?: string
+          message?: string | null
+          phase?: string
+          screenshot_url?: string | null
+          selector_used?: string | null
+          status?: string
+          worker_version?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       consultants_public: {

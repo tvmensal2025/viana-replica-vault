@@ -19,6 +19,7 @@ import { mkdir, writeFile } from 'fs/promises';
 import { existsSync, writeFileSync, readFileSync, copyFileSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
+import { logPhase, WORKER_VERSION_TAG } from './phase-logger.mjs';
 
 const CONSULTOR_ID_FALLBACK = process.env.IGREEN_CONSULTOR_ID || '124170';
 // PORTAL_URL agora é gerado dinamicamente por cliente (usa igreen_id do consultor)
@@ -200,6 +201,90 @@ async function waitForFieldByPlaceholder(page, regex, timeoutMs = 15000) {
     return found;
   } catch (_) {
     return false;
+  }
+}
+
+// ─── findFieldFast: detecção AGRESSIVA com waitForFunction (250ms poll) ──
+// Múltiplos critérios em OR: placeholder, name, aria-label, type, label adjacente.
+// Retorna o handle do elemento (ou null em timeout).
+// Usado para campos críticos que demoram a aparecer (ex: WhatsApp após CPF).
+async function findFieldFast(page, criteria, timeoutMs = 12000) {
+  const start = Date.now();
+  try {
+    const handle = await page.waitForFunction(
+      (crit) => {
+        const inputs = Array.from(document.querySelectorAll('input, textarea'));
+        for (const input of inputs) {
+          if (input.offsetParent === null) continue;
+          if (input.disabled) continue;
+          const ph = (input.getAttribute('placeholder') || '').toLowerCase();
+          const name = (input.getAttribute('name') || '').toLowerCase();
+          const aria = (input.getAttribute('aria-label') || '').toLowerCase();
+          const type = (input.getAttribute('type') || '').toLowerCase();
+          const id = (input.getAttribute('id') || '').toLowerCase();
+          // Buscar contexto via label/parent
+          let ctx = '';
+          try {
+            const labelFor = id ? document.querySelector(`label[for="${id}"]`) : null;
+            const parentLabel = input.closest('label');
+            const formCtl = input.closest('.MuiFormControl-root,[class*="FormControl"],div');
+            ctx = ((labelFor?.textContent || '') + ' ' + (parentLabel?.textContent || '') + ' ' + (formCtl?.textContent || '')).toLowerCase();
+          } catch (_) {}
+          const haystack = `${ph} ${name} ${aria} ${id} ${ctx}`;
+          // OR: qualquer keyword bater
+          const matchKeyword = (crit.keywords || []).some((k) => haystack.includes(k.toLowerCase()));
+          const matchType = crit.type ? type === crit.type : false;
+          const matchExclude = (crit.exclude || []).some((x) => haystack.includes(x.toLowerCase()));
+          if ((matchKeyword || matchType) && !matchExclude) {
+            return true;
+          }
+        }
+        return false;
+      },
+      criteria,
+      { polling: 250, timeout: timeoutMs }
+    ).catch(() => null);
+
+    const elapsed = Date.now() - start;
+    if (!handle) {
+      console.log(`   ⚠️  [findFieldFast] timeout após ${elapsed}ms — keywords=${JSON.stringify(criteria.keywords || [])}`);
+      return null;
+    }
+
+    // Re-localizar agora que sabemos que existe (handle do waitForFunction é o boolean)
+    const locator = await page.evaluateHandle((crit) => {
+      const inputs = Array.from(document.querySelectorAll('input, textarea'));
+      for (const input of inputs) {
+        if (input.offsetParent === null) continue;
+        if (input.disabled) continue;
+        const ph = (input.getAttribute('placeholder') || '').toLowerCase();
+        const name = (input.getAttribute('name') || '').toLowerCase();
+        const aria = (input.getAttribute('aria-label') || '').toLowerCase();
+        const type = (input.getAttribute('type') || '').toLowerCase();
+        const id = (input.getAttribute('id') || '').toLowerCase();
+        let ctx = '';
+        try {
+          const labelFor = id ? document.querySelector(`label[for="${id}"]`) : null;
+          const parentLabel = input.closest('label');
+          const formCtl = input.closest('.MuiFormControl-root,[class*="FormControl"],div');
+          ctx = ((labelFor?.textContent || '') + ' ' + (parentLabel?.textContent || '') + ' ' + (formCtl?.textContent || '')).toLowerCase();
+        } catch (_) {}
+        const haystack = `${ph} ${name} ${aria} ${id} ${ctx}`;
+        const matchKeyword = (crit.keywords || []).some((k) => haystack.includes(k.toLowerCase()));
+        const matchType = crit.type ? type === crit.type : false;
+        const matchExclude = (crit.exclude || []).some((x) => haystack.includes(x.toLowerCase()));
+        if ((matchKeyword || matchType) && !matchExclude) {
+          return input;
+        }
+      }
+      return null;
+    }, criteria);
+
+    console.log(`   ⚡ [findFieldFast] OK em ${elapsed}ms — keywords=${JSON.stringify(criteria.keywords || [])}`);
+    return locator;
+  } catch (e) {
+    console.warn(`   ⚠️  [findFieldFast] erro: ${e.message}`);
+    return null;
   }
 }
 
@@ -1153,13 +1238,63 @@ export async function executarAutomacao(customerId, options = {}) {
     // Nome e Data de Nascimento. Esses valores SÃO A FONTE DA VERDADE — nunca
     // sobrescrever com dados do banco/OCR (que podem estar errados).
     currentPhase = 'fase3b-autofill';
+    await logPhase(customerId, 'fase3b-autofill', 'started');
     console.log('   ⏳ [AUTO-FILL] Aguardando portal preencher Nome + DataNasc via Receita...');
     const autofill = await waitForAutoFill(page, 18000);
     if (autofill.nome || autofill.nascimento) {
       console.log(`   📥 [AUTO-FILL] Portal preencheu: Nome="${autofill.nome || '(vazio)'}" DataNasc="${autofill.nascimento || '(vazio)'}"`);
+      await logPhase(customerId, 'fase3b-autofill', 'ok', { message: `Nome="${autofill.nome || ''}" DataNasc="${autofill.nascimento || ''}"` });
     } else {
       console.warn('   ⚠️  [AUTO-FILL] Portal NÃO auto-preencheu (CPF talvez sem registro na Receita). Worker continuará.');
+      await logPhase(customerId, 'fase3b-autofill', 'warn', { message: 'Receita não retornou dados' });
     }
+
+    // ─── 6a-bis. VALIDAR NOME (crítico v10.1) ───────────────────────────
+    currentPhase = 'fase3c-nome-validation';
+    await logPhase(customerId, 'fase3c-nome-validation', 'started');
+    {
+      const portalNomeAtual = (autofill.nome || '').trim();
+      const bancoNome = String(data.nomeCompleto || '').trim();
+      if (!portalNomeAtual && !bancoNome) {
+        const msg = 'Nome ausente: portal não auto-preencheu E banco vazio. Cliente precisa enviar CPF correto.';
+        await logPhase(customerId, 'fase3c-nome-validation', 'aborted', { message: msg });
+        await atualizarStatus(customerId, 'awaiting_cpf_review', msg);
+        throw new Error(msg);
+      }
+      if (!portalNomeAtual && bancoNome) {
+        console.log(`   🆘 Portal sem nome — tentando preencher manualmente: "${bancoNome}"`);
+        try {
+          const nomeHandle = await findFieldFast(page, {
+            keywords: ['nome', 'fullname', 'titular'],
+            exclude: ['mãe', 'pai', 'usuário', 'fantasia', 'arquivo'],
+          }, 4000);
+          if (nomeHandle) {
+            const meta = await nomeHandle.evaluate((el) => ({
+              placeholder: el.getAttribute('placeholder') || '',
+              name: el.getAttribute('name') || '',
+              id: el.getAttribute('id') || '',
+            })).catch(() => null);
+            let nomeLoc = null;
+            if (meta?.placeholder) nomeLoc = page.locator(`input[placeholder="${meta.placeholder}"]`).first();
+            else if (meta?.id) nomeLoc = page.locator(`#${meta.id}`).first();
+            else if (meta?.name) nomeLoc = page.locator(`input[name="${meta.name}"]`).first();
+            if (nomeLoc && await nomeLoc.count() > 0) {
+              await reactFill(page, nomeLoc, bancoNome);
+              await logPhase(customerId, 'fase3c-nome-validation', 'ok', { message: `Nome preenchido manualmente: ${bancoNome}` });
+            } else {
+              await logPhase(customerId, 'fase3c-nome-validation', 'warn', { message: 'Campo nome não localizado' });
+            }
+          } else {
+            await logPhase(customerId, 'fase3c-nome-validation', 'warn', { message: 'findFieldFast não achou nome' });
+          }
+        } catch (e) {
+          await logPhase(customerId, 'fase3c-nome-validation', 'warn', { message: `Erro: ${e.message}` });
+        }
+      } else {
+        await logPhase(customerId, 'fase3c-nome-validation', 'ok', { message: `Nome OK: "${portalNomeAtual}"` });
+      }
+    }
+
 
     // ─── 6b. TRATAR CADASTRO EXISTENTE ────────────────────────────────────
     currentPhase = 'cadastro-existente';
@@ -1181,77 +1316,82 @@ export async function executarAutomacao(customerId, options = {}) {
     currentPhase = 'fase4-whatsapp';
     console.log('\n📋 [4/16] WhatsApp + Confirmação...');
 
-    // Aguardar campo WhatsApp aparecer via MutationObserver + polling (12 tentativas, 1.5s = 18s total)
-    const whatsappAppeared = await waitForFieldByPlaceholder(page, /whatsapp/i, 18000);
-    if (whatsappAppeared) {
-      console.log('   ✅ Campo WhatsApp detectado');
-    } else {
-      console.log('   ⏳ MutationObserver não detectou — usando polling clássico');
+    await logPhase(customerId, 'fase4-whatsapp', 'started');
+    const waStart = Date.now();
+    const waHandle = await findFieldFast(page, {
+      keywords: ['whatsapp', 'celular', 'telefone'],
+      type: 'tel',
+      exclude: ['confirme', 'confirmar', 'confirmação'],
+    }, 12000);
+    const waElapsed = Date.now() - waStart;
+
+    let phoneField = null;
+    if (waHandle) {
+      const meta = await waHandle.evaluate((el) => ({
+        placeholder: el.getAttribute('placeholder') || '',
+        name: el.getAttribute('name') || '',
+        id: el.getAttribute('id') || '',
+      })).catch(() => null);
+      if (meta?.placeholder) phoneField = page.locator(`input[placeholder="${meta.placeholder}"]`).first();
+      else if (meta?.id) phoneField = page.locator(`#${meta.id}`).first();
+      else if (meta?.name) phoneField = page.locator(`input[name="${meta.name}"]`).first();
     }
 
-    let phoneField = byPHPartial('WhatsApp');
-    let phoneVisible = false;
-    for (let i = 0; i < 12; i++) {
-      try {
-        await phoneField.waitFor({ state: 'visible', timeout: 1500 });
-        phoneVisible = true;
-        break;
-      } catch (_) {
-        console.log(`   ⏳ Aguardando campo WhatsApp aparecer (tentativa ${i + 1}/12)...`);
+    if (!phoneField || await phoneField.count() === 0 || !await phoneField.isVisible().catch(() => false)) {
+      console.log('   ⏳ findFieldFast falhou, fallback para byPHPartial');
+      phoneField = byPHPartial('WhatsApp');
+      if (await phoneField.count() === 0) {
         await page.evaluate(() => window.scrollBy(0, 200));
-        await delay(1500);
-        phoneField = byPHPartial('WhatsApp');
+        await delay(800);
+        phoneField = page.locator('input[type="tel"], input[name*="whats" i], input[placeholder*="WhatsApp" i], input[placeholder*="celular" i]').first();
       }
     }
-    
-    if (phoneVisible && await phoneField.count() > 0) {
-      await fillRequiredField(phoneField, data.whatsapp, 'WhatsApp', 'digits');
-    } else {
-      // Fallback name-based
-      const phoneFallback = page.locator('input[name="phone"], input[name*="whats" i], input[type="tel"]').first();
-      if (await phoneFallback.count() > 0 && await phoneFallback.isVisible().catch(() => false)) {
-        await fillRequiredField(phoneFallback, data.whatsapp, 'WhatsApp', 'digits');
-      } else {
-        await screenshot(page, customerId, 'ERROR-whatsapp-nao-encontrado');
-        throw new Error('Campo WhatsApp não encontrado no portal (após 12 tentativas + MutationObserver)');
-      }
-    }
-    // Disparar blur para forçar render do campo de confirmação
-    await page.evaluate(() => { (document.activeElement)?.dispatchEvent(new Event('blur', { bubbles: true })); }).catch(() => {});
-    await delay(1200);
 
-    // Confirmar celular - OPCIONAL (portal nem sempre exibe esse campo hoje)
-    // Se não aparecer em 4 tentativas (~8s), seguimos. O portal valida via SMS depois.
+    if (phoneField && await phoneField.count() > 0 && await phoneField.isVisible().catch(() => false)) {
+      await fillRequiredField(phoneField, data.whatsapp, 'WhatsApp', 'digits');
+      await logPhase(customerId, 'fase4-whatsapp', 'ok', { message: `Detectado em ${waElapsed}ms`, duration_ms: waElapsed });
+    } else {
+      await screenshot(page, customerId, 'ERROR-whatsapp-nao-encontrado');
+      await logPhase(customerId, 'fase4-whatsapp', 'failed', { message: 'WhatsApp field not found' });
+      throw new Error('Campo WhatsApp não encontrado no portal');
+    }
+
+    await page.evaluate(() => { (document.activeElement)?.dispatchEvent(new Event('blur', { bubbles: true })); }).catch(() => {});
+    await delay(800);
+
+    // Confirme celular - OPCIONAL (3 tentativas × 1s = ~3s pior caso)
+    currentPhase = 'fase4b-confirme-celular';
+    await logPhase(customerId, 'fase4b-confirme-celular', 'started');
     let confirmPhone = byPHPartial('Confirme seu celular');
     let confirmPhoneFound = false;
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 3; i++) {
       if (await confirmPhone.count() > 0 && await confirmPhone.isVisible().catch(() => false)) {
         confirmPhoneFound = true;
         break;
       }
-      console.log(`   ⏳ Aguardando "Confirme seu celular" (tentativa ${i + 1}/4)...`);
+      console.log(`   ⏳ Aguardando "Confirme seu celular" (tentativa ${i + 1}/3, soft)...`);
       try { await phoneField.evaluate((el) => el.dispatchEvent(new Event('blur', { bubbles: true }))); } catch (_) {}
-      await page.evaluate(() => window.scrollBy(0, 150));
-      await delay(1500);
+      await delay(1000);
       confirmPhone = byPHPartial('Confirme seu celular');
     }
 
     if (confirmPhoneFound) {
       await fillRequiredField(confirmPhone, data.whatsapp, 'Confirmação WhatsApp', 'digits');
+      await logPhase(customerId, 'fase4b-confirme-celular', 'ok');
     } else {
-      // Fallback: 2º input tel/whatsapp na página
       const allPhoneInputs = page.locator('input[type="tel"], input[placeholder*="celular" i], input[placeholder*="WhatsApp" i]');
       const cnt = await allPhoneInputs.count();
       if (cnt >= 2) {
         await fillRequiredField(allPhoneInputs.nth(1), data.whatsapp, 'Confirmação WhatsApp (fallback)', 'digits');
+        await logPhase(customerId, 'fase4b-confirme-celular', 'ok', { message: '2º input tel (fallback)' });
       } else {
-        // ⚠️ SOFT-WARN: portal não pediu confirmação — seguir adiante (validação por SMS depois)
-        console.warn('   ⚠️  [SOFT] Campo "Confirme seu celular" não apareceu — seguindo adiante (portal valida via SMS)');
-        await screenshot(page, customerId, 'WARN-confirme-celular-ausente');
+        console.warn('   ⚠️  [SOFT-SKIP] "Confirme seu celular" não existe — seguindo (validação por SMS)');
+        await logPhase(customerId, 'fase4b-confirme-celular', 'soft-skip', { message: 'Campo não existe no portal v2026' });
       }
     }
-    await delay(2500);
-    
+    await delay(1500);
+
+
     // ─── 8. Email ────────────────────────────────────────────────────────
     currentPhase = 'fase5-email';
     console.log('\n📋 [5/16] Email...');
