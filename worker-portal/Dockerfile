@@ -1,9 +1,10 @@
 # Dockerfile para Worker VPS - Portal iGreen
 # VERSÃO 10.1 - 2026-04-18 (force rebuild: phase-logger + WhatsApp fast detect + nome validation)
-LABEL version="v10.1-2026.04.18"
-LABEL changelog="phase-logger,wa-fast-detect,nome-validation,confirme-celular-soft"
 
 FROM node:20-bookworm-slim
+
+LABEL version="v10.1-2026.04.18"
+LABEL changelog="phase-logger,wa-fast-detect,nome-validation,confirme-celular-soft"
 
 # Instalar dependências do sistema para Playwright + VNC + noVNC
 RUN apt-get update && apt-get install -y --no-install-recommends \
