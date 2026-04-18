@@ -1393,26 +1393,51 @@ export async function executarAutomacao(customerId, options = {}) {
     // ─── 8. Email ────────────────────────────────────────────────────────
     currentPhase = 'fase5-email';
     console.log('\n📋 [5/16] Email...');
-    
+
     // Portal usa placeholder="E-mail"
     const emailField = byPH('E-mail');
+    let emailToUse = data.email;
     if (await emailField.count() > 0) {
-      await fillRequiredField(emailField, data.email, 'Email');
+      await fillRequiredField(emailField, emailToUse, 'Email');
     } else {
       const emailFallback = page.locator('input[name="email"], input[placeholder*="email" i]').first();
       if (await emailFallback.count() > 0) {
-        await fillRequiredField(emailFallback, data.email, 'Email');
+        await fillRequiredField(emailFallback, emailToUse, 'Email');
       } else {
         throw new Error('Campo Email não encontrado no portal');
       }
     }
-    await delay(500);
-    
+    await delay(800);
+
+    // ─── 8b. v11: detectar email DUPLICADO e aplicar fallback automático ─
+    // Portal valida unicidade: "Este email já está cadastrado para outro cliente"
+    currentPhase = 'fase5b-email-dup-check';
+    await logPhase(customerId, 'fase5b-email-dup-check', 'started');
+    {
+      const dupCount = await page.locator('text=/(j[áa]\\s*est[áa]\\s*cadastrad)|(email.*j[áa].*cadastrad)/i').count().catch(() => 0);
+      if (dupCount > 0) {
+        const cpfDigits = String(data.cpfDigits || '').replace(/\D/g, '');
+        const fallback = `${cpfDigits || Date.now()}@temp.igreen.com.br`;
+        console.warn(`   ⚠️  Email duplicado detectado — aplicando fallback: ${fallback}`);
+        const refield = byPH('E-mail');
+        if (await refield.count() > 0) {
+          await refield.click();
+          await refield.fill('');
+          await refield.type(fallback, { delay: 50 });
+          emailToUse = fallback;
+          await logPhase(customerId, 'fase5b-email-dup-check', 'warn', { message: `Email duplicado → fallback ${fallback}` });
+          await delay(800);
+        }
+      } else {
+        await logPhase(customerId, 'fase5b-email-dup-check', 'ok');
+      }
+    }
+
     // Confirmar email
     let confirmEmail = byPH('Confirme seu E-mail');
     if (await confirmEmail.count() === 0) confirmEmail = byPHPartial('Confirme seu E-mail');
     if (await confirmEmail.count() > 0) {
-      await fillRequiredField(confirmEmail, data.email, 'Confirmação Email');
+      await fillRequiredField(confirmEmail, emailToUse, 'Confirmação Email');
     } else {
       throw new Error('Campo de confirmação de email não encontrado no portal');
     }
