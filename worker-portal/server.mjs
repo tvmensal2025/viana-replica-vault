@@ -849,7 +849,7 @@ app.get('/health', (req, res) => {
   res.json({ 
     status: 'ok',
     service: 'worker-portal',
-    version: '5.1.0',
+    version: process.env.WORKER_VERSION || '5.1.0',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     memory: process.memoryUsage(),
@@ -859,6 +859,40 @@ app.get('/health', (req, res) => {
     currentJob: status.currentJob,
   });
 });
+
+//
+// GET /debug/version - Confirma se rebuild v10.1 foi aplicado
+///
+app.get('/debug/version', async (req, res) => {
+  let hasPoppler = false;
+  let popplerVersion = null;
+  try {
+    const { execSync } = await import('child_process');
+    const out = execSync('pdftoppm -v 2>&1 || true', { encoding: 'utf-8' }).trim();
+    hasPoppler = out.toLowerCase().includes('pdftoppm') || out.toLowerCase().includes('poppler');
+    popplerVersion = out.split('\n')[0] || null;
+  } catch (_) {}
+
+  let hasPhaseLogger = false;
+  try {
+    const { existsSync } = await import('fs');
+    hasPhaseLogger = existsSync('./phase-logger.mjs');
+  } catch (_) {}
+
+  res.json({
+    worker_version: process.env.WORKER_VERSION || '5.1.0',
+    expected_version: 'v10.1-2026.04.18',
+    is_v10_or_newer: (process.env.WORKER_VERSION || '').startsWith('v10'),
+    has_poppler: hasPoppler,
+    poppler_version: popplerVersion,
+    has_phase_logger: hasPhaseLogger,
+    has_findFieldFast: true,
+    confirme_celular_optional: true,
+    node_version: process.version,
+    timestamp: new Date().toISOString(),
+  });
+});
+
 
 //
 // Limpar códigos OTP expirados
