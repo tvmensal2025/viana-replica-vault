@@ -1310,54 +1310,43 @@ export async function executarAutomacao(customerId, options = {}) {
     }
     
     // ─── 7. WhatsApp ─────────────────────────────────────────────────────
-    // CONFIRMADO via mapeamento ao vivo (17/04/2026):
-    // Após CPF auto-preencher Nome+DataNasc, aparecem 2 campos:
-    //   - "Número do seu WhatsApp" (placeholder)
-    //   - "Confirme seu celular"   (placeholder)
+    // CONFIRMADO via mapeamento ao vivo (18/04/2026):
+    // Após CPF auto-preencher Nome+DataNasc, aparecem 2 campos type="text":
+    //   - placeholder="Número do seu WhatsApp"
+    //   - placeholder="Confirme seu celular"
     // AMBOS são obrigatórios e devem receber o MESMO valor.
+    // IMPORTANTE: NÃO são type="tel" — buscar por placeholder exato é o método mais confiável.
     currentPhase = 'fase4-whatsapp';
     console.log('\n📋 [4/16] WhatsApp + Confirmação...');
 
     await logPhase(customerId, 'fase4-whatsapp', 'started');
     const waStart = Date.now();
-    const waHandle = await findFieldFast(page, {
-      keywords: ['whatsapp', 'celular', 'telefone'],
-      type: 'tel',
-      exclude: ['confirme', 'confirmar', 'confirmação'],
-    }, 12000);
-    const waElapsed = Date.now() - waStart;
 
-    let phoneField = null;
-    if (waHandle) {
-      const meta = await waHandle.evaluate((el) => ({
-        placeholder: el.getAttribute('placeholder') || '',
-        name: el.getAttribute('name') || '',
-        id: el.getAttribute('id') || '',
-      })).catch(() => null);
-      // IMPORTANTE: usar [id="..."] em vez de #id para suportar IDs do React 18 (ex: ":r5:")
-      const escAttr = (s) => String(s).replace(/"/g, '\\"');
-      if (meta?.placeholder) phoneField = page.locator(`input[placeholder="${escAttr(meta.placeholder)}"]`).first();
-      else if (meta?.id) phoneField = page.locator(`input[id="${escAttr(meta.id)}"]`).first();
-      else if (meta?.name) phoneField = page.locator(`input[name="${escAttr(meta.name)}"]`).first();
-    }
+    // 1. Tentar placeholder exato (mais confiável)
+    let phoneField = page.locator('input[placeholder="Número do seu WhatsApp"]').first();
 
-    if (!phoneField || await phoneField.count() === 0 || !await phoneField.isVisible().catch(() => false)) {
-      console.log('   ⏳ findFieldFast falhou, fallback para byPHPartial');
+    // 2. Aguardar até 8s o campo aparecer (o portal pode demorar a renderizar após CPF)
+    try {
+      await phoneField.waitFor({ state: 'visible', timeout: 8000 });
+    } catch (_) {
+      // 3. Fallback: placeholder parcial
+      console.log('   ⏳ Placeholder exato não achou, fallback parcial');
       phoneField = byPHPartial('WhatsApp');
       if (await phoneField.count() === 0) {
-        await page.evaluate(() => window.scrollBy(0, 200));
-        await delay(800);
-        phoneField = page.locator('input[type="tel"], input[name*="whats" i], input[placeholder*="WhatsApp" i], input[placeholder*="celular" i]').first();
+        phoneField = page.locator('input[placeholder*="celular" i]:not([placeholder*="onfirme" i])').first();
       }
     }
 
-    if (phoneField && await phoneField.count() > 0 && await phoneField.isVisible().catch(() => false)) {
+    const waElapsed = Date.now() - waStart;
+
+    if (await phoneField.count() > 0 && await phoneField.isVisible().catch(() => false)) {
       await fillRequiredField(phoneField, data.whatsapp, 'WhatsApp', 'digits');
-      await logPhase(customerId, 'fase4-whatsapp', 'ok', { message: `Detectado em ${waElapsed}ms`, duration_ms: waElapsed });
+      await logPhase(customerId, 'fase4-whatsapp', 'ok', { message: `Detectado em ${waElapsed}ms`, duration_ms: waElapsed, selector_used: 'input[placeholder="Número do seu WhatsApp"]' });
     } else {
       await screenshot(page, customerId, 'ERROR-whatsapp-nao-encontrado');
       await logPhase(customerId, 'fase4-whatsapp', 'failed', { message: 'WhatsApp field not found' });
       throw new Error('Campo WhatsApp não encontrado no portal');
+
     }
 
     await page.evaluate(() => { (document.activeElement)?.dispatchEvent(new Event('blur', { bubbles: true })); }).catch(() => {});
