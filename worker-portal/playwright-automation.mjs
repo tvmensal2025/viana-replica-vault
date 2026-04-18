@@ -583,7 +583,7 @@ async function prepararDocumento(url, label, cliente = null, instanceName = null
   return null;
 }
 
-async function prepararContaEnergia(cliente) {
+async function prepararContaEnergia(cliente, instanceName = null) {
   const url = cliente.electricity_bill_photo_url;
   if (url && url.startsWith('whapi-media:')) {
     try {
@@ -599,15 +599,15 @@ async function prepararContaEnergia(cliente) {
   if (url) {
     try {
       let outPath;
-      
+
       if (url.startsWith('data:')) {
         const isPdf = url.includes('application/pdf');
         const ext = isPdf ? 'pdf' : 'jpg';
         outPath = join(TMP_DIR, `conta-${Date.now()}.${ext}`);
         const base64 = url.replace(/^data:[^;]+;base64,/, '');
         writeFileSync(outPath, Buffer.from(base64, 'base64'));
-      } else {
-        const res = await fetch(url);
+      } else if (url.startsWith('http')) {
+        const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
         if (res.ok) {
           const ct = (res.headers.get('content-type') || '').toLowerCase();
           const ext = ct.includes('pdf') ? 'pdf' : 'jpg';
@@ -615,7 +615,7 @@ async function prepararContaEnergia(cliente) {
           writeFileSync(outPath, Buffer.from(await res.arrayBuffer()));
         }
       }
-      
+
       if (outPath && existsSync(outPath)) {
         console.log(`📄 Conta de energia baixada: ${outPath}`);
         return outPath;
@@ -624,8 +624,27 @@ async function prepararContaEnergia(cliente) {
       console.warn('⚠️  Erro ao baixar conta:', e.message);
     }
   }
-  
-  // Fallback: criar PDF mínimo
+
+  // 🆘 Fallbacks: Base64 inline → Evolution API
+  const inlineB64 = cliente.bill_base64;
+  if (inlineB64 && inlineB64.length > 100) {
+    try {
+      const isPdf = inlineB64.startsWith('JVBERi');
+      const ext = isPdf ? 'pdf' : 'jpg';
+      const outPath = join(TMP_DIR, `conta-inline-${Date.now()}.${ext}`);
+      writeFileSync(outPath, Buffer.from(inlineB64, 'base64'));
+      console.log(`   ✅ [conta] Recuperada do Base64 inline do banco`);
+      return outPath;
+    } catch (e) {
+      console.warn(`   ⚠️  [conta] Falha ao decodar Base64 inline: ${e.message}`);
+    }
+  }
+  if (cliente.bill_message_id && instanceName) {
+    const evoPath = await downloadMediaViaEvolution(cliente.bill_message_id, instanceName, 'conta');
+    if (evoPath) return evoPath;
+  }
+
+  // Fallback final: PDF mínimo (portal exige um arquivo qualquer no campo)
   const pdfPath = join(FIXTURES_DIR, 'conta-energia.pdf');
   if (!existsSync(pdfPath)) {
     const pdfContent = '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]>>endobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000062 00000 n \n0000000115 00000 n \ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n206\n%%EOF';
