@@ -1275,9 +1275,11 @@ export async function executarAutomacao(customerId, options = {}) {
               id: el.getAttribute('id') || '',
             })).catch(() => null);
             let nomeLoc = null;
-            if (meta?.placeholder) nomeLoc = page.locator(`input[placeholder="${meta.placeholder}"]`).first();
-            else if (meta?.id) nomeLoc = page.locator(`#${meta.id}`).first();
-            else if (meta?.name) nomeLoc = page.locator(`input[name="${meta.name}"]`).first();
+            // IMPORTANTE: usar [id="..."] em vez de #id para suportar IDs do React 18 (ex: ":r5:")
+            const escAttr = (s) => String(s).replace(/"/g, '\\"');
+            if (meta?.placeholder) nomeLoc = page.locator(`input[placeholder="${escAttr(meta.placeholder)}"]`).first();
+            else if (meta?.id) nomeLoc = page.locator(`input[id="${escAttr(meta.id)}"]`).first();
+            else if (meta?.name) nomeLoc = page.locator(`input[name="${escAttr(meta.name)}"]`).first();
             if (nomeLoc && await nomeLoc.count() > 0) {
               await reactFill(page, nomeLoc, bancoNome);
               await logPhase(customerId, 'fase3c-nome-validation', 'ok', { message: `Nome preenchido manualmente: ${bancoNome}` });
