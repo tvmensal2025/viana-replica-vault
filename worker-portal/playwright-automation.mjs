@@ -1220,22 +1220,22 @@ export async function executarAutomacao(customerId, options = {}) {
     await page.evaluate(() => { (document.activeElement)?.dispatchEvent(new Event('blur', { bubbles: true })); }).catch(() => {});
     await delay(1200);
 
-    // Confirmar celular - OBRIGATÓRIO (HARD-FAIL se não encontrar)
+    // Confirmar celular - OPCIONAL (portal nem sempre exibe esse campo hoje)
+    // Se não aparecer em 4 tentativas (~8s), seguimos. O portal valida via SMS depois.
     let confirmPhone = byPHPartial('Confirme seu celular');
     let confirmPhoneFound = false;
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 4; i++) {
       if (await confirmPhone.count() > 0 && await confirmPhone.isVisible().catch(() => false)) {
         confirmPhoneFound = true;
         break;
       }
-      console.log(`   ⏳ Aguardando "Confirme seu celular" (tentativa ${i + 1}/8)...`);
-      // Re-disparar blur no campo WhatsApp para forçar render
+      console.log(`   ⏳ Aguardando "Confirme seu celular" (tentativa ${i + 1}/4)...`);
       try { await phoneField.evaluate((el) => el.dispatchEvent(new Event('blur', { bubbles: true }))); } catch (_) {}
       await page.evaluate(() => window.scrollBy(0, 150));
       await delay(1500);
       confirmPhone = byPHPartial('Confirme seu celular');
     }
-    
+
     if (confirmPhoneFound) {
       await fillRequiredField(confirmPhone, data.whatsapp, 'Confirmação WhatsApp', 'digits');
     } else {
@@ -1245,8 +1245,9 @@ export async function executarAutomacao(customerId, options = {}) {
       if (cnt >= 2) {
         await fillRequiredField(allPhoneInputs.nth(1), data.whatsapp, 'Confirmação WhatsApp (fallback)', 'digits');
       } else {
-        await screenshot(page, customerId, 'ERROR-confirme-celular-nao-encontrado');
-        throw new Error('Campo "Confirme seu celular" não apareceu no portal (8 tentativas após blur). Não posso avançar sem confirmar — o portal exigiria validação.');
+        // ⚠️ SOFT-WARN: portal não pediu confirmação — seguir adiante (validação por SMS depois)
+        console.warn('   ⚠️  [SOFT] Campo "Confirme seu celular" não apareceu — seguindo adiante (portal valida via SMS)');
+        await screenshot(page, customerId, 'WARN-confirme-celular-ausente');
       }
     }
     await delay(2500);
