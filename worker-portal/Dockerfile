@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 \
     libgbm1 libasound2 libpango-1.0-0 libcairo2 curl \
     xvfb x11vnc novnc websockify \
+    poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
 # Criar estrutura de diretórios

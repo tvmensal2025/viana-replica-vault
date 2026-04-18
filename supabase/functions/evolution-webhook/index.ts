@@ -617,9 +617,20 @@ Deno.serve(async (req) => {
             customerBirth: customer.data_nascimento,
             kind: "conta",
           });
-          updates.electricity_bill_photo_url = minioUrl || (fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending");
+          if (minioUrl) {
+            updates.electricity_bill_photo_url = minioUrl;
+            updates.media_storage = "minio";
+          } else {
+            // 🆘 FALLBACK: MinIO offline → salvar Base64 inline + messageId p/ worker re-baixar
+            console.warn("📦⚠️  MinIO offline — salvando conta como Base64 inline (fallback)");
+            updates.electricity_bill_photo_url = `data:${mime};base64,${fileBase64}`;
+            updates.bill_base64 = fileBase64;
+            updates.bill_message_id = messageId || null;
+            updates.media_storage = "inline";
+          }
         } else {
           updates.electricity_bill_photo_url = fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending";
+          updates.bill_message_id = messageId || null;
         }
         updates.conversation_step = "processando_ocr_conta";
 
@@ -832,13 +843,20 @@ Deno.serve(async (req) => {
             customerBirth: customer.data_nascimento,
             kind: "doc_frente",
           });
-          updates.document_front_url = minioUrl || (fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending");
-          // ⚠️ NÃO salvar `document_front_base64` no banco — é um payload gigante (~1MB)
-          // que estava causando lentidão e estouros. O OCR conjunto frente+verso para CNH
-          // não precisa porque CNH só processa a frente; para RG o verso é OCR'd quando
-          // chega e os campos faltantes são preenchidos pelo verso então.
+          if (minioUrl) {
+            updates.document_front_url = minioUrl;
+            updates.media_storage = "minio";
+          } else {
+            // 🆘 FALLBACK: MinIO offline → salvar Base64 inline + messageId p/ worker re-baixar
+            console.warn("📦⚠️  MinIO offline — salvando doc_frente como Base64 inline (fallback)");
+            updates.document_front_url = `data:${mime};base64,${fileBase64}`;
+            updates.document_front_base64 = fileBase64;
+            updates.media_message_id = messageId || null;
+            updates.media_storage = "inline";
+          }
         } else {
           updates.document_front_url = fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending";
+          updates.media_message_id = messageId || null;
         }
 
         // Detecção de incoerência: cliente escolheu "RG" mas mandou CNH (ou vice-versa)
@@ -926,7 +944,13 @@ Deno.serve(async (req) => {
             customerBirth: customer.data_nascimento,
             kind: "doc_verso",
           });
-          updates.document_back_url = minioUrl || (fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending");
+          if (minioUrl) {
+            updates.document_back_url = minioUrl;
+          } else {
+            // 🆘 FALLBACK: MinIO offline → salvar inline (verso é menor que frente)
+            console.warn("📦⚠️  MinIO offline — salvando doc_verso como Base64 inline (fallback)");
+            updates.document_back_url = `data:${mime};base64,${fileBase64}`;
+          }
         } else {
           updates.document_back_url = fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending";
         }

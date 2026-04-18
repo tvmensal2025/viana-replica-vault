@@ -423,14 +423,61 @@ async function convertPdfToJpg(pdfPath, label) {
   return pdfPath; // fallback: tenta original
 }
 
+// ─── Baixar mídia direta via Evolution API (fallback quando MinIO está offline) ─
+async function downloadMediaViaEvolution(messageId, instanceName, label) {
+  if (!messageId || !instanceName) return null;
+  try {
+    let evolutionUrl = (process.env.EVOLUTION_API_URL || '').replace(/\/$/, '');
+    let evolutionKey = process.env.EVOLUTION_API_KEY || '';
+    if (!evolutionUrl || !evolutionKey) {
+      const { data: rows } = await getSupabase().from('settings').select('key, value');
+      const s = {}; (rows || []).forEach(r => { s[r.key] = r.value; });
+      evolutionUrl = evolutionUrl || (s.evolution_api_url || '').replace(/\/$/, '');
+      evolutionKey = evolutionKey || s.evolution_api_key || '';
+    }
+    if (!evolutionUrl || !evolutionKey) {
+      console.warn(`   ⚠️  [${label}] Evolution não configurado — pulando fallback`);
+      return null;
+    }
+    console.log(`   📡 [${label}] Re-baixando via Evolution API (msgId=${messageId.substring(0, 16)}...)`);
+    const res = await fetch(`${evolutionUrl}/chat/getBase64FromMediaMessage/${instanceName}`, {
+      method: 'POST',
+      headers: { apikey: evolutionKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: { key: { id: messageId } }, convertToMp4: false }),
+    });
+    if (!res.ok) {
+      console.warn(`   ⚠️  [${label}] Evolution retornou ${res.status}`);
+      return null;
+    }
+    const data = await res.json();
+    const b64 = data?.base64;
+    const mime = (data?.mimetype || 'application/octet-stream').toLowerCase();
+    if (!b64 || b64.length < 100) return null;
+    const ext = mime.includes('pdf') ? 'pdf' : mime.includes('png') ? 'png' : 'jpg';
+    const outPath = join(TMP_DIR, `${label}-evo-${Date.now()}.${ext}`);
+    writeFileSync(outPath, Buffer.from(b64, 'base64'));
+    console.log(`   ✅ [${label}] Re-baixado via Evolution: ${outPath}`);
+    return outPath;
+  } catch (e) {
+    console.warn(`   ⚠️  [${label}] downloadMediaViaEvolution falhou: ${e.message}`);
+    return null;
+  }
+}
+
 // ─── Preparar arquivos de upload ──────────────────────────────────────────────
-async function prepararDocumento(url, label) {
+// Hierarquia (FAIL-FAST: nunca cai em fixture genérica para documento):
+//   1. URL HTTP do MinIO (se válida)
+//   2. data: URL Base64 já no campo *_url
+//   3. Base64 inline no banco (cliente.document_front_base64 / cliente.bill_base64)
+//   4. Re-baixar via Evolution API (cliente.media_message_id / cliente.bill_message_id)
+//   5. ABORT — devolve null e o caller decide (worker hoje aborta para doc-frente)
+async function prepararDocumento(url, label, cliente = null, instanceName = null) {
   // Tratar URLs inválidas (nao_aplicavel, vazio, etc.)
-  if (!url || url === 'nao_aplicavel' || url === 'null' || url === 'undefined' || url.trim() === '') {
+  if (!url || url === 'nao_aplicavel' || url === 'null' || url === 'undefined' || String(url).trim() === '') {
     console.log(`   ⚠️  ${label}: URL não aplicável, retornando null`);
     return null;
   }
-  // whapi-media:xxx → baixar via API Whapi
+  // whapi-media:xxx → baixar via API Whapi (legado)
   if (url.startsWith('whapi-media:')) {
     try {
       const mediaId = url.replace('whapi-media:', '').trim();
@@ -441,10 +488,11 @@ async function prepararDocumento(url, label) {
       console.warn(`⚠️  Erro ao baixar ${label} (Whapi): ${e.message}`);
     }
   }
+
   // Tentar baixar foto real do documento (URL HTTP ou data:)
   try {
     let outPath;
-    
+
     if (url.startsWith('data:')) {
       const isPdf = url.includes('application/pdf');
       const ext = isPdf ? 'pdf' : 'jpg';
@@ -452,18 +500,22 @@ async function prepararDocumento(url, label) {
       const base64 = url.replace(/^data:[^;]+;base64,/, '');
       writeFileSync(outPath, Buffer.from(base64, 'base64'));
     } else if (url.startsWith('http')) {
-      const res = await fetch(url);
+      const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
       if (res.ok) {
         const ct = (res.headers.get('content-type') || '').toLowerCase();
         const ext = ct.includes('pdf') ? 'pdf' : 'jpg';
         outPath = join(TMP_DIR, `${label}-${Date.now()}.${ext}`);
         writeFileSync(outPath, Buffer.from(await res.arrayBuffer()));
+      } else {
+        console.warn(`   ⚠️  ${label}: HTTP ${res.status} ao baixar URL primária`);
       }
+    } else {
+      // url == "evolution-media:pending" ou outra string inesperada
+      console.warn(`   ⚠️  ${label}: URL não-HTTP/data: "${String(url).substring(0, 60)}"`);
     }
-    
+
     if (outPath && existsSync(outPath)) {
       console.log(`📄 ${label} baixado: ${outPath}`);
-      // Portal só aceita imagem para documento pessoal — converter PDF
       if (outPath.endsWith('.pdf') && (label === 'doc-frente' || label === 'doc-verso')) {
         return await convertPdfToJpg(outPath, label);
       }
@@ -472,17 +524,66 @@ async function prepararDocumento(url, label) {
   } catch (e) {
     console.warn(`⚠️  Erro ao baixar ${label}: ${e.message}`);
   }
-  
-  // Fallback: criar JPEG placeholder
-  const docPath = join(FIXTURES_DIR, 'documento.jpg');
-  if (!existsSync(docPath)) {
-    writeFileSync(docPath, MINIMAL_JPEG);
-    console.log(`📄 ${label} placeholder criado`);
+
+  // 🆘 FALLBACK 1: Base64 inline no banco
+  if (cliente) {
+    const inlineB64 = label === 'doc-frente' ? cliente.document_front_base64
+                    : label === 'conta'      ? cliente.bill_base64
+                    : null;
+    if (inlineB64 && inlineB64.length > 100) {
+      try {
+        // Heurística simples para PDF (header %PDF em base64 começa com "JVBERi")
+        const isPdf = inlineB64.startsWith('JVBERi');
+        const ext = isPdf ? 'pdf' : 'jpg';
+        const outPath = join(TMP_DIR, `${label}-inline-${Date.now()}.${ext}`);
+        writeFileSync(outPath, Buffer.from(inlineB64, 'base64'));
+        console.log(`   ✅ [${label}] Recuperado do Base64 inline do banco`);
+        if (isPdf && (label === 'doc-frente' || label === 'doc-verso')) {
+          return await convertPdfToJpg(outPath, label);
+        }
+        return outPath;
+      } catch (e) {
+        console.warn(`   ⚠️  [${label}] Falha ao decodar Base64 inline: ${e.message}`);
+      }
+    }
   }
-  return docPath;
+
+  // 🆘 FALLBACK 2: Re-baixar via Evolution API
+  if (cliente && instanceName) {
+    const msgId = label === 'doc-frente' ? cliente.media_message_id
+                : label === 'conta'      ? cliente.bill_message_id
+                : null;
+    if (msgId) {
+      const evoPath = await downloadMediaViaEvolution(msgId, instanceName, label);
+      if (evoPath) {
+        if (evoPath.endsWith('.pdf') && (label === 'doc-frente' || label === 'doc-verso')) {
+          return await convertPdfToJpg(evoPath, label);
+        }
+        return evoPath;
+      }
+    }
+  }
+
+  // 🛑 FAIL-FAST: para documento pessoal, NUNCA usar fixture genérico
+  if (label === 'doc-frente') {
+    console.error(`   ❌ [${label}] Não foi possível recuperar mídia real (URL/Base64/Evolution todos falharam)`);
+    return null;
+  }
+
+  // Para verso (RG) e conta, ainda permitimos placeholder porque o worker decide depois
+  if (label === 'doc-verso') {
+    const docPath = join(FIXTURES_DIR, 'documento.jpg');
+    if (!existsSync(docPath)) {
+      writeFileSync(docPath, MINIMAL_JPEG);
+    }
+    console.log(`📄 ${label} placeholder criado (verso opcional)`);
+    return docPath;
+  }
+
+  return null;
 }
 
-async function prepararContaEnergia(cliente) {
+async function prepararContaEnergia(cliente, instanceName = null) {
   const url = cliente.electricity_bill_photo_url;
   if (url && url.startsWith('whapi-media:')) {
     try {
@@ -498,15 +599,15 @@ async function prepararContaEnergia(cliente) {
   if (url) {
     try {
       let outPath;
-      
+
       if (url.startsWith('data:')) {
         const isPdf = url.includes('application/pdf');
         const ext = isPdf ? 'pdf' : 'jpg';
         outPath = join(TMP_DIR, `conta-${Date.now()}.${ext}`);
         const base64 = url.replace(/^data:[^;]+;base64,/, '');
         writeFileSync(outPath, Buffer.from(base64, 'base64'));
-      } else {
-        const res = await fetch(url);
+      } else if (url.startsWith('http')) {
+        const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
         if (res.ok) {
           const ct = (res.headers.get('content-type') || '').toLowerCase();
           const ext = ct.includes('pdf') ? 'pdf' : 'jpg';
@@ -514,7 +615,7 @@ async function prepararContaEnergia(cliente) {
           writeFileSync(outPath, Buffer.from(await res.arrayBuffer()));
         }
       }
-      
+
       if (outPath && existsSync(outPath)) {
         console.log(`📄 Conta de energia baixada: ${outPath}`);
         return outPath;
@@ -523,8 +624,27 @@ async function prepararContaEnergia(cliente) {
       console.warn('⚠️  Erro ao baixar conta:', e.message);
     }
   }
-  
-  // Fallback: criar PDF mínimo
+
+  // 🆘 Fallbacks: Base64 inline → Evolution API
+  const inlineB64 = cliente.bill_base64;
+  if (inlineB64 && inlineB64.length > 100) {
+    try {
+      const isPdf = inlineB64.startsWith('JVBERi');
+      const ext = isPdf ? 'pdf' : 'jpg';
+      const outPath = join(TMP_DIR, `conta-inline-${Date.now()}.${ext}`);
+      writeFileSync(outPath, Buffer.from(inlineB64, 'base64'));
+      console.log(`   ✅ [conta] Recuperada do Base64 inline do banco`);
+      return outPath;
+    } catch (e) {
+      console.warn(`   ⚠️  [conta] Falha ao decodar Base64 inline: ${e.message}`);
+    }
+  }
+  if (cliente.bill_message_id && instanceName) {
+    const evoPath = await downloadMediaViaEvolution(cliente.bill_message_id, instanceName, 'conta');
+    if (evoPath) return evoPath;
+  }
+
+  // Fallback final: PDF mínimo (portal exige um arquivo qualquer no campo)
   const pdfPath = join(FIXTURES_DIR, 'conta-energia.pdf');
   if (!existsSync(pdfPath)) {
     const pdfContent = '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]>>endobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000062 00000 n \n0000000115 00000 n \ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n206\n%%EOF';
@@ -789,13 +909,32 @@ export async function executarAutomacao(customerId, options = {}) {
     if (faltando.length > 0) throw new Error(`Campos obrigatórios faltando: ${faltando.join(', ')}`);
     console.log('✅ Dados validados');
     
-    // Preparar arquivos de upload
-    const docFrentePath = await prepararDocumento(cliente.document_front_url, 'doc-frente');
-    const docVersoPath = await prepararDocumento(cliente.document_back_url, 'doc-verso');
-    const contaPath = await prepararContaEnergia(cliente);
+    // Buscar instanceName do consultor (necessário p/ fallback Evolution API)
+    let instanceName = null;
+    if (cliente.consultant_id) {
+      try {
+        const { data: inst } = await getSupabase()
+          .from('whatsapp_instances').select('instance_name')
+          .eq('consultant_id', cliente.consultant_id).limit(1).maybeSingle();
+        instanceName = inst?.instance_name || null;
+      } catch (_) {}
+    }
+
+    // Preparar arquivos de upload (com hierarquia URL → Base64 → Evolution → fail)
+    const docFrentePath = await prepararDocumento(cliente.document_front_url, 'doc-frente', cliente, instanceName);
+    const docVersoPath = await prepararDocumento(cliente.document_back_url, 'doc-verso', cliente, instanceName);
+    const contaPath = await prepararContaEnergia(cliente, instanceName);
     console.log(`📄 Doc frente: ${docFrentePath}`);
     console.log(`📄 Doc verso: ${docVersoPath}`);
     console.log(`📄 Conta: ${contaPath}`);
+
+    // 🛑 FAIL-FAST: se não conseguimos a frente do documento, NÃO abrir browser
+    if (!docFrentePath) {
+      const msg = 'Documento (frente) indisponível: MinIO offline + Base64 inline ausente + Evolution API sem messageId. Cliente precisa reenviar a foto pelo WhatsApp.';
+      console.error(`❌ ${msg}`);
+      await atualizarStatus(customerId, 'awaiting_document_resend', msg);
+      throw new Error(msg);
+    }
     
     await atualizarStatus(customerId, 'portal_submitting');
     
@@ -1081,22 +1220,22 @@ export async function executarAutomacao(customerId, options = {}) {
     await page.evaluate(() => { (document.activeElement)?.dispatchEvent(new Event('blur', { bubbles: true })); }).catch(() => {});
     await delay(1200);
 
-    // Confirmar celular - OBRIGATÓRIO (HARD-FAIL se não encontrar)
+    // Confirmar celular - OPCIONAL (portal nem sempre exibe esse campo hoje)
+    // Se não aparecer em 4 tentativas (~8s), seguimos. O portal valida via SMS depois.
     let confirmPhone = byPHPartial('Confirme seu celular');
     let confirmPhoneFound = false;
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 4; i++) {
       if (await confirmPhone.count() > 0 && await confirmPhone.isVisible().catch(() => false)) {
         confirmPhoneFound = true;
         break;
       }
-      console.log(`   ⏳ Aguardando "Confirme seu celular" (tentativa ${i + 1}/8)...`);
-      // Re-disparar blur no campo WhatsApp para forçar render
+      console.log(`   ⏳ Aguardando "Confirme seu celular" (tentativa ${i + 1}/4)...`);
       try { await phoneField.evaluate((el) => el.dispatchEvent(new Event('blur', { bubbles: true }))); } catch (_) {}
       await page.evaluate(() => window.scrollBy(0, 150));
       await delay(1500);
       confirmPhone = byPHPartial('Confirme seu celular');
     }
-    
+
     if (confirmPhoneFound) {
       await fillRequiredField(confirmPhone, data.whatsapp, 'Confirmação WhatsApp', 'digits');
     } else {
@@ -1106,8 +1245,9 @@ export async function executarAutomacao(customerId, options = {}) {
       if (cnt >= 2) {
         await fillRequiredField(allPhoneInputs.nth(1), data.whatsapp, 'Confirmação WhatsApp (fallback)', 'digits');
       } else {
-        await screenshot(page, customerId, 'ERROR-confirme-celular-nao-encontrado');
-        throw new Error('Campo "Confirme seu celular" não apareceu no portal (8 tentativas após blur). Não posso avançar sem confirmar — o portal exigiria validação.');
+        // ⚠️ SOFT-WARN: portal não pediu confirmação — seguir adiante (validação por SMS depois)
+        console.warn('   ⚠️  [SOFT] Campo "Confirme seu celular" não apareceu — seguindo adiante (portal valida via SMS)');
+        await screenshot(page, customerId, 'WARN-confirme-celular-ausente');
       }
     }
     await delay(2500);

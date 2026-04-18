@@ -377,6 +377,8 @@ export type Database = {
           andamento_igreen: string | null
           assinatura_cliente: string | null
           assinatura_igreen: string | null
+          bill_base64: string | null
+          bill_message_id: string | null
           cashback: string | null
           cep: string | null
           consultant_id: string | null
@@ -408,6 +410,8 @@ export type Database = {
           igreen_link: string | null
           link_assinatura: string | null
           media_consumo: number | null
+          media_message_id: string | null
+          media_storage: string | null
           name: string | null
           nivel_licenciado: string | null
           nome_mae: string | null
@@ -440,6 +444,8 @@ export type Database = {
           andamento_igreen?: string | null
           assinatura_cliente?: string | null
           assinatura_igreen?: string | null
+          bill_base64?: string | null
+          bill_message_id?: string | null
           cashback?: string | null
           cep?: string | null
           consultant_id?: string | null
@@ -471,6 +477,8 @@ export type Database = {
           igreen_link?: string | null
           link_assinatura?: string | null
           media_consumo?: number | null
+          media_message_id?: string | null
+          media_storage?: string | null
           name?: string | null
           nivel_licenciado?: string | null
           nome_mae?: string | null
@@ -503,6 +511,8 @@ export type Database = {
           andamento_igreen?: string | null
           assinatura_cliente?: string | null
           assinatura_igreen?: string | null
+          bill_base64?: string | null
+          bill_message_id?: string | null
           cashback?: string | null
           cep?: string | null
           consultant_id?: string | null
@@ -534,6 +544,8 @@ export type Database = {
           igreen_link?: string | null
           link_assinatura?: string | null
           media_consumo?: number | null
+          media_message_id?: string | null
+          media_storage?: string | null
           name?: string | null
           nivel_licenciado?: string | null
           nome_mae?: string | null
