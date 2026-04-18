@@ -1408,83 +1408,72 @@ export async function executarAutomacao(customerId, options = {}) {
       await screenshot(page, customerId, '04b-apos-novo-cadastro');
     }
     
-    // ─── 7. WhatsApp ─────────────────────────────────────────────────────
-    // CONFIRMADO via mapeamento ao vivo (18/04/2026):
-    // Após CPF auto-preencher Nome+DataNasc, aparecem 2 campos type="text":
-    //   - placeholder="Número do seu WhatsApp"
-    //   - placeholder="Confirme seu celular"
-    // AMBOS são obrigatórios e devem receber o MESMO valor.
-    // IMPORTANTE: NÃO são type="tel" — buscar por placeholder exato é o método mais confiável.
+    // ─── 7. WhatsApp + Confirmação (BULLETPROOF) ─────────────────────────
+    // Usa bulletproofType: re-resolve o input por placeholder a CADA tentativa,
+    // foca via click(force)+focus(), digita via page.keyboard. NUNCA falha por
+    // re-render do React. Até 5 retries × 5s = 25s pior caso por campo.
     currentPhase = 'fase4-whatsapp';
-    console.log('\n📋 [4/16] WhatsApp + Confirmação...');
-
+    console.log('\n📋 [4/16] WhatsApp (bulletproof)...');
     await logPhase(customerId, 'fase4-whatsapp', 'started');
     const waStart = Date.now();
 
-    // 1. Tentar placeholder exato (mais confiável)
-    let phoneField = page.locator('input[placeholder="Número do seu WhatsApp"]').first();
-
-    // 2. Aguardar até 8s o campo aparecer (o portal pode demorar a renderizar após CPF)
     try {
-      await phoneField.waitFor({ state: 'visible', timeout: 8000 });
-    } catch (_) {
-      // 3. Fallback: placeholder parcial
-      console.log('   ⏳ Placeholder exato não achou, fallback parcial');
-      phoneField = byPHPartial('WhatsApp');
-      if (await phoneField.count() === 0) {
-        phoneField = page.locator('input[placeholder*="celular" i]:not([placeholder*="onfirme" i])').first();
+      await bulletproofType(page, 'Número do seu WhatsApp', data.whatsapp, {
+        label: 'WhatsApp',
+        maxAttempts: 5,
+        appearTimeoutMs: 30000,
+      });
+      await logPhase(customerId, 'fase4-whatsapp', 'ok', {
+        duration_ms: Date.now() - waStart,
+        selector_used: 'input[placeholder="Número do seu WhatsApp"]',
+      });
+    } catch (e) {
+      // Fallback: 1º input que não seja "Confirme"
+      console.warn(`   ⚠️  bulletproof WhatsApp falhou: ${e.message} — fallback genérico`);
+      const fallback = page.locator('input[placeholder*="WhatsApp" i], input[placeholder*="celular" i]:not([placeholder*="onfirme" i])').first();
+      if (await fallback.count() > 0) {
+        await fallback.click({ force: true }).catch(() => {});
+        await fallback.evaluate((el) => el.focus()).catch(() => {});
+        await page.keyboard.type(String(data.whatsapp).replace(/\D/g, ''), { delay: 80 });
+        await page.keyboard.press('Tab').catch(() => {});
+        await logPhase(customerId, 'fase4-whatsapp', 'warn', { message: 'fallback genérico aplicado' });
+      } else {
+        await screenshot(page, customerId, 'ERROR-whatsapp');
+        await logPhase(customerId, 'fase4-whatsapp', 'failed', { message: e.message });
+        throw e;
       }
     }
+    await delay(600);
 
-    const waElapsed = Date.now() - waStart;
-
-    if (await phoneField.count() > 0 && await phoneField.isVisible().catch(() => false)) {
-      await fillRequiredField(phoneField, data.whatsapp, 'WhatsApp', 'digits');
-      await logPhase(customerId, 'fase4-whatsapp', 'ok', { message: `Detectado em ${waElapsed}ms`, duration_ms: waElapsed, selector_used: 'input[placeholder="Número do seu WhatsApp"]' });
-    } else {
-      await screenshot(page, customerId, 'ERROR-whatsapp-nao-encontrado');
-      await logPhase(customerId, 'fase4-whatsapp', 'failed', { message: 'WhatsApp field not found' });
-      throw new Error('Campo WhatsApp não encontrado no portal');
-
-    }
-
-    await page.evaluate(() => { (document.activeElement)?.dispatchEvent(new Event('blur', { bubbles: true })); }).catch(() => {});
-    await delay(800);
-
-    // Confirme celular - OPCIONAL (3 tentativas × 1s = ~3s pior caso)
+    // Confirme celular — mesmo padrão bulletproof
     currentPhase = 'fase4b-confirme-celular';
     await logPhase(customerId, 'fase4b-confirme-celular', 'started');
-    let confirmPhone = byPH('Confirme seu celular');
-    if (await confirmPhone.count() === 0) confirmPhone = byPHPartial('Confirme seu celular');
-    let confirmPhoneFound = false;
-    for (let i = 0; i < 3; i++) {
-      if (await confirmPhone.count() > 0 && await confirmPhone.isVisible().catch(() => false)) {
-        confirmPhoneFound = true;
-        break;
-      }
-      console.log(`   ⏳ Aguardando "Confirme seu celular" (tentativa ${i + 1}/3, soft)...`);
-      try { await phoneField.evaluate((el) => el.dispatchEvent(new Event('blur', { bubbles: true }))); } catch (_) {}
-      await delay(1000);
-      confirmPhone = byPH('Confirme seu celular');
-      if (await confirmPhone.count() === 0) confirmPhone = byPHPartial('Confirme seu celular');
-    }
-
-    if (confirmPhoneFound) {
-      await fillRequiredField(confirmPhone, data.whatsapp, 'Confirmação WhatsApp', 'digits');
-      await logPhase(customerId, 'fase4b-confirme-celular', 'ok');
-    } else {
-      const allPhoneInputs = page.locator('input[type="tel"], input[placeholder*="celular" i], input[placeholder*="WhatsApp" i]');
-      const cnt = await allPhoneInputs.count();
-      if (cnt >= 2) {
-        await fillRequiredField(allPhoneInputs.nth(1), data.whatsapp, 'Confirmação WhatsApp (fallback)', 'digits');
-        await logPhase(customerId, 'fase4b-confirme-celular', 'ok', { message: '2º input tel (fallback)' });
+    const cStart = Date.now();
+    try {
+      await bulletproofType(page, 'Confirme seu celular', data.whatsapp, {
+        label: 'Confirme celular',
+        maxAttempts: 5,
+        appearTimeoutMs: 15000,
+      });
+      await logPhase(customerId, 'fase4b-confirme-celular', 'ok', { duration_ms: Date.now() - cStart });
+    } catch (e) {
+      // Fallback: 2º input de telefone na página
+      console.warn(`   ⚠️  bulletproof Confirme falhou: ${e.message} — fallback nth(1)`);
+      const all = page.locator('input[placeholder*="celular" i], input[placeholder*="WhatsApp" i]');
+      if ((await all.count()) >= 2) {
+        const second = all.nth(1);
+        await second.click({ force: true }).catch(() => {});
+        await second.evaluate((el) => el.focus()).catch(() => {});
+        await page.keyboard.type(String(data.whatsapp).replace(/\D/g, ''), { delay: 80 });
+        await page.keyboard.press('Tab').catch(() => {});
+        await logPhase(customerId, 'fase4b-confirme-celular', 'warn', { message: 'fallback nth(1)' });
       } else {
-        await screenshot(page, customerId, 'ERROR-confirme-celular-nao-encontrado');
-        await logPhase(customerId, 'fase4b-confirme-celular', 'failed', { message: 'Campo obrigatório não encontrado' });
-        throw new Error('Campo obrigatório não encontrado no portal: Confirme seu celular');
+        await screenshot(page, customerId, 'ERROR-confirme-celular');
+        await logPhase(customerId, 'fase4b-confirme-celular', 'failed', { message: e.message });
+        throw e;
       }
     }
-    await delay(1500);
+    await delay(800);
 
 
     // ─── 8. Email ────────────────────────────────────────────────────────
