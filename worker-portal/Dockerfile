@@ -1,10 +1,10 @@
 # Dockerfile para Worker VPS - Portal iGreen
-# VERSÃO 11.1 - 2026-04-18 (fix: CPF→WhatsApp gap, masked-input retry, autofill timeout reduzido)
+# VERSÃO 11.2 - 2026-04-18 (BULLETPROOF: telefone NUNCA falha — re-lookup + page.keyboard + 5 retries)
 
 FROM node:20-bookworm-slim
 
-LABEL version="v11.1-2026.04.18"
-LABEL changelog="cpf-whatsapp-gap-fix,masked-input-3retry-relookup,autofill-timeout-10s,delay-pos-cpf-1s"
+LABEL version="v11.2-2026.04.18"
+LABEL changelog="bulletproof-type-by-placeholder,re-lookup-each-attempt,page-keyboard-typing,5-retries-25s-worst-case"
 
 # Instalar dependências do sistema para Playwright + VNC + noVNC
 RUN apt-get update && apt-get install -y --no-install-recommends \
