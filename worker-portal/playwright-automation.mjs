@@ -19,6 +19,7 @@ import { mkdir, writeFile } from 'fs/promises';
 import { existsSync, writeFileSync, readFileSync, copyFileSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
+import { logPhase, WORKER_VERSION_TAG } from './phase-logger.mjs';
 
 const CONSULTOR_ID_FALLBACK = process.env.IGREEN_CONSULTOR_ID || '124170';
 // PORTAL_URL agora é gerado dinamicamente por cliente (usa igreen_id do consultor)
