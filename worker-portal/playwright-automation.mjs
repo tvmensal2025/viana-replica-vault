@@ -1238,13 +1238,63 @@ export async function executarAutomacao(customerId, options = {}) {
     // Nome e Data de Nascimento. Esses valores SÃO A FONTE DA VERDADE — nunca
     // sobrescrever com dados do banco/OCR (que podem estar errados).
     currentPhase = 'fase3b-autofill';
+    await logPhase(customerId, 'fase3b-autofill', 'started');
     console.log('   ⏳ [AUTO-FILL] Aguardando portal preencher Nome + DataNasc via Receita...');
     const autofill = await waitForAutoFill(page, 18000);
     if (autofill.nome || autofill.nascimento) {
       console.log(`   📥 [AUTO-FILL] Portal preencheu: Nome="${autofill.nome || '(vazio)'}" DataNasc="${autofill.nascimento || '(vazio)'}"`);
+      await logPhase(customerId, 'fase3b-autofill', 'ok', { message: `Nome="${autofill.nome || ''}" DataNasc="${autofill.nascimento || ''}"` });
     } else {
       console.warn('   ⚠️  [AUTO-FILL] Portal NÃO auto-preencheu (CPF talvez sem registro na Receita). Worker continuará.');
+      await logPhase(customerId, 'fase3b-autofill', 'warn', { message: 'Receita não retornou dados' });
     }
+
+    // ─── 6a-bis. VALIDAR NOME (crítico v10.1) ───────────────────────────
+    currentPhase = 'fase3c-nome-validation';
+    await logPhase(customerId, 'fase3c-nome-validation', 'started');
+    {
+      const portalNomeAtual = (autofill.nome || '').trim();
+      const bancoNome = String(data.nomeCompleto || '').trim();
+      if (!portalNomeAtual && !bancoNome) {
+        const msg = 'Nome ausente: portal não auto-preencheu E banco vazio. Cliente precisa enviar CPF correto.';
+        await logPhase(customerId, 'fase3c-nome-validation', 'aborted', { message: msg });
+        await atualizarStatus(customerId, 'awaiting_cpf_review', msg);
+        throw new Error(msg);
+      }
+      if (!portalNomeAtual && bancoNome) {
+        console.log(`   🆘 Portal sem nome — tentando preencher manualmente: "${bancoNome}"`);
+        try {
+          const nomeHandle = await findFieldFast(page, {
+            keywords: ['nome', 'fullname', 'titular'],
+            exclude: ['mãe', 'pai', 'usuário', 'fantasia', 'arquivo'],
+          }, 4000);
+          if (nomeHandle) {
+            const meta = await nomeHandle.evaluate((el) => ({
+              placeholder: el.getAttribute('placeholder') || '',
+              name: el.getAttribute('name') || '',
+              id: el.getAttribute('id') || '',
+            })).catch(() => null);
+            let nomeLoc = null;
+            if (meta?.placeholder) nomeLoc = page.locator(`input[placeholder="${meta.placeholder}"]`).first();
+            else if (meta?.id) nomeLoc = page.locator(`#${meta.id}`).first();
+            else if (meta?.name) nomeLoc = page.locator(`input[name="${meta.name}"]`).first();
+            if (nomeLoc && await nomeLoc.count() > 0) {
+              await reactFill(page, nomeLoc, bancoNome);
+              await logPhase(customerId, 'fase3c-nome-validation', 'ok', { message: `Nome preenchido manualmente: ${bancoNome}` });
+            } else {
+              await logPhase(customerId, 'fase3c-nome-validation', 'warn', { message: 'Campo nome não localizado' });
+            }
+          } else {
+            await logPhase(customerId, 'fase3c-nome-validation', 'warn', { message: 'findFieldFast não achou nome' });
+          }
+        } catch (e) {
+          await logPhase(customerId, 'fase3c-nome-validation', 'warn', { message: `Erro: ${e.message}` });
+        }
+      } else {
+        await logPhase(customerId, 'fase3c-nome-validation', 'ok', { message: `Nome OK: "${portalNomeAtual}"` });
+      }
+    }
+
 
     // ─── 6b. TRATAR CADASTRO EXISTENTE ────────────────────────────────────
     currentPhase = 'cadastro-existente';
