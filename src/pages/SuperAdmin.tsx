@@ -18,6 +18,7 @@ import { AIKnowledgePanel } from "@/components/superadmin/AIKnowledgePanel";
 import { CrmAnalyticsTab } from "@/components/superadmin/CrmAnalyticsTab";
 import { AuditLogPanel } from "@/components/superadmin/AuditLogPanel";
 import { BotFunnelPanel } from "@/components/superadmin/BotFunnelPanel";
+import { WorkerPhaseTimeline } from "@/components/superadmin/WorkerPhaseTimeline";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { logAdminAction } from "@/hooks/useAdminAudit";
 
@@ -52,7 +53,7 @@ const SuperAdmin = () => {
   const [loadingData, setLoadingData] = useState(true);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [resettingId, setResettingId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"consultores" | "ia" | "crm" | "auditoria" | "funil">("consultores");
+  const [activeTab, setActiveTab] = useState<"consultores" | "ia" | "crm" | "auditoria" | "funil" | "worker">("consultores");
   const [searchTerm, setSearchTerm] = useState("");
   const accessDeniedToastShownRef = useRef(false);
   const { isAdmin, loading: roleLoading } = useUserRole(userId);
@@ -229,6 +230,7 @@ const SuperAdmin = () => {
     { id: "consultores" as const, label: "Consultores", icon: Users, count: consultants.length },
     { id: "crm" as const, label: "CRM Analytics", icon: BarChart3 },
     { id: "funil" as const, label: "Funil do Bot", icon: Activity },
+    { id: "worker" as const, label: "Worker Phases", icon: Activity },
     { id: "auditoria" as const, label: "Auditoria", icon: Shield },
     { id: "ia" as const, label: "IA / Conhecimento", icon: Brain },
   ];
@@ -480,6 +482,7 @@ const SuperAdmin = () => {
 
         {activeTab === "crm" && <CrmAnalyticsTab />}
         {activeTab === "funil" && <BotFunnelPanel />}
+        {activeTab === "worker" && <WorkerPhaseTimeline />}
         {activeTab === "auditoria" && <AuditLogPanel />}
         {activeTab === "ia" && <AIKnowledgePanel />}
       </main>
