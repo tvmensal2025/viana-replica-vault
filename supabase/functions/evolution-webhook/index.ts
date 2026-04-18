@@ -617,9 +617,20 @@ Deno.serve(async (req) => {
             customerBirth: customer.data_nascimento,
             kind: "conta",
           });
-          updates.electricity_bill_photo_url = minioUrl || (fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending");
+          if (minioUrl) {
+            updates.electricity_bill_photo_url = minioUrl;
+            updates.media_storage = "minio";
+          } else {
+            // 🆘 FALLBACK: MinIO offline → salvar Base64 inline + messageId p/ worker re-baixar
+            console.warn("📦⚠️  MinIO offline — salvando conta como Base64 inline (fallback)");
+            updates.electricity_bill_photo_url = `data:${mime};base64,${fileBase64}`;
+            updates.bill_base64 = fileBase64;
+            updates.bill_message_id = messageId || null;
+            updates.media_storage = "inline";
+          }
         } else {
           updates.electricity_bill_photo_url = fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending";
+          updates.bill_message_id = messageId || null;
         }
         updates.conversation_step = "processando_ocr_conta";
 
