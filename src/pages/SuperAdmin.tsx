@@ -230,6 +230,7 @@ const SuperAdmin = () => {
     { id: "consultores" as const, label: "Consultores", icon: Users, count: consultants.length },
     { id: "crm" as const, label: "CRM Analytics", icon: BarChart3 },
     { id: "funil" as const, label: "Funil do Bot", icon: Activity },
+    { id: "worker" as const, label: "Worker Phases", icon: Activity },
     { id: "auditoria" as const, label: "Auditoria", icon: Shield },
     { id: "ia" as const, label: "IA / Conhecimento", icon: Brain },
   ];
