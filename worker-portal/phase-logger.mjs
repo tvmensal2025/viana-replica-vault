@@ -3,7 +3,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const WORKER_VERSION = process.env.WORKER_VERSION || 'v11.0-2026.04.18';
+const WORKER_VERSION = process.env.WORKER_VERSION || 'v11.1-2026.04.18';
 
 let _client = null;
 function client() {
