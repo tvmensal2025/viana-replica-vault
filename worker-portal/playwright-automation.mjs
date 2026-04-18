@@ -1054,8 +1054,10 @@ export async function executarAutomacao(customerId, options = {}) {
     // ═══════════════════════════════════════════════════════════════════
     // HELPER: buscar input por placeholder (portal não usa name attrs)
     // ═══════════════════════════════════════════════════════════════════
-    const byPH = (ph) => page.locator(`input[placeholder="${ph}"]`).first();
-    const byPHPartial = (ph) => page.locator(`input[placeholder*="${ph}" i]`).first();
+    const escAttr = (value) => String(value ?? '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    const byId = (id) => page.locator(`[id="${escAttr(id)}"]`).first();
+    const byPH = (ph) => page.locator(`input[placeholder="${escAttr(ph)}"]`).first();
+    const byPHPartial = (ph) => page.locator(`input[placeholder*="${escAttr(ph)}" i]`).first();
     const clickText = async (text, tag = 'button') => {
       const el = page.locator(`${tag}:has-text("${text}")`).first();
       if (await el.count() > 0 && await el.isVisible().catch(() => false)) {
@@ -1130,7 +1132,7 @@ export async function executarAutomacao(customerId, options = {}) {
         if (!pattern.test(text || '')) continue;
         const inputId = await item.getAttribute('for').catch(() => null);
         if (!inputId) continue;
-        const input = page.locator(`#${inputId}`).first();
+        const input = byId(inputId);
         if (await input.count() === 0) continue;
         await input.setInputFiles(filePath);
         console.log(`   ✅ ${label}`);
@@ -1355,7 +1357,8 @@ export async function executarAutomacao(customerId, options = {}) {
     // Confirme celular - OPCIONAL (3 tentativas × 1s = ~3s pior caso)
     currentPhase = 'fase4b-confirme-celular';
     await logPhase(customerId, 'fase4b-confirme-celular', 'started');
-    let confirmPhone = byPHPartial('Confirme seu celular');
+    let confirmPhone = byPH('Confirme seu celular');
+    if (await confirmPhone.count() === 0) confirmPhone = byPHPartial('Confirme seu celular');
     let confirmPhoneFound = false;
     for (let i = 0; i < 3; i++) {
       if (await confirmPhone.count() > 0 && await confirmPhone.isVisible().catch(() => false)) {
@@ -1365,7 +1368,8 @@ export async function executarAutomacao(customerId, options = {}) {
       console.log(`   ⏳ Aguardando "Confirme seu celular" (tentativa ${i + 1}/3, soft)...`);
       try { await phoneField.evaluate((el) => el.dispatchEvent(new Event('blur', { bubbles: true }))); } catch (_) {}
       await delay(1000);
-      confirmPhone = byPHPartial('Confirme seu celular');
+      confirmPhone = byPH('Confirme seu celular');
+      if (await confirmPhone.count() === 0) confirmPhone = byPHPartial('Confirme seu celular');
     }
 
     if (confirmPhoneFound) {
@@ -1378,8 +1382,9 @@ export async function executarAutomacao(customerId, options = {}) {
         await fillRequiredField(allPhoneInputs.nth(1), data.whatsapp, 'Confirmação WhatsApp (fallback)', 'digits');
         await logPhase(customerId, 'fase4b-confirme-celular', 'ok', { message: '2º input tel (fallback)' });
       } else {
-        console.warn('   ⚠️  [SOFT-SKIP] "Confirme seu celular" não existe — seguindo (validação por SMS)');
-        await logPhase(customerId, 'fase4b-confirme-celular', 'soft-skip', { message: 'Campo não existe no portal v2026' });
+        await screenshot(page, customerId, 'ERROR-confirme-celular-nao-encontrado');
+        await logPhase(customerId, 'fase4b-confirme-celular', 'failed', { message: 'Campo obrigatório não encontrado' });
+        throw new Error('Campo obrigatório não encontrado no portal: Confirme seu celular');
       }
     }
     await delay(1500);

@@ -1,10 +1,10 @@
 # Dockerfile para Worker VPS - Portal iGreen
-# VERSÃO 10.3 - 2026-04-18 (whatsapp via placeholder exato após mapeamento ao vivo)
+# VERSÃO 10.4 - 2026-04-18 (escape de ids React + confirmação celular obrigatória)
 
 FROM node:20-bookworm-slim
 
-LABEL version="v10.3-2026.04.18"
-LABEL changelog="whatsapp-placeholder-exato,css-escape-react-useid,phase-logger"
+LABEL version="v10.4-2026.04.18"
+LABEL changelog="react-id-attr-selector,confirme-celular-obrigatorio,placeholder-hardening"
 
 # Instalar dependências do sistema para Playwright + VNC + noVNC
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -38,7 +38,7 @@ ENV NODE_ENV=production
 ENV PORT=3100
 ENV HEADLESS=1
 ENV DISPLAY=:99
-ENV WORKER_VERSION=v10.3-2026.04.18
+ENV WORKER_VERSION=v10.4-2026.04.18
 
 # Expor portas: 3100 (API) + 6080 (noVNC web)
 EXPOSE 3100 6080
