@@ -1,5 +1,5 @@
 # Dockerfile para Worker VPS - Portal iGreen
-# VERSÃO 10.1 - 2026-04-18 (force rebuild: phase-logger + WhatsApp fast detect + nome validation)
+# VERSÃO 10.2 - 2026-04-18 (fix: CSS escape para React useId :r5:)
 
 FROM node:20-bookworm-slim
 
