@@ -1,110 +1,108 @@
+# Mapeamento Completo do Portal iGreen — Validado Live 2026-04-18
 
+## ✅ O que foi validado ao vivo (browser Playwright)
 
-## Análise profunda do bug "WhatsApp não digita"
+Percorri o portal `digital.igreenenergy.com.br/?id=124170&sendcontract=true` end-to-end, das 4 etapas:
 
-### Sintoma nos logs
-```
-⏳ MutationObserver não detectou — usando polling clássico
-⏳ Aguardando campo WhatsApp aparecer (tentativa 1/12)...
-... (12 tentativas = 30s perdidos)
-✅ [reactFill MASK] (locator): "(11) 98900-0650"
-⏳ Aguardando "Confirme seu celular" (tentativa 1/8)
-... (8 tentativas = 40s perdidos)
-❌ Hard fail
-```
+### Etapa 1 — Simulador (página inicial)
+- 2 inputs (`CEP`, `Valor da conta`) + botão `Calcular`
+- Após Calcular: aparece banner "Baseado no seu gasto, você poderá economizar..." + botão verde **"Garantir meu desconto"**
 
-O campo **APARECE e é preenchido** (linha "✅ reactFill MASK"), mas:
-1. Demora 30s pra detectar (polling de 2.5s × 12)
-2. Depois espera campo "Confirme celular" que **não existe mais** no portal
-3. A v9 prometeu soft-warn mas o código no VPS ainda é v8
+### Etapa 2 — Formulário Progressivo (revelado em blocos)
+**Ordem real validada:**
+1. CPF → auto-preenche Nome + Data de Nascimento (via Receita)
+2. WhatsApp + Confirme celular (mesmo valor obrigatório)
+3. E-mail + Confirme E-mail (mesmo valor — portal valida unicidade!)
+4. CEP (vem auto da etapa 1) + Endereço + Número + Bairro + Cidade + Estado (combobox MUI sem acentos) + Complemento
+5. Distribuidora (combobox MUI **filtrado pelo Estado**, não pelo CEP)
+6. Número da instalação (aparece após Distribuidora)
+7. Tipo documento (combobox MUI: "RG (Antigo)", "RG (Novo)")
 
-### Causas raiz (análise por campo)
+### Etapa 3 — Upload de Documentos
+- Bloco "Documento pessoal" com 2 cards: **Frente** + **Verso** (labels clickables com input file dentro)
+- Bloco "Conta de energia" (aparece depois)
 
-**Campo CPF** — OK, funciona (auto-fill da Receita responde)
-
-**Campo Nome** — quebrado silenciosamente. Log: `Nome="(vazio)"`. O portal preencheu DataNasc mas Nome veio vazio. Worker não valida e segue.
-
-**Campo WhatsApp** — funciona mas com latência absurda:
-- MutationObserver falha porque o portal usa React Portal/Suspense (campo não nasce no DOM principal)
-- Polling com `page.locator('input[placeholder*="WhatsApp"]')` é lento
-- Solução: detectar via `waitForFunction` com query mais flexível (placeholder OU label OU name) + reduzir intervalo para 500ms
-
-**Campo "Confirme celular"** — não existe mais no portal v2026:
-- Worker no VPS ainda tem código v8 (8 tentativas hard-fail)
-- O patch v9 está no repositório mas o **container não foi rebuildado**
-- Confirmar: `docker exec worker grep -n "Confirme seu celular" playwright-automation.mjs`
-
-**Campo Email** — log mostra "[5/16] Email" mas sem confirmação de preenchimento — provavelmente também travou
-
-**Campo Endereço/Número** — `⚠️ Campo Número endereço não encontrado` — selector quebrado
-
-**Campo Instalação** — `⚠️ Campo instalação não encontrado` — selector quebrado
-
-**Tipo Documento** — `⚠️ Tipo documento não selecionado` — MUI Select muda DOM, selector velho
-
-**Upload arquivos** — `0 input(s) file encontrado(s)` — portal usa input file dentro de Shadow DOM ou via dropzone custom
-
-### O verdadeiro problema raiz
-
-**O worker no Easypanel está rodando código v8 antigo.** Todos os patches v9 (poppler, soft-warn confirme celular, hierarquia base64, etc) estão no Git mas o container nunca foi rebuildado/redeployed.
-
-Prova: log mostra "tentativa 8/8" + "fixtures/documento.jpg" + "Conversão PDF→JPG falhou" — exatamente os bugs que a v9 corrigiu.
+### Etapa 4 — Finalizar/OTP
+- Botão "Finalizar" só aparece após uploads
+- Dispara OTP via WhatsApp/SMS
 
 ---
 
-## Plano de ação
+## 🔥 Descobertas críticas (que estavam quebrando o worker)
 
-### Etapa 1 — Forçar rebuild do worker (CRÍTICO)
-Adicionar `/debug/version` endpoint no worker que retorna:
-```json
-{ "git_sha": "...", "playwright_version": "...", "has_poppler": true/false, "patch_v9": true/false }
+### 1. Email tem validação de unicidade no portal
+> ⚠️ Mensagem: "Este email já está cadastrado para outro cliente"
+
+**Solução**: se o email do cliente já estiver no portal, gerar fallback `{cpf}@temp.igreen.com.br` ou abortar com status `email_duplicate`.
+
+### 2. Distribuidora é filtrada pelo ESTADO (não pelo CEP)
+Memória anterior dizia "filtrada pelo CEP" — **errado**. Ao escolher "Paraiba", a única opção foi "Energisa Paraiba". Ao escolher SP, aparecem 5 opções (CPFL, Elektro, etc).
+
+**Solução**: garantir que Estado seja escolhido **antes** de tentar abrir Distribuidora.
+
+### 3. CPF inválido NÃO trava o form com erro — silenciosamente bloqueia campos seguintes
+Tentei `09334548809` (CPF do CELIO) e o portal apenas marcou "CPF inválido" em vermelho mas continuou aceitando outros valores. Os campos seguintes só aparecem após CPF ser **aceito pela Receita**.
+
+**Solução**: após blur do CPF, esperar até 5s e verificar se Nome aparece preenchido. Se não → abortar.
+
+### 4. Estado tem nomes SEM acento (exceto poucos)
+Lista exata observada:
+- Alagoas, Bahia, Ceara, Espirito Santo, Goias, **Maranhão**, Minas Gerais, Mato Grosso do Sul, Mato Grosso, **Pará**, Paraiba, Pernambuco, **Piauí**, **Paraná**, Rio de Janeiro, Rio Grande do Norte, Rio Grande do Sul, Santa Catarina, Sergipe, **Sao Paulo** (sem acento!), Tocantins
+
+**Solução**: mapear UF → texto exato no `playwright-automation.mjs`.
+
+### 5. Tipo documento é combobox MUI (não radio)
+Opções: `RG (Antigo)`, `RG (Novo)` (e provavelmente `CNH`).
+
+**Solução**: usar `combobox` MUI + `li[role="option"]`.
+
+### 6. Uploads são `<label>` clickables (não inputs file diretos)
+Cada card "Frente"/"Verso" é um `<label>` com `<input type="file">` hidden dentro.
+
+**Solução**: 
+```js
+// Estratégia A — usar setInputFiles direto no input hidden
+const fileInputs = await page.locator('input[type="file"]').all()
+await fileInputs[0].setInputFiles(pathFrente)
+await fileInputs[1].setInputFiles(pathVerso)
+await fileInputs[2].setInputFiles(pathConta)
 ```
-Usuário acessa essa URL → confirma se v9 está ativa → se não, força redeploy no Easypanel.
-
-### Etapa 2 — Re-mapear TODOS os selectors do portal
-O portal mudou (versão atual diferente da memória). Precisa ir lá com Playwright recorder e capturar:
-- Selector real do campo WhatsApp
-- Selector real do campo Email/Confirme Email
-- Selector real do Número endereço
-- Selector real do Número instalação
-- Selector real do MUI Select de Tipo Documento (3 opções)
-- Selector real dos input file (provavelmente atrás de dropzone)
-- Como clicar no Finalizar
-
-### Etapa 3 — Reescrever fase WhatsApp com detecção rápida
-- Trocar polling de 2.5s por `waitForFunction` com 500ms
-- Buscar por **múltiplos critérios em OR**: placeholder, label, name, type=tel
-- Se Confirme celular não aparece em 8s → seguir (soft-warn já existe na v9)
-
-### Etapa 4 — Validar Nome obrigatório
-- Se Nome ficar vazio após CPF → tentar preencher manualmente do banco
-- Se ainda vazio → abortar com `awaiting_cpf_review` (não seguir com nome em branco)
-
-### Etapa 5 — Diagnóstico em tempo real
-Tabela `worker_phase_logs(customer_id, phase, status, timestamp, screenshot_url)` + painel no /super-admin mostrando exatamente onde cada lead travou, com link pro screenshot da fase.
-
-### Etapa 6 — Endpoint de re-scan do portal
-`POST /worker/portal-introspect` — abre o portal headed (via noVNC), navega até cada fase, dump do DOM, retorna lista de selectors candidatos. Roda 1x por dia para detectar mudanças do portal automaticamente.
 
 ---
 
-## Arquivos a alterar
+## 📋 Próximas ações (atualização do worker)
 
-- `worker-portal/server.mjs` — endpoints `/debug/version` e `/worker/portal-introspect`
-- `worker-portal/playwright-automation.mjs` — selectors v10, validação de nome, detecção rápida WhatsApp
-- `worker-portal/Dockerfile` — adicionar `LABEL version=v10` para forçar rebuild
-- Migration: tabela `worker_phase_logs`
-- `src/components/superadmin/WorkerPhaseTimeline.tsx` (novo) — timeline visual
-- `src/pages/SuperAdmin.tsx` — adicionar aba "Worker Phases"
+### A. Reescrever `playwright-automation.mjs` para v11
+1. Aplicar selectors validados (placeholders exatos)
+2. Adicionar mapeamento UF → estado-portal (sem acento)
+3. Validar Nome após CPF (5s timeout)
+4. Validar email duplicado (fallback automático)
+5. Esperar Distribuidora aparecer ANTES de tentar abrir
+6. Combobox MUI: `[role="combobox"]` + `li[role="option"]`
+7. Uploads: usar `setInputFiles` em todos os `input[type="file"]` por índice
+
+### B. Atualizar `Dockerfile`
+```dockerfile
+LABEL version=v11-2026.04.18
+ENV WORKER_VERSION=v11-2026.04.18
+```
+
+### C. Adicionar telemetria por fase
+Cada bloco preenchido grava em `worker_phase_logs` com `phase=fase_X_blockname`, `selector_used=placeholder`, `screenshot_url` em caso de falha. Já há tabela criada — só plugar.
+
+### D. Painel `/super-admin` → "Worker Phases"
+- Timeline visual por lead
+- Botão "Reprocessar" que chama POST /submit-lead
+- Filtro por status (success/failed/timeout)
 
 ---
 
-## Resultado esperado
+## 🎯 Resultado esperado pós v11
 
-- ✅ Confirmação imediata se worker está rodando v9 ou v8
-- ✅ Selectors atualizados para o portal atual (não memória de 2 semanas atrás)
-- ✅ Campo WhatsApp detectado em <2s, não 30s
-- ✅ "Confirme celular" não trava mais o fluxo
-- ✅ Nome vazio vira erro explícito, não silencioso
-- ✅ Super Admin vê em tempo real qual fase quebrou e screenshot
-
+- ✅ CPF válido → Nome aparece em <3s, worker detecta
+- ✅ Email duplicado → fallback automático, sem travar
+- ✅ Estado SP → "Sao Paulo" selecionado corretamente
+- ✅ Distribuidora aberta SÓ depois do Estado
+- ✅ Uploads via `setInputFiles` em 3 inputs file por índice
+- ✅ Lead chega em "Finalizar" → OTP disparado → polling do banco
+- ✅ Sem `:r5:` errors (selectors usam placeholder, não id)
