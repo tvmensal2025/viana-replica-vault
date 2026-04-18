@@ -1334,9 +1334,11 @@ export async function executarAutomacao(customerId, options = {}) {
         name: el.getAttribute('name') || '',
         id: el.getAttribute('id') || '',
       })).catch(() => null);
-      if (meta?.placeholder) phoneField = page.locator(`input[placeholder="${meta.placeholder}"]`).first();
-      else if (meta?.id) phoneField = page.locator(`#${meta.id}`).first();
-      else if (meta?.name) phoneField = page.locator(`input[name="${meta.name}"]`).first();
+      // IMPORTANTE: usar [id="..."] em vez de #id para suportar IDs do React 18 (ex: ":r5:")
+      const escAttr = (s) => String(s).replace(/"/g, '\\"');
+      if (meta?.placeholder) phoneField = page.locator(`input[placeholder="${escAttr(meta.placeholder)}"]`).first();
+      else if (meta?.id) phoneField = page.locator(`input[id="${escAttr(meta.id)}"]`).first();
+      else if (meta?.name) phoneField = page.locator(`input[name="${escAttr(meta.name)}"]`).first();
     }
 
     if (!phoneField || await phoneField.count() === 0 || !await phoneField.isVisible().catch(() => false)) {
