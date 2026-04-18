@@ -944,7 +944,13 @@ Deno.serve(async (req) => {
             customerBirth: customer.data_nascimento,
             kind: "doc_verso",
           });
-          updates.document_back_url = minioUrl || (fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending");
+          if (minioUrl) {
+            updates.document_back_url = minioUrl;
+          } else {
+            // 🆘 FALLBACK: MinIO offline → salvar inline (verso é menor que frente)
+            console.warn("📦⚠️  MinIO offline — salvando doc_verso como Base64 inline (fallback)");
+            updates.document_back_url = `data:${mime};base64,${fileBase64}`;
+          }
         } else {
           updates.document_back_url = fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending";
         }
