@@ -1,10 +1,10 @@
 # Dockerfile para Worker VPS - Portal iGreen
-# VERSÃO 10.2 - 2026-04-18 (fix: CSS escape para React useId :r5:)
+# VERSÃO 10.3 - 2026-04-18 (whatsapp via placeholder exato após mapeamento ao vivo)
 
 FROM node:20-bookworm-slim
 
-LABEL version="v10.2-2026.04.18"
-LABEL changelog="css-escape-react-useid,phase-logger,wa-fast-detect,nome-validation"
+LABEL version="v10.3-2026.04.18"
+LABEL changelog="whatsapp-placeholder-exato,css-escape-react-useid,phase-logger"
 
 # Instalar dependências do sistema para Playwright + VNC + noVNC
 RUN apt-get update && apt-get install -y --no-install-recommends \
