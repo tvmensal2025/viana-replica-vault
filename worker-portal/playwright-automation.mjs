@@ -1316,77 +1316,82 @@ export async function executarAutomacao(customerId, options = {}) {
     currentPhase = 'fase4-whatsapp';
     console.log('\n📋 [4/16] WhatsApp + Confirmação...');
 
-    // Aguardar campo WhatsApp aparecer via MutationObserver + polling (12 tentativas, 1.5s = 18s total)
-    const whatsappAppeared = await waitForFieldByPlaceholder(page, /whatsapp/i, 18000);
-    if (whatsappAppeared) {
-      console.log('   ✅ Campo WhatsApp detectado');
-    } else {
-      console.log('   ⏳ MutationObserver não detectou — usando polling clássico');
+    await logPhase(customerId, 'fase4-whatsapp', 'started');
+    const waStart = Date.now();
+    const waHandle = await findFieldFast(page, {
+      keywords: ['whatsapp', 'celular', 'telefone'],
+      type: 'tel',
+      exclude: ['confirme', 'confirmar', 'confirmação'],
+    }, 12000);
+    const waElapsed = Date.now() - waStart;
+
+    let phoneField = null;
+    if (waHandle) {
+      const meta = await waHandle.evaluate((el) => ({
+        placeholder: el.getAttribute('placeholder') || '',
+        name: el.getAttribute('name') || '',
+        id: el.getAttribute('id') || '',
+      })).catch(() => null);
+      if (meta?.placeholder) phoneField = page.locator(`input[placeholder="${meta.placeholder}"]`).first();
+      else if (meta?.id) phoneField = page.locator(`#${meta.id}`).first();
+      else if (meta?.name) phoneField = page.locator(`input[name="${meta.name}"]`).first();
     }
 
-    let phoneField = byPHPartial('WhatsApp');
-    let phoneVisible = false;
-    for (let i = 0; i < 12; i++) {
-      try {
-        await phoneField.waitFor({ state: 'visible', timeout: 1500 });
-        phoneVisible = true;
-        break;
-      } catch (_) {
-        console.log(`   ⏳ Aguardando campo WhatsApp aparecer (tentativa ${i + 1}/12)...`);
+    if (!phoneField || await phoneField.count() === 0 || !await phoneField.isVisible().catch(() => false)) {
+      console.log('   ⏳ findFieldFast falhou, fallback para byPHPartial');
+      phoneField = byPHPartial('WhatsApp');
+      if (await phoneField.count() === 0) {
         await page.evaluate(() => window.scrollBy(0, 200));
-        await delay(1500);
-        phoneField = byPHPartial('WhatsApp');
+        await delay(800);
+        phoneField = page.locator('input[type="tel"], input[name*="whats" i], input[placeholder*="WhatsApp" i], input[placeholder*="celular" i]').first();
       }
     }
-    
-    if (phoneVisible && await phoneField.count() > 0) {
-      await fillRequiredField(phoneField, data.whatsapp, 'WhatsApp', 'digits');
-    } else {
-      // Fallback name-based
-      const phoneFallback = page.locator('input[name="phone"], input[name*="whats" i], input[type="tel"]').first();
-      if (await phoneFallback.count() > 0 && await phoneFallback.isVisible().catch(() => false)) {
-        await fillRequiredField(phoneFallback, data.whatsapp, 'WhatsApp', 'digits');
-      } else {
-        await screenshot(page, customerId, 'ERROR-whatsapp-nao-encontrado');
-        throw new Error('Campo WhatsApp não encontrado no portal (após 12 tentativas + MutationObserver)');
-      }
-    }
-    // Disparar blur para forçar render do campo de confirmação
-    await page.evaluate(() => { (document.activeElement)?.dispatchEvent(new Event('blur', { bubbles: true })); }).catch(() => {});
-    await delay(1200);
 
-    // Confirmar celular - OPCIONAL (portal nem sempre exibe esse campo hoje)
-    // Se não aparecer em 4 tentativas (~8s), seguimos. O portal valida via SMS depois.
+    if (phoneField && await phoneField.count() > 0 && await phoneField.isVisible().catch(() => false)) {
+      await fillRequiredField(phoneField, data.whatsapp, 'WhatsApp', 'digits');
+      await logPhase(customerId, 'fase4-whatsapp', 'ok', { message: `Detectado em ${waElapsed}ms`, duration_ms: waElapsed });
+    } else {
+      await screenshot(page, customerId, 'ERROR-whatsapp-nao-encontrado');
+      await logPhase(customerId, 'fase4-whatsapp', 'failed', { message: 'WhatsApp field not found' });
+      throw new Error('Campo WhatsApp não encontrado no portal');
+    }
+
+    await page.evaluate(() => { (document.activeElement)?.dispatchEvent(new Event('blur', { bubbles: true })); }).catch(() => {});
+    await delay(800);
+
+    // Confirme celular - OPCIONAL (3 tentativas × 1s = ~3s pior caso)
+    currentPhase = 'fase4b-confirme-celular';
+    await logPhase(customerId, 'fase4b-confirme-celular', 'started');
     let confirmPhone = byPHPartial('Confirme seu celular');
     let confirmPhoneFound = false;
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 3; i++) {
       if (await confirmPhone.count() > 0 && await confirmPhone.isVisible().catch(() => false)) {
         confirmPhoneFound = true;
         break;
       }
-      console.log(`   ⏳ Aguardando "Confirme seu celular" (tentativa ${i + 1}/4)...`);
+      console.log(`   ⏳ Aguardando "Confirme seu celular" (tentativa ${i + 1}/3, soft)...`);
       try { await phoneField.evaluate((el) => el.dispatchEvent(new Event('blur', { bubbles: true }))); } catch (_) {}
-      await page.evaluate(() => window.scrollBy(0, 150));
-      await delay(1500);
+      await delay(1000);
       confirmPhone = byPHPartial('Confirme seu celular');
     }
 
     if (confirmPhoneFound) {
       await fillRequiredField(confirmPhone, data.whatsapp, 'Confirmação WhatsApp', 'digits');
+      await logPhase(customerId, 'fase4b-confirme-celular', 'ok');
     } else {
-      // Fallback: 2º input tel/whatsapp na página
       const allPhoneInputs = page.locator('input[type="tel"], input[placeholder*="celular" i], input[placeholder*="WhatsApp" i]');
       const cnt = await allPhoneInputs.count();
       if (cnt >= 2) {
         await fillRequiredField(allPhoneInputs.nth(1), data.whatsapp, 'Confirmação WhatsApp (fallback)', 'digits');
+        await logPhase(customerId, 'fase4b-confirme-celular', 'ok', { message: '2º input tel (fallback)' });
       } else {
-        // ⚠️ SOFT-WARN: portal não pediu confirmação — seguir adiante (validação por SMS depois)
-        console.warn('   ⚠️  [SOFT] Campo "Confirme seu celular" não apareceu — seguindo adiante (portal valida via SMS)');
-        await screenshot(page, customerId, 'WARN-confirme-celular-ausente');
+        console.warn('   ⚠️  [SOFT-SKIP] "Confirme seu celular" não existe — seguindo (validação por SMS)');
+        await logPhase(customerId, 'fase4b-confirme-celular', 'soft-skip', { message: 'Campo não existe no portal v2026' });
       }
     }
-    await delay(2500);
-    
+    await delay(1500);
+
+
     // ─── 8. Email ────────────────────────────────────────────────────────
     currentPhase = 'fase5-email';
     console.log('\n📋 [5/16] Email...');
