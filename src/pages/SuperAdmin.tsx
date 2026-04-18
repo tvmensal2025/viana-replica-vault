@@ -53,7 +53,7 @@ const SuperAdmin = () => {
   const [loadingData, setLoadingData] = useState(true);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [resettingId, setResettingId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"consultores" | "ia" | "crm" | "auditoria" | "funil">("consultores");
+  const [activeTab, setActiveTab] = useState<"consultores" | "ia" | "crm" | "auditoria" | "funil" | "worker">("consultores");
   const [searchTerm, setSearchTerm] = useState("");
   const accessDeniedToastShownRef = useRef(false);
   const { isAdmin, loading: roleLoading } = useUserRole(userId);
