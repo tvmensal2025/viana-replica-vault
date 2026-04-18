@@ -56,27 +56,45 @@ async function reactFill(page, selector, value) {
   
   if (isMasked) {
     console.log(`   🎭 [reactFill] Campo com máscara detectado (${selectorStr}) — usando digitação real`);
-    try {
-      await el.click();
-      await el.fill('');
-      // Pequeno delay antes de digitar para a máscara estabilizar
-      await new Promise(r => setTimeout(r, 150));
-      await el.type(value, { delay: 90 });
-      // Disparar blur para acionar validação
-      await el.evaluate((input) => input.dispatchEvent(new Event('blur', { bubbles: true }))).catch(() => {});
-      const filled = await el.inputValue().catch(() => '');
-      const onlyDigitsFilled = filled.replace(/\D/g, '');
-      const onlyDigitsValue = String(value).replace(/\D/g, '');
-      if (onlyDigitsFilled === onlyDigitsValue) {
-        console.log(`   ✅ [reactFill MASK] ${selectorStr}: "${filled}" (alvo: "${value}")`);
-        return true;
+    const onlyDigitsValue = String(value).replace(/\D/g, '');
+    // Até 3 tentativas: o React do portal iGreen pode re-renderizar entre o autofill (CPF→Receita)
+    // e o próximo campo, fazendo o input ficar STALE. Re-resolvemos a referência a cada tentativa.
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        // Re-resolver o locator a cada tentativa (caso o React tenha re-montado o input)
+        const fresh = typeof selector === 'string' ? page.locator(selector).first() : selector;
+        if (await fresh.count() === 0) {
+          console.log(`   ⚠️  [reactFill MASK attempt ${attempt}] locator desapareceu`);
+          await new Promise(r => setTimeout(r, 400));
+          continue;
+        }
+        await fresh.scrollIntoViewIfNeeded().catch(() => {});
+        // Forçar foco real (click + focus JS) antes de digitar
+        await fresh.click({ timeout: 3000 }).catch(() => {});
+        await fresh.evaluate((input) => input.focus()).catch(() => {});
+        await new Promise(r => setTimeout(r, 120));
+        // Limpar usando seleção + Backspace (não quebra máscara) em vez de fill('')
+        await fresh.evaluate((input) => {
+          input.select?.();
+        }).catch(() => {});
+        await page.keyboard.press('Backspace').catch(() => {});
+        await new Promise(r => setTimeout(r, 80));
+        await fresh.type(onlyDigitsValue, { delay: 70 });
+        await fresh.evaluate((input) => input.dispatchEvent(new Event('blur', { bubbles: true }))).catch(() => {});
+        await new Promise(r => setTimeout(r, 250));
+        const filled = await fresh.inputValue().catch(() => '');
+        const onlyDigitsFilled = filled.replace(/\D/g, '');
+        if (onlyDigitsFilled === onlyDigitsValue) {
+          console.log(`   ✅ [reactFill MASK attempt ${attempt}] ${selectorStr}: "${filled}"`);
+          return true;
+        }
+        console.log(`   ⚠️  [reactFill MASK attempt ${attempt}] valor não bate. Atual: "${filled}" / esperado: "${onlyDigitsValue}"`);
+      } catch (e) {
+        console.log(`   ⚠️  [reactFill MASK attempt ${attempt}] erro: ${e.message}`);
       }
-      console.log(`   ⚠️  [reactFill MASK] valor não bate. Atual: "${filled}" / esperado: "${value}"`);
-      return false;
-    } catch (e) {
-      console.log(`   ⚠️  [reactFill MASK] falhou: ${e.message}`);
-      return false;
+      await new Promise(r => setTimeout(r, 500));
     }
+    return false;
   }
   
   // Tier 1: Reset React _valueTracker + native setter + dispatch events
@@ -1232,17 +1250,19 @@ export async function executarAutomacao(customerId, options = {}) {
       }
     }
     // Aguardar auto-preenchimento do portal (Nome + Data de Nascimento vêm da Receita)
-    await delay(5000);
+    // Reduzido de 5s→1s: o waitForAutoFill abaixo já faz polling adaptativo de até 10s
+    await delay(1000);
     await screenshot(page, customerId, '04-apos-cpf');
 
     // ─── 6a. AGUARDAR AUTO-FILL DA RECEITA (Nome + DataNasc) ──────────────
     // REGRA DE OURO: o portal consulta a Receita Federal via CPF e auto-preenche
     // Nome e Data de Nascimento. Esses valores SÃO A FONTE DA VERDADE — nunca
     // sobrescrever com dados do banco/OCR (que podem estar errados).
+    // Timeout reduzido de 18s→10s: na prática a Receita responde em 2-4s.
     currentPhase = 'fase3b-autofill';
     await logPhase(customerId, 'fase3b-autofill', 'started');
     console.log('   ⏳ [AUTO-FILL] Aguardando portal preencher Nome + DataNasc via Receita...');
-    const autofill = await waitForAutoFill(page, 18000);
+    const autofill = await waitForAutoFill(page, 10000);
     if (autofill.nome || autofill.nascimento) {
       console.log(`   📥 [AUTO-FILL] Portal preencheu: Nome="${autofill.nome || '(vazio)'}" DataNasc="${autofill.nascimento || '(vazio)'}"`);
       await logPhase(customerId, 'fase3b-autofill', 'ok', { message: `Nome="${autofill.nome || ''}" DataNasc="${autofill.nascimento || ''}"` });
@@ -1250,6 +1270,9 @@ export async function executarAutomacao(customerId, options = {}) {
       console.warn('   ⚠️  [AUTO-FILL] Portal NÃO auto-preencheu (CPF talvez sem registro na Receita). Worker continuará.');
       await logPhase(customerId, 'fase3b-autofill', 'warn', { message: 'Receita não retornou dados' });
     }
+    // ⏸️  Aguardar React estabilizar após autofill antes de buscar próximo campo
+    // (o portal re-renderiza o form quando a Receita responde)
+    await delay(1200);
 
     // ─── 6a-bis. VALIDAR NOME (crítico v10.1) ───────────────────────────
     currentPhase = 'fase3c-nome-validation';
