@@ -909,13 +909,32 @@ export async function executarAutomacao(customerId, options = {}) {
     if (faltando.length > 0) throw new Error(`Campos obrigatórios faltando: ${faltando.join(', ')}`);
     console.log('✅ Dados validados');
     
-    // Preparar arquivos de upload
-    const docFrentePath = await prepararDocumento(cliente.document_front_url, 'doc-frente');
-    const docVersoPath = await prepararDocumento(cliente.document_back_url, 'doc-verso');
-    const contaPath = await prepararContaEnergia(cliente);
+    // Buscar instanceName do consultor (necessário p/ fallback Evolution API)
+    let instanceName = null;
+    if (cliente.consultant_id) {
+      try {
+        const { data: inst } = await getSupabase()
+          .from('whatsapp_instances').select('instance_name')
+          .eq('consultant_id', cliente.consultant_id).limit(1).maybeSingle();
+        instanceName = inst?.instance_name || null;
+      } catch (_) {}
+    }
+
+    // Preparar arquivos de upload (com hierarquia URL → Base64 → Evolution → fail)
+    const docFrentePath = await prepararDocumento(cliente.document_front_url, 'doc-frente', cliente, instanceName);
+    const docVersoPath = await prepararDocumento(cliente.document_back_url, 'doc-verso', cliente, instanceName);
+    const contaPath = await prepararContaEnergia(cliente, instanceName);
     console.log(`📄 Doc frente: ${docFrentePath}`);
     console.log(`📄 Doc verso: ${docVersoPath}`);
     console.log(`📄 Conta: ${contaPath}`);
+
+    // 🛑 FAIL-FAST: se não conseguimos a frente do documento, NÃO abrir browser
+    if (!docFrentePath) {
+      const msg = 'Documento (frente) indisponível: MinIO offline + Base64 inline ausente + Evolution API sem messageId. Cliente precisa reenviar a foto pelo WhatsApp.';
+      console.error(`❌ ${msg}`);
+      await atualizarStatus(customerId, 'awaiting_document_resend', msg);
+      throw new Error(msg);
+    }
     
     await atualizarStatus(customerId, 'portal_submitting');
     
