@@ -1,131 +1,125 @@
 ---
-name: Portal iGreen Form Selectors Map (validado live 2026-04-18 v5 - end-to-end)
-description: Mapeamento completo end-to-end do portal digital.igreenenergy.com.br validado live em 2026-04-18 com Playwright. Formulário PROGRESSIVO 100% mapeado em 3 etapas (simulador, dados, documentos). CPF auto-preenche Nome+DataNasc. CEP NÃO auto-preenche endereço. Distribuidora é filtrada pelo ESTADO (não CEP). Email tem validação de unicidade no portal. Tipo documento tem labels "RG (Antigo)", "RG (Novo)" etc. Uploads são <label> clickable que disparam <input type=file> escondidos. Todos os inputs usam placeholder exato (sem id/name estável - React 18 useId).
+name: Portal iGreen Form Selectors Map (validado live 2026-04-18 v6 - CEP auto-completa)
+description: Mapeamento DEFINITIVO end-to-end do portal digital.igreenenergy.com.br validado live em 2026-04-18 com Playwright. CEP **AUTO-PREENCHE** Endereço+Bairro+Cidade+Estado (descoberta v6). NÃO há combobox de Distribuidora — é inferida pelo CEP. Tipo documento tem 3 opções fixas (RG Antigo, RG Novo, CNH). CNH pede APENAS Frente. Portal valida unicidade de Email E de Número da Instalação. CPF auto-preenche Nome+DataNasc via Receita.
 type: feature
 ---
 
 ## Portal URL
 `https://digital.igreenenergy.com.br/?id={CONSULTOR_ID}&sendcontract=true`
 
-## ⚠️ REGRAS CRÍTICAS (validadas live 2026-04-18 v5)
+## ⚠️ REGRAS DEFINITIVAS (validadas live 2026-04-18 v6)
 
-1. **3 ETAPAS sequenciais**: (1) Simulador → (2) Formulário Progressivo → (3) Upload de Documentos → (4) Finalizar/OTP
-2. **CPF auto-preenche Nome+DataNasc** via Receita — NÃO sobrescrever, mas VALIDAR (CPF inválido bloqueia tudo silenciosamente)
-3. **Email tem validação ÚNICA no portal** — "Este email já está cadastrado para outro cliente" se reusado
-4. **CEP NÃO auto-preenche endereço** — Endereço/Número/Bairro/Cidade são MANUAIS
-5. **Distribuidora é filtrada pelo ESTADO selecionado** (não pelo CEP) — opções variam por UF (ex: SP=CPFL/Elektro/Energisa SS, PB=Energisa Paraiba)
-6. **Estado é combobox MUI sem acentos** ("Sao Paulo", "Maranhão" único com til, "Pará", "Paraná", "Piauí")
-7. **Tipo documento é combobox MUI** com opções: "RG (Antigo)", "RG (Novo)", possivelmente "CNH"
-8. **Uploads são `<label>` clickables** com `<input type=file>` hidden por dentro — clicar no label abre o file picker, ou usar `setInputFiles` no input file
-9. **"Confirme seu celular" e "Confirme seu E-mail" SEMPRE existem** — ambos obrigatórios com mesmo valor
-10. **Todos inputs usam placeholder EXATO** — React 18 gera IDs com `:` (ex: `:r5:`) que quebram CSS `#id`. Usar `[id="..."]` se precisar
+1. **3 ETAPAS sequenciais**: (1) Simulador → (2) Formulário Progressivo → (3) Upload Documentos → (4) Finalizar/OTP
+2. **CPF auto-preenche Nome+DataNasc** via Receita — validar campos não-vazios após blur (CPF inválido bloqueia silenciosamente)
+3. **Email tem validação ÚNICA no portal** — recusa se já cadastrado
+4. **CEP AUTO-PREENCHE Endereço+Bairro+Cidade+Estado** ✅ (DESCOBERTA v6 — antes pensávamos que era manual)
+5. **Apenas Número e Complemento são manuais no bloco endereço**
+6. **NÃO existe combobox "Distribuidora"** ✅ (DESCOBERTA v6 — distribuidora é inferida pelo CEP no backend)
+7. **Número da instalação tem validação de unicidade** — "Número de instalação já cadastrado" se reusado
+8. **Tipo documento é combobox MUI com 3 opções FIXAS**: `RG (Antigo)`, `RG (Novo)`, `CNH`
+9. **CNH pede APENAS upload Frente** (1 file). RG (Antigo/Novo) pede Frente + Verso (2 files)
+10. **Conta de energia parece NÃO ser bloco separado** — é incorporada na fluxo após documento (validar live até finalizar)
+11. **Confirmação de celular E email são obrigatórias** (mesmo valor)
+12. **Selectors estáveis: `input[placeholder="EXATO"]`** — React 18 IDs com `:` quebram CSS `#id`
 
-## Sequência Validada Live End-to-End (CEP 13350000)
+## Sequência Validada Live End-to-End (CEP 13309-410, Itu/SP)
 
-### ETAPA 1: Simulação (página inicial)
-- `input[placeholder="CEP"]` → "13350000"
-- `input[placeholder="Valor da conta"]` → "301,01" (formato BR)
-- `button:has-text("Calcular")` → revela `button:has-text("Garantir meu desconto")`
-- Clicar "Garantir meu desconto" → vai ao formulário
+### ETAPA 1: Simulação
+1. `input[placeholder="CEP"]` → "13309410"
+2. `input[placeholder="Valor da conta"]` → "205,04" (BR)
+3. `button:has-text("Calcular")` → revela `button:has-text("Garantir meu desconto")`
+4. Clicar "Garantir meu desconto" → vai ao formulário
 
-### ETAPA 2: Formulário Progressivo (ordem real validada)
+### ETAPA 2: Formulário Progressivo (ordem REAL validada)
 
-**Bloco identificação (aparece um a um):**
-1. `input[placeholder="CPF ou CNPJ"]` — digitar CPF VÁLIDO → auto-preenche Nome+DataNasc após blur
-2. `input[placeholder="Nome completo"]` — AUTO (validar não-vazio antes de seguir)
-3. `input[placeholder="Data de Nascimento"]` — AUTO (validar não-vazio)
+**Bloco identificação:**
+1. `input[placeholder="CPF ou CNPJ"]` → digitar CPF VÁLIDO + blur → auto-preenche
+2. `input[placeholder="Nome completo"]` ← AUTO (validar não-vazio)
+3. `input[placeholder="Data de Nascimento"]` ← AUTO
 
-**Bloco contato (aparece após Nome+DataNasc preenchidos):**
-4. `input[placeholder="Número do seu WhatsApp"]` — máscara aplica "(11) 98900-0650"
-5. `input[placeholder="Confirme seu celular"]` — mesmo valor
+**Bloco contato:**
+4. `input[placeholder="Número do seu WhatsApp"]` (máscara aplica "(11) 98900-0650")
+5. `input[placeholder="Confirme seu celular"]` (mesmo valor)
 
-**Bloco email (aparece após WhatsApp confirmado):**
-6. `input[placeholder="E-mail"]` — validar unicidade (portal recusa repetidos)
-7. `input[placeholder="Confirme seu E-mail"]` — mesmo valor
+**Bloco email:**
+6. `input[placeholder="E-mail"]` (validar unicidade)
+7. `input[placeholder="Confirme seu E-mail"]` (mesmo valor)
 
-**Bloco endereço (aparece após Email confirmado):**
-8. `input[placeholder="CEP"]` — vem auto da Etapa 1
-9. `input[placeholder="Endereço"]` — MANUAL
-10. `input[placeholder="Número"]` (segundo input com este placeholder, contexto endereço) — MANUAL
-11. `input[placeholder="Bairro"]` — MANUAL
-12. `input[placeholder="Cidade"]` — MANUAL
-13. **Combobox MUI "Estado"** — `[role="combobox"]` próximo ao label "Estado"; opções `li[role="option"]` com nomes sem acento ("Sao Paulo")
-14. `input[placeholder="Complemento"]` — opcional
+**Bloco endereço (após confirmar email):**
+8. `input[placeholder="CEP"]` ← VEM AUTO da Etapa 1
+9. `input[placeholder="Endereço"]` ← **AUTO via CEP** ✅
+10. `input[placeholder="Número"]` (segundo input com este placeholder, contexto endereço) ← MANUAL
+11. `input[placeholder="Bairro"]` ← **AUTO via CEP** ✅
+12. `input[placeholder="Cidade"]` ← **AUTO via CEP** ✅
+13. **Combobox MUI "Estado"** ← **AUTO via CEP** ✅ (mostra "Sao Paulo" sem acento)
+14. `input[placeholder="Complemento"]` ← OPCIONAL/MANUAL
 
-**Bloco distribuidora (aparece após Estado selecionado):**
-15. **Combobox MUI "Distribuidora de energia"** — opções FILTRADAS pelo Estado (ex: PB → "Energisa Paraiba" única; SP → 5 opções)
-16. `input[placeholder="Número da instalação"]` — aparece DEPOIS de Distribuidora
+**Bloco instalação (após endereço completo):**
+15. `input[placeholder="Número da instalação"]` ← MANUAL (validar unicidade no portal)
+    - Se erro "Número de instalação já cadastrado", o lead já existe → abortar com `installation_duplicate`
 
-**Bloco documento (aparece após Número da instalação):**
-17. **Combobox MUI "Tipo documento"** — opções "RG (Antigo)", "RG (Novo)" (CNH possivelmente)
+**Bloco documento (após instalação aceita):**
+16. **Combobox MUI "Tipo documento"** com 3 opções: `RG (Antigo)`, `RG (Novo)`, `CNH`
+    - Mapping: `customer.document_type === 'cnh' || rg === null` → `CNH`
+    - Senão → `RG (Novo)` (default seguro)
 
-### ETAPA 3: Upload de Documentos (aparece após Tipo documento)
+### ETAPA 3: Upload de Documentos
 
-**Documento pessoal (frente + verso para RG):**
-18. `label` com texto "Frente" — clicar abre file picker; o input file está dentro do label.  
-    Selector input: `input[type="file"]` dentro do bloco "Documento pessoal" (primeiro)
-19. `label` com texto "Verso" — segundo input file dentro de "Documento pessoal"
-    
-**Conta de energia (aparece após documento pessoal):**
-20. Bloco "Conta de energia" com botão de upload — terceiro `input[type="file"]`
+**Se CNH:**
+17. `label` "Frente" → 1 input file dentro do bloco "Documento pessoal"
+    ```js
+    const inputs = page.locator('input[type="file"]')
+    await inputs.nth(0).setInputFiles(pathFrente)
+    ```
 
-### ETAPA 4: Finalizar (aparece após todos uploads concluídos)
-21. `button:has-text("Finalizar")` — dispara OTP via WhatsApp/SMS
+**Se RG (Antigo) ou RG (Novo):**
+17. `label` "Frente" → input[0]
+18. `label` "Verso" → input[1] (obrigatório, mostra erro "Documento obrigatório.")
+
+**Conta de energia (a confirmar live — pode aparecer DEPOIS):**
+- Bloco "Conta de energia" com botão upload → próximo input file livre
+
+### ETAPA 4: Finalizar
+- `button:has-text("Finalizar")` → dispara OTP via WhatsApp/SMS
 
 ## Estratégia de Seletores (Worker)
 
-### Para inputs texto:
+### Inputs texto:
 ```js
 page.locator('input[placeholder="EXATO"]').first()
+// Para "Número" (existe 2x — um do CEP simulador e um do endereço):
+page.locator('input[placeholder="Número"]').nth(1) // segundo
 ```
 
-### Para comboboxes MUI:
+### Comboboxes MUI:
 ```js
-// Abrir
-await page.locator('[role="combobox"]').filter({ has: page.locator('text=LABEL') }).click()
-// OU pelo label dentro do parent
-await page.getByLabel('Estado').click()
-// Selecionar opção
-await page.locator('li[role="option"]').filter({ hasText: 'Sao Paulo' }).click()
+await page.locator('[role="combobox"]').filter({ hasText: 'Tipo documento' }).click()
+await page.locator('li[role="option"]').filter({ hasText: 'CNH' }).click()
 ```
 
-### Para uploads:
+### Uploads (estratégia validada):
 ```js
-// Estratégia A: setInputFiles direto no input file escondido
-const fileInputs = await page.locator('input[type="file"]').all()
-await fileInputs[0].setInputFiles(pathFrente)  // Frente RG
-await fileInputs[1].setInputFiles(pathVerso)   // Verso RG
-await fileInputs[2].setInputFiles(pathConta)   // Conta de luz
-
-// Estratégia B (se A não funcionar): clicar no label e usar filechooser
-const [chooser] = await Promise.all([
-  page.waitForEvent('filechooser'),
-  page.locator('label:has-text("Frente")').click()
-])
-await chooser.setFiles(pathFrente)
+// O setInputFiles funciona no input file escondido dentro do label
+const fileInputs = page.locator('input[type="file"]')
+await fileInputs.nth(0).setInputFiles(pathFrente)  // Frente (CNH ou RG)
+// Apenas se RG:
+await fileInputs.nth(1).setInputFiles(pathVerso)   // Verso RG
+// Conta de luz vai no próximo índice livre quando aparecer
 ```
 
-### Para Estado (cuidado com nomes sem acento):
-| UF input do banco | Texto exato no portal |
-|---|---|
-| SP / São Paulo | `Sao Paulo` |
-| RJ / Rio de Janeiro | `Rio de Janeiro` |
-| MG / Minas Gerais | `Minas Gerais` |
-| BA / Bahia | `Bahia` |
-| PR / Paraná | `Paraná` (com acento) |
-| PI / Piauí | `Piauí` (com acento) |
-| MA / Maranhão | `Maranhão` (com acento) |
-| PA / Pará | `Pará` (com acento) |
-| Outros | Sem acento (ex: "Goias", "Ceara", "Espirito Santo") |
-
-### Para Distribuidora:
-- Lista é dinâmica filtrada pelo Estado escolhido
-- Fallback seguro: pegar a 1ª opção, OU fazer match por substring com o campo `customer.distribuidora`
+### Mapping documento → tipo no portal:
+| customer.document_type | Tipo documento (portal) | Uploads |
+|---|---|---|
+| `cnh` | `CNH` | 1 (Frente apenas) |
+| `rg`, `rg_novo` | `RG (Novo)` | 2 (Frente + Verso) |
+| `rg_antigo` | `RG (Antigo)` | 2 (Frente + Verso) |
+| `null`/desconhecido | `CNH` (fallback seguro: 1 file) | 1 |
 
 ## Validações Críticas Anti-Travamento
 
-1. **Após preencher CPF**, esperar até 5s e verificar se Nome NÃO está vazio. Se vazio → CPF inválido, abortar com `awaiting_cpf_review`
-2. **Após preencher Email**, esperar e verificar se NÃO apareceu mensagem "Este email já está cadastrado". Se apareceu → trocar para email alternativo (`{cpf}@temp.igreen.com.br`) ou abortar com `email_duplicate`
-3. **Após escolher Estado**, esperar combobox Distribuidora ficar habilitado (não vazio) antes de clicar
-4. **Após escolher Distribuidora**, esperar campo "Número da instalação" aparecer
-5. **Após escolher Tipo documento**, esperar bloco "Documento pessoal" aparecer com inputs file
+1. **Pós-CPF**: aguardar 5s, verificar `Nome != ""` — senão CPF inválido → abortar `awaiting_cpf_review`
+2. **Pós-Email**: verificar mensagem "Este email já está cadastrado" — fallback `{cpf}@temp.igreen.com.br` ou abortar `email_duplicate`
+3. **Pós-Número da instalação**: verificar "Número de instalação já cadastrado" — abortar `installation_duplicate`
+4. **Pós-CEP**: aguardar 3s — se Endereço/Bairro/Cidade ainda vazios, fallback para preenchimento manual a partir de `customer.address_*`
+5. **Pós-Tipo documento**: aguardar bloco "Documento pessoal" + N inputs file (1 para CNH, 2 para RG)
+6. **Conta de energia**: verificar se aparece bloco extra após docs pessoais — se sim, anexar PDF da conta no próximo input file
