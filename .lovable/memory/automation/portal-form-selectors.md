@@ -1,57 +1,68 @@
 ---
 name: portal-form-selectors
-description: Mapeamento real do portal digital.igreenenergy.com.br — formulário PROGRESSIVO. CPF auto-preenche Nome+DataNasc (NUNCA sobrescrever). Tipo documento = 3 opções reais (RG Antigo, RG Novo, CNH). CNH = só FRENTE; RG = FRENTE+VERSO. document_type canônico no banco: cnh | rg_novo | rg_antigo.
+description: Mapeamento real do portal igreen + hierarquia de mídia (URL→Base64→Evolution→fail) + "Confirme celular" agora é OPCIONAL (soft-warn). document_type canônico cnh|rg_novo|rg_antigo. CNH só frente.
 type: feature
 ---
 
-Mapeamento confirmado ao vivo (v8 — 17/04/2026, validado end-to-end com CPF de teste 111.444.777-35) do portal `https://digital.igreenenergy.com.br/?id={consultor_id}&sendcontract=true`:
+# Portal iGreen — Selectors e Comportamento Real (v9 — 18/04/2026)
 
-**Landing**: CEP (`placeholder="CEP"`) + Valor da conta (`placeholder` começa com `R$`) → "Calcular" → revela botão verde **"Garantir meu desconto"** que avança para o formulário.
+## Landing
+CEP (`placeholder="CEP"`) + Valor (placeholder começa com `R$`) → "Calcular" → "Garantir meu desconto".
 
-**Fluxo PROGRESSIVO** (campos só aparecem após o anterior validar):
-1. **CPF ou CNPJ** (`placeholder="CPF ou CNPJ"`) — auto-preenche **Nome** e **Data de Nascimento** via consulta à Receita Federal em ~3-5s (até 18s com `waitForAutoFill()`). **Fonte da verdade** — worker NUNCA sobrescreve.
-2. **Número do seu WhatsApp** — máscara `(00) 00000-0000`. Worker faz até 12 tentativas (1.5s) + MutationObserver.
-3. **Confirme seu celular** — OBRIGATÓRIO. Worker dispara blur no campo WhatsApp e tenta 8x. Se não aparecer, **hard-fail**.
-4. **E-mail** + **Confirme seu E-mail**.
-5. **CEP** já vem da landing → auto-preenche **Endereço/Bairro/Cidade/Estado**.
-6. **Número** + **Complemento** (opcional).
-7. **Distribuidora** — MUI Select MANUAL (CPFL, Enel, etc.).
+## Fluxo PROGRESSIVO (campos só aparecem após o anterior validar)
+1. **CPF/CNPJ** — auto-preenche **Nome + Data Nasc** via Receita (3-18s). Worker **NUNCA sobrescreve**.
+2. **Número do WhatsApp** — máscara `(00) 00000-0000`. Worker tenta 12x (1.5s) + MutationObserver.
+3. **Confirme seu celular** — ⚠️ **OPCIONAL desde v9**. Worker tenta 4x (~8s); se não aparecer, **soft-warn e segue** (portal valida via SMS depois). Não é mais hard-fail.
+4. **E-mail** + Confirme E-mail.
+5. **CEP** — auto-preenche endereço.
+6. **Número** + Complemento.
+7. **Distribuidora** — MUI Select manual.
 8. **Número da instalação** — 7-12 dígitos.
-9. **Tipo documento** — ⚠️ MUI Select com **3 OPÇÕES REAIS**:
-   - `RG (Antigo)` (li[1])
-   - `RG (Novo)` (li[2])
-   - `CNH` (li[3])
+9. **Tipo documento** — MUI Select com 3 opções literais:
+   - `RG (Antigo)` / `RG (Novo)` / `CNH`
 10. **Documento pessoal**:
-    - **CNH** → APENAS upload "Frente" (sem Verso). Portal esconde o campo verso.
-    - **RG (Antigo|Novo)** → Frente + Verso obrigatórios.
-    - Apenas IMG/JPG/PNG (PDFs convertidos antes).
-11. Placas solares (default Não), upload conta (PDF aceito), procurador (Não), débito (Não), Finalizar.
+    - **CNH** → SÓ frente (portal esconde verso).
+    - **RG** → Frente + Verso obrigatórios.
+    - Apenas IMG/JPG/PNG (PDFs convertidos via `pdftoppm`).
+11. Placas (Não), conta (PDF aceito), procurador (Não), débito (Não), Finalizar.
 
-**REGRA DE OURO — document_type CANÔNICO (v8)**:
-Em todo o sistema usamos APENAS 3 valores no banco e no worker:
-- `cnh`
-- `rg_novo`
-- `rg_antigo`
+## REGRA — document_type CANÔNICO
+Banco e código usam APENAS: `cnh` | `rg_novo` | `rg_antigo`.
+Helpers em `_shared/document-type.ts` (webhook) e `normalizeDocType()` (worker).
+**Nunca** comparar string crua (`=== "CNH"`).
 
-Helpers: `_shared/document-type.ts` no Supabase e `normalizeDocType()` no worker. **Nunca comparar string crua** (`=== "CNH"`) — sempre normalizar.
+## REGRA — Data Nascimento
+- Portal via CPF é fonte da verdade.
+- Webhook só salva data da CNH se `dataNascimentoConfianca === "alta"`.
 
-**REGRA DE OURO — Data de Nascimento**:
-- Portal preenche via CPF → fonte da verdade, worker não sobrescreve.
-- Webhook só salva `data_nascimento` da CNH se `dataNascimentoConfianca === "alta"`.
-- Senão, deixa em branco e o portal preenche automaticamente.
+## REGRA — Hierarquia de Mídia (v9)
+Worker `prepararDocumento`/`prepararContaEnergia` busca em ordem:
+1. URL HTTP do MinIO (timeout 15s)
+2. data: URL Base64 já no campo `*_url`
+3. `customers.document_front_base64` / `customers.bill_base64` (fallback inline)
+4. Re-baixar via Evolution API (`customers.media_message_id` / `bill_message_id`) com `chat/getBase64FromMediaMessage`
+5. **doc-frente**: ABORT → status `awaiting_document_resend` → cliente reenvia. **doc-verso/conta**: placeholder mínimo aceito.
 
-**REGRA DE OURO — Storage MinIO (v8)**:
-- Caminho ÚNICO oficial: upload imediato no `evolution-webhook` ao receber a mídia (bill, doc_frente, doc_verso) via `_shared/minio-upload.ts`.
-- A função `upload-documents-minio` virou ferramenta de RECOVERY manual — não é mais chamada no hot-path do webhook (era um upload duplicado e travava em timeouts de rede).
-- `customers.document_front_base64` foi descontinuado: NÃO salvar mais base64 gigante no banco. O OCR conjunto frente+verso usa apenas o base64 do verso (suficiente para preencher campos faltantes).
-- Se MinIO falhar, salva `evolution-media:pending` no campo e segue (recovery posterior).
+**Nunca** usar `fixtures/documento.jpg` como fallback silencioso para frente.
 
-**BUG CRÍTICO** (corrigido em v4): Campos com máscara MUI/react-imask (telefone, CPF, CNPJ, CEP, data) precisam de digitação caractere-por-caractere com `delay: 90ms` + `blur` — `_valueTracker.setValue()` não funciona.
+## REGRA — Storage no Webhook
+- Caminho oficial: upload imediato MinIO em `evolution-webhook`.
+- Se MinIO falhar:
+  - Salva Base64 inline em `document_front_base64`/`bill_base64`
+  - Salva `media_message_id`/`bill_message_id` (id da msg WhatsApp)
+  - Marca `media_storage = 'inline'`
+- `upload-documents-minio` é apenas recovery manual.
 
-**MUDANÇAS v8 vs v7**:
-- ✅ Worker para de mapear CNH→RG(Novo); seleciona "CNH" real no MUI Select e pula upload do verso.
-- ✅ Validação visual após selecionar tipo: confere se campo verso aparece (RG) ou some (CNH).
-- ✅ `document_type` canonicalizado (`cnh|rg_novo|rg_antigo`) em webhook, validators, conversation-helpers e worker via `normalizeDocType()`.
-- ✅ Removido segundo upload "fire-and-forget" para `upload-documents-minio` no fim do fluxo do webhook.
-- ✅ `document_front_base64` parou de ser persistido no banco.
-- ✅ Logs estruturados `[FASE_*] [STATUS]` no worker para debug rápido nos logs do Easypanel.
+## Conversão PDF → JPG
+Container do worker tem `poppler-utils`. Para `doc-frente`/`doc-verso` PDF → JPG via `pdftoppm -jpeg -r 150 -f 1 -l 1`.
+
+## BUG CRÍTICO (resolvido)
+Campos com máscara MUI/react-imask (tel, CPF, CEP, data): digitação caractere-por-caractere com `delay: 90ms` + `blur`. `_valueTracker.setValue()` não funciona.
+
+## MUDANÇAS v9 vs v8
+- ✅ "Confirme celular" virou OPCIONAL (soft-warn em vez de hard-fail).
+- ✅ Hierarquia de mídia URL→Base64→Evolution→fail-fast implementada.
+- ✅ Webhook salva Base64 inline + messageId quando MinIO offline.
+- ✅ Worker NUNCA usa fixture genérica para doc-frente — aborta com `awaiting_document_resend`.
+- ✅ Dockerfile do worker passou a instalar `poppler-utils`.
+- ✅ Novas colunas: `media_message_id`, `bill_message_id`, `bill_base64`, `media_storage`.
