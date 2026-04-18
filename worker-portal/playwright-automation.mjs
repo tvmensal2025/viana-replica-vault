@@ -204,6 +204,90 @@ async function waitForFieldByPlaceholder(page, regex, timeoutMs = 15000) {
   }
 }
 
+// ─── findFieldFast: detecção AGRESSIVA com waitForFunction (250ms poll) ──
+// Múltiplos critérios em OR: placeholder, name, aria-label, type, label adjacente.
+// Retorna o handle do elemento (ou null em timeout).
+// Usado para campos críticos que demoram a aparecer (ex: WhatsApp após CPF).
+async function findFieldFast(page, criteria, timeoutMs = 12000) {
+  const start = Date.now();
+  try {
+    const handle = await page.waitForFunction(
+      (crit) => {
+        const inputs = Array.from(document.querySelectorAll('input, textarea'));
+        for (const input of inputs) {
+          if (input.offsetParent === null) continue;
+          if (input.disabled) continue;
+          const ph = (input.getAttribute('placeholder') || '').toLowerCase();
+          const name = (input.getAttribute('name') || '').toLowerCase();
+          const aria = (input.getAttribute('aria-label') || '').toLowerCase();
+          const type = (input.getAttribute('type') || '').toLowerCase();
+          const id = (input.getAttribute('id') || '').toLowerCase();
+          // Buscar contexto via label/parent
+          let ctx = '';
+          try {
+            const labelFor = id ? document.querySelector(`label[for="${id}"]`) : null;
+            const parentLabel = input.closest('label');
+            const formCtl = input.closest('.MuiFormControl-root,[class*="FormControl"],div');
+            ctx = ((labelFor?.textContent || '') + ' ' + (parentLabel?.textContent || '') + ' ' + (formCtl?.textContent || '')).toLowerCase();
+          } catch (_) {}
+          const haystack = `${ph} ${name} ${aria} ${id} ${ctx}`;
+          // OR: qualquer keyword bater
+          const matchKeyword = (crit.keywords || []).some((k) => haystack.includes(k.toLowerCase()));
+          const matchType = crit.type ? type === crit.type : false;
+          const matchExclude = (crit.exclude || []).some((x) => haystack.includes(x.toLowerCase()));
+          if ((matchKeyword || matchType) && !matchExclude) {
+            return true;
+          }
+        }
+        return false;
+      },
+      criteria,
+      { polling: 250, timeout: timeoutMs }
+    ).catch(() => null);
+
+    const elapsed = Date.now() - start;
+    if (!handle) {
+      console.log(`   ⚠️  [findFieldFast] timeout após ${elapsed}ms — keywords=${JSON.stringify(criteria.keywords || [])}`);
+      return null;
+    }
+
+    // Re-localizar agora que sabemos que existe (handle do waitForFunction é o boolean)
+    const locator = await page.evaluateHandle((crit) => {
+      const inputs = Array.from(document.querySelectorAll('input, textarea'));
+      for (const input of inputs) {
+        if (input.offsetParent === null) continue;
+        if (input.disabled) continue;
+        const ph = (input.getAttribute('placeholder') || '').toLowerCase();
+        const name = (input.getAttribute('name') || '').toLowerCase();
+        const aria = (input.getAttribute('aria-label') || '').toLowerCase();
+        const type = (input.getAttribute('type') || '').toLowerCase();
+        const id = (input.getAttribute('id') || '').toLowerCase();
+        let ctx = '';
+        try {
+          const labelFor = id ? document.querySelector(`label[for="${id}"]`) : null;
+          const parentLabel = input.closest('label');
+          const formCtl = input.closest('.MuiFormControl-root,[class*="FormControl"],div');
+          ctx = ((labelFor?.textContent || '') + ' ' + (parentLabel?.textContent || '') + ' ' + (formCtl?.textContent || '')).toLowerCase();
+        } catch (_) {}
+        const haystack = `${ph} ${name} ${aria} ${id} ${ctx}`;
+        const matchKeyword = (crit.keywords || []).some((k) => haystack.includes(k.toLowerCase()));
+        const matchType = crit.type ? type === crit.type : false;
+        const matchExclude = (crit.exclude || []).some((x) => haystack.includes(x.toLowerCase()));
+        if ((matchKeyword || matchType) && !matchExclude) {
+          return input;
+        }
+      }
+      return null;
+    }, criteria);
+
+    console.log(`   ⚡ [findFieldFast] OK em ${elapsed}ms — keywords=${JSON.stringify(criteria.keywords || [])}`);
+    return locator;
+  } catch (e) {
+    console.warn(`   ⚠️  [findFieldFast] erro: ${e.message}`);
+    return null;
+  }
+}
+
 // ─── Controle global: apenas 1 browser por vez ───────────────────────────────
 let activeBrowser = null;
 
