@@ -5,13 +5,13 @@ import { getNextMissingStep, getReplyForStep, validarCPFDigitos } from "../_shar
 import { ocrContaEnergia, ocrDocumentoFrenteVerso } from "../_shared/ocr.ts";
 import { createEvolutionSender, parseEvolutionMessage, extractMediaUrl } from "../_shared/evolution-api.ts";
 import { checkAndMarkProcessed, logStepTransition, jsonLog, generateCorrelationId } from "../_shared/audit.ts";
-import { uploadBytesToMinio, base64ToBytes } from "../_shared/minio-upload.ts";
+import { uploadMediaUnified } from "../_shared/media-storage.ts";
 import { normalizeDocumentType, isCNH, friendlyLabel } from "../_shared/document-type.ts";
 
 /**
- * Sobe uma mídia (base64 + mime) imediatamente para o MinIO e retorna a URL pública.
- * Se MinIO falhar, retorna null — o caller usa fallback ("evolution-media:pending").
- * Isso impede que data URLs gigantes (1MB+) sejam salvos no banco.
+ * Sobe uma mídia com fallback automático: tenta MinIO (8s timeout) e, se falhar,
+ * usa Supabase Storage (bucket whatsapp-media). NUNCA mais salva data URL no banco.
+ * Retorna null SOMENTE em caso de falha catastrófica em ambos os storages.
  */
 async function uploadMediaToMinio(opts: {
   fileBase64: string;
@@ -22,19 +22,10 @@ async function uploadMediaToMinio(opts: {
   kind: "conta" | "doc_frente" | "doc_verso";
 }): Promise<string | null> {
   try {
-    const bytes = base64ToBytes(opts.fileBase64);
-    const result = await uploadBytesToMinio({
-      bytes,
-      contentType: opts.mimeType || "application/octet-stream",
-      consultantFolder: opts.consultantFolder,
-      customerName: opts.customerName,
-      customerBirth: opts.customerBirth,
-      kind: opts.kind,
-    });
-    console.log(`📦✅ MinIO upload OK [${opts.kind}]: ${result.url}`);
+    const result = await uploadMediaUnified(opts);
     return result.url;
   } catch (err: any) {
-    console.error(`📦❌ MinIO upload falhou [${opts.kind}]:`, err?.message || err);
+    console.error(`📦❌ Upload TOTALMENTE falhou [${opts.kind}]:`, err?.message || err);
     return null;
   }
 }
