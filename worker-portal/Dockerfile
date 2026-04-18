@@ -3,8 +3,8 @@
 
 FROM node:20-bookworm-slim
 
-LABEL version="v10.1-2026.04.18"
-LABEL changelog="phase-logger,wa-fast-detect,nome-validation,confirme-celular-soft"
+LABEL version="v10.2-2026.04.18"
+LABEL changelog="css-escape-react-useid,phase-logger,wa-fast-detect,nome-validation"
 
 # Instalar dependências do sistema para Playwright + VNC + noVNC
 RUN apt-get update && apt-get install -y --no-install-recommends \
