@@ -482,6 +482,7 @@ const SuperAdmin = () => {
 
         {activeTab === "crm" && <CrmAnalyticsTab />}
         {activeTab === "funil" && <BotFunnelPanel />}
+        {activeTab === "worker" && <WorkerPhaseTimeline />}
         {activeTab === "auditoria" && <AuditLogPanel />}
         {activeTab === "ia" && <AIKnowledgePanel />}
       </main>
