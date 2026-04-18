@@ -1,10 +1,10 @@
 # Dockerfile para Worker VPS - Portal iGreen
-# VERSÃO 11.0 - 2026-04-18 (zero-erro: email-duplicado fallback, instalação-duplicada detect, distribuidora soft)
+# VERSÃO 11.1 - 2026-04-18 (fix: CPF→WhatsApp gap, masked-input retry, autofill timeout reduzido)
 
 FROM node:20-bookworm-slim
 
-LABEL version="v11.0-2026.04.18"
-LABEL changelog="email-duplicate-fallback,installation-duplicate-detect,distribuidora-soft,cnh-skip-verso"
+LABEL version="v11.1-2026.04.18"
+LABEL changelog="cpf-whatsapp-gap-fix,masked-input-3retry-relookup,autofill-timeout-10s,delay-pos-cpf-1s"
 
 # Instalar dependências do sistema para Playwright + VNC + noVNC
 RUN apt-get update && apt-get install -y --no-install-recommends \
