@@ -129,7 +129,81 @@ async function reactFill(page, selector, value) {
     if (filled === value) {
       console.log(`   ✅ [reactFill T2] ${selectorStr}: "${value}"`);
       return true;
+}
+
+// ─── bulletproofType: NUNCA falha em campos com placeholder conhecido ──────
+// Estratégia "à prova de balas" para o portal iGreen (react-imask + MUI re-renders):
+// 1. Aguarda input com placeholder aparecer (até 30s, polling 250ms)
+// 2. Re-resolve o handle a cada tentativa (input pode ser re-montado)
+// 3. Foca via .click(force) + .focus() JS
+// 4. Limpa com Ctrl+A + Backspace (compatível com máscara)
+// 5. Digita via page.keyboard.type (foco no input, não importa se re-renderizar)
+// 6. Verifica valor; se não bater, retenta (até 5x). Aceita match por dígitos.
+async function bulletproofType(page, placeholder, value, opts = {}) {
+  const { maxAttempts = 5, appearTimeoutMs = 30000, label = placeholder } = opts;
+  const onlyDigits = String(value).replace(/\D/g, '');
+  const expected = onlyDigits || String(value);
+  const escPh = placeholder.replace(/"/g, '\\"');
+  const getLocator = () => page.locator(`input[placeholder="${escPh}"]`).first();
+
+  console.log(`   🛡️  [bulletproof] aguardando "${label}" aparecer...`);
+  const appearStart = Date.now();
+  while (Date.now() - appearStart < appearTimeoutMs) {
+    const loc = getLocator();
+    if ((await loc.count()) > 0 && (await loc.isVisible().catch(() => false))) break;
+    await new Promise(r => setTimeout(r, 250));
+  }
+  if ((await getLocator().count()) === 0) {
+    throw new Error(`[bulletproof] Campo "${label}" não apareceu em ${appearTimeoutMs}ms`);
+  }
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const fresh = getLocator();
+      if ((await fresh.count()) === 0) { await new Promise(r => setTimeout(r, 500)); continue; }
+      await fresh.scrollIntoViewIfNeeded().catch(() => {});
+      await fresh.click({ timeout: 5000, force: true }).catch(() => {});
+      await fresh.evaluate((el) => el.focus()).catch(() => {});
+      await new Promise(r => setTimeout(r, 150));
+
+      // Limpar
+      await page.keyboard.down('Control').catch(() => {});
+      await page.keyboard.press('a').catch(() => {});
+      await page.keyboard.up('Control').catch(() => {});
+      await page.keyboard.press('Backspace').catch(() => {});
+      await new Promise(r => setTimeout(r, 80));
+
+      // Re-focar (Backspace pode ter desfocado em alguns browsers)
+      const fresh2 = getLocator();
+      await fresh2.click({ timeout: 3000, force: true }).catch(() => {});
+      await fresh2.evaluate((el) => el.focus()).catch(() => {});
+      await new Promise(r => setTimeout(r, 80));
+
+      // Digitar via teclado
+      await page.keyboard.type(expected, { delay: 60 });
+      await new Promise(r => setTimeout(r, 200));
+      await page.keyboard.press('Tab').catch(() => {});
+      await new Promise(r => setTimeout(r, 250));
+
+      const filled = await getLocator().inputValue().catch(() => '');
+      if (filled.replace(/\D/g, '') === expected || filled === expected) {
+        console.log(`   ✅ [bulletproof attempt ${attempt}] ${label}: "${filled}"`);
+        return true;
+      }
+      console.log(`   🔁 [bulletproof attempt ${attempt}] "${filled}" ≠ "${expected}", retry`);
+    } catch (e) {
+      console.log(`   ⚠️  [bulletproof attempt ${attempt}] erro: ${e.message}`);
     }
+    await new Promise(r => setTimeout(r, 500 + attempt * 200));
+  }
+
+  const finalVal = await getLocator().inputValue().catch(() => '');
+  if (finalVal.replace(/\D/g, '') === expected) {
+    console.log(`   ✅ [bulletproof FINAL] ${label}: "${finalVal}"`);
+    return true;
+  }
+  throw new Error(`[bulletproof] Falhou "${label}" após ${maxAttempts} tentativas. Final: "${finalVal}"`);
+}
   } catch (e) {
     console.log(`   ⚠️  [reactFill T2] falhou: ${e.message}`);
   }
