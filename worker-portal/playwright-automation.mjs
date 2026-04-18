@@ -1625,7 +1625,33 @@ export async function executarAutomacao(customerId, options = {}) {
       } else {
         throw new Error('Campo número da instalação não encontrado no portal');
       }
-      await delay(1500);
+      await delay(2000);
+
+      // ─── v11: detectar INSTALAÇÃO DUPLICADA ─────────────────────────────
+      // Portal mostra: "Número de instalação já cadastrado"
+      currentPhase = 'fase7b-instalacao-dup-check';
+      await logPhase(customerId, 'fase7b-instalacao-dup-check', 'started');
+      try {
+        const dupInst = await page
+          .locator('text=/(instala[cç][aã]o\\s*j[áa]\\s*cadastrad)|(n[uú]mero.*j[áa].*cadastrad)/i')
+          .count()
+          .catch(() => 0);
+        if (dupInst > 0) {
+          const msg = `Número de instalação ${data.numeroInstalacao} já cadastrado no portal iGreen`;
+          console.error(`   🚫 ${msg}`);
+          await logPhase(customerId, 'fase7b-instalacao-dup-check', 'aborted', { message: msg });
+          await screenshot(page, customerId, 'ERROR-instalacao-duplicada');
+          await atualizarStatus(customerId, 'installation_duplicate', msg);
+          throw new Error(`INSTALLATION_DUPLICATE: ${msg}`);
+        } else {
+          await logPhase(customerId, 'fase7b-instalacao-dup-check', 'ok');
+        }
+      } catch (e) {
+        if (String(e.message || '').startsWith('INSTALLATION_DUPLICATE')) throw e;
+        // Erro do próprio detector — não trava
+        console.warn(`   ⚠️  Detector de duplicata falhou: ${e.message}`);
+      }
+      await delay(800);
     }
     
     await page.evaluate(() => window.scrollBy(0, 200));
