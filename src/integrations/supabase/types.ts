@@ -405,10 +405,12 @@ export type Database = {
           electricity_bill_value: number | null
           email: string | null
           error_message: string | null
+          facial_confirmed_at: string | null
           id: string
           igreen_code: string | null
           igreen_link: string | null
           link_assinatura: string | null
+          link_facial: string | null
           media_consumo: number | null
           media_message_id: string | null
           media_storage: string | null
@@ -472,10 +474,12 @@ export type Database = {
           electricity_bill_value?: number | null
           email?: string | null
           error_message?: string | null
+          facial_confirmed_at?: string | null
           id?: string
           igreen_code?: string | null
           igreen_link?: string | null
           link_assinatura?: string | null
+          link_facial?: string | null
           media_consumo?: number | null
           media_message_id?: string | null
           media_storage?: string | null
@@ -539,10 +543,12 @@ export type Database = {
           electricity_bill_value?: number | null
           email?: string | null
           error_message?: string | null
+          facial_confirmed_at?: string | null
           id?: string
           igreen_code?: string | null
           igreen_link?: string | null
           link_assinatura?: string | null
+          link_facial?: string | null
           media_consumo?: number | null
           media_message_id?: string | null
           media_storage?: string | null
