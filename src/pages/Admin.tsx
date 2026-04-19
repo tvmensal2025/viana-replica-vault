@@ -295,7 +295,9 @@ const AdminContent = () => {
             </div>
             <p className="text-sm text-muted-foreground">{qrModal.label}</p>
             <div className="flex justify-center bg-white rounded-xl p-6">
-              <QRCodeSVG id="qr-canvas" value={qrModal.url} size={200} level="H" includeMargin={false} />
+              <Suspense fallback={<div className="w-[200px] h-[200px] flex items-center justify-center"><div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full" /></div>}>
+                <QRCodeSVG id="qr-canvas" value={qrModal.url} size={200} level="H" includeMargin={false} />
+              </Suspense>
             </div>
             <p className="text-xs text-muted-foreground text-center break-all">{qrModal.url}</p>
             <div className="flex gap-3">
@@ -327,7 +329,11 @@ const AdminContent = () => {
       )}
 
       {/* AI Chat Panel */}
-      <AIChatPanel open={aiChatOpen} onClose={() => setAiChatOpen(false)} />
+      {aiChatOpen && (
+        <Suspense fallback={null}>
+          <AIChatPanel open={aiChatOpen} onClose={() => setAiChatOpen(false)} />
+        </Suspense>
+      )}
     </div>
   );
 };
