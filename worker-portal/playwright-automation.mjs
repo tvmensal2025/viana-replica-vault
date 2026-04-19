@@ -1263,44 +1263,45 @@ export async function executarAutomacao(customerId, options = {}) {
     // ─── 4. FASE 1: CEP + Valor ──────────────────────────────────────────
     currentPhase = 'fase1-cep';
     console.log('\n📋 [1/16] FASE 1: CEP e valor da conta...');
-    
-    // Portal usa placeholder="CEP" e placeholder="Valor da conta"
-    const cepInput = byPH('CEP');
-    if (await cepInput.count() > 0) {
-      await cepInput.click();
-      await cepInput.fill('');
-      await cepInput.type(data.cepFormatted, { delay: 80 });
+
+    // DESCOBERTO NA SIMULAÇÃO: portal usa name="cep" e name="consumption" (SEM placeholder)
+    // Seletores por name são primários; placeholder é fallback para versões antigas
+    const cepInput = page.locator('input[name="cep"]').first();
+    const cepInputPH = byPH('CEP');
+    const cepTarget = (await cepInput.count() > 0) ? cepInput : cepInputPH;
+    if (await cepTarget.count() > 0) {
+      await cepTarget.scrollIntoViewIfNeeded().catch(() => {});
+      await cepTarget.click({ force: true });
+      await cepTarget.fill('');
+      await cepTarget.type(data.cepFormatted, { delay: 80 });
+      await cepTarget.dispatchEvent('blur');
       console.log(`   ✅ CEP: ${data.cepFormatted}`);
     } else {
-      // Fallback: tentar name-based (versão antiga do portal)
-      const cepFallback = page.locator('input[name="cep"], input[name="CEP"]').first();
-      if (await cepFallback.count() > 0) {
-        await reactFill(page, cepFallback, data.cepFormatted);
-        console.log(`   ✅ CEP (fallback): ${data.cepFormatted}`);
-      }
+      throw new Error('Campo CEP não encontrado no portal');
     }
-    
-    const valorInput = byPH('Valor da conta');
-    if (await valorInput.count() > 0) {
-      await valorInput.click();
-      await valorInput.fill('');
-      await valorInput.type(String(data.electricity_bill_value), { delay: 80 });
+
+    await delay(300);
+
+    const valorInput = page.locator('input[name="consumption"]').first();
+    const valorInputPH = byPH('Valor da conta');
+    const valorTarget = (await valorInput.count() > 0) ? valorInput : valorInputPH;
+    if (await valorTarget.count() > 0) {
+      await valorTarget.scrollIntoViewIfNeeded().catch(() => {});
+      await valorTarget.click({ force: true });
+      await valorTarget.fill('');
+      await valorTarget.type(String(data.electricity_bill_value), { delay: 80 });
+      await valorTarget.dispatchEvent('blur');
       console.log(`   ✅ Valor: ${data.electricity_bill_value}`);
     } else {
-      const valorFallback = page.locator('input[name="consumption"]').first();
-      if (await valorFallback.count() > 0) {
-        await reactFill(page, valorFallback, String(data.electricity_bill_value));
-        console.log(`   ✅ Valor (fallback): ${data.electricity_bill_value}`);
-      }
+      throw new Error('Campo Valor da conta não encontrado no portal');
     }
-    
+
     await delay(500);
-    // Botão Calcular (type="button" no portal atual)
+    // Botão Calcular
     const calcClicked = await clickText('Calcular');
     if (calcClicked) {
       console.log('   ✅ Calcular clicado');
     } else {
-      // Fallback
       const calcBtn = page.locator('button[type="submit"]').first();
       if (await calcBtn.count() > 0) { await calcBtn.click(); console.log('   ✅ Calcular clicado (fallback)'); }
     }
@@ -1323,22 +1324,27 @@ export async function executarAutomacao(customerId, options = {}) {
     // ─── 6. FASE 3: CPF ──────────────────────────────────────────────────
     currentPhase = 'fase3-cpf';
     console.log('\n📋 [3/16] CPF...');
-    
-    // Portal usa placeholder="CPF ou CNPJ"
-    const cpfInput = byPH('CPF ou CNPJ');
-    if (await cpfInput.count() > 0) {
-      await cpfInput.click();
-      await cpfInput.type(data.cpfDigits, { delay: 100 });
+
+    // DESCOBERTO NA SIMULAÇÃO: portal usa name="documentNumber" (SEM placeholder)
+    await page.waitForSelector('input[name="documentNumber"], input[placeholder*="CPF" i]', { timeout: 15000 }).catch(() => {});
+    const cpfInput = page.locator('input[name="documentNumber"]').first();
+    const cpfInputPH = byPH('CPF ou CNPJ');
+    const cpfTarget = (await cpfInput.count() > 0) ? cpfInput : cpfInputPH;
+    if (await cpfTarget.count() > 0) {
+      await cpfTarget.scrollIntoViewIfNeeded().catch(() => {});
+      await cpfTarget.click({ force: true });
+      await cpfTarget.evaluate(el => el.focus());
+      await page.keyboard.down('Control');
+      await page.keyboard.press('a');
+      await page.keyboard.up('Control');
+      await page.keyboard.press('Backspace');
+      await delay(80);
+      await cpfTarget.type(data.cpfDigits, { delay: 100 });
+      await cpfTarget.dispatchEvent('blur');
       console.log(`   ✅ CPF digitado: ${data.cpfFormatted}`);
     } else {
-      const cpfAlt = page.locator('input[name="documentNumber"], input[placeholder*="CPF"]').first();
-      if (await cpfAlt.count() > 0) {
-        await cpfAlt.type(data.cpfDigits, { delay: 100 });
-        console.log(`   ✅ CPF digitado (fallback): ${data.cpfFormatted}`);
-      }
+      throw new Error('Campo CPF não encontrado no portal');
     }
-    // Aguardar auto-preenchimento do portal (Nome + Data de Nascimento vêm da Receita)
-    // Reduzido de 5s→1s: o waitForAutoFill abaixo já faz polling adaptativo de até 10s
     await delay(1000);
     await screenshot(page, customerId, '04-apos-cpf');
 
@@ -1422,81 +1428,135 @@ export async function executarAutomacao(customerId, options = {}) {
       await screenshot(page, customerId, '04b-apos-novo-cadastro');
     }
     
-    // ─── 7. WhatsApp + Confirmação (BULLETPROOF) ─────────────────────────
-    // Usa bulletproofType: re-resolve o input por placeholder a CADA tentativa,
-    // foca via click(force)+focus(), digita via page.keyboard. NUNCA falha por
-    // re-render do React. Até 5 retries × 5s = 25s pior caso por campo.
+    // ─── 7. WhatsApp + Confirmação (BULLETPROOF v11.3) ───────────────────
+    // ESTRATÉGIA: após CPF auto-fill, o React re-renderiza o form.
+    // Os campos WhatsApp e Confirme celular SÓ aparecem depois do auto-fill.
+    // Usamos waitForSelector + scroll + 4 estratégias de preenchimento.
     currentPhase = 'fase4-whatsapp';
     console.log('\n📋 [4/16] WhatsApp (bulletproof)...');
     console.log(`   📱 Telefone a usar: ${data.whatsapp}`);
     await logPhase(customerId, 'fase4-whatsapp', 'started');
     const waStart = Date.now();
 
-    // Aguardar campo WhatsApp aparecer (pode demorar após auto-fill CPF)
-    await page.waitForSelector('input[placeholder*="WhatsApp" i], input[placeholder*="celular" i]', { timeout: 20000 }).catch(() => {});
+    // Scroll para garantir que os campos estão visíveis
+    await page.evaluate(() => window.scrollBy(0, 300));
     await delay(500);
 
-    try {
-      await bulletproofType(page, 'Número do seu WhatsApp', data.whatsapp, {
-        label: 'WhatsApp',
-        maxAttempts: 5,
-        appearTimeoutMs: 30000,
-      });
-      await logPhase(customerId, 'fase4-whatsapp', 'ok', {
-        duration_ms: Date.now() - waStart,
-        selector_used: 'input[placeholder="Número do seu WhatsApp"]',
-      });
-    } catch (e) {
-      // Fallback: 1º input de telefone visível que não seja "Confirme"
-      console.warn(`   ⚠️  bulletproof WhatsApp falhou: ${e.message} — fallback genérico`);
-      const fallback = page.locator('input[placeholder*="WhatsApp" i], input[placeholder*="celular" i]:not([placeholder*="onfirme" i]), input[type="tel"]').first();
-      if (await fallback.count() > 0 && await fallback.isVisible().catch(() => false)) {
-        await fallback.click({ force: true }).catch(() => {});
-        await fallback.evaluate((el) => el.focus()).catch(() => {});
-        await page.keyboard.type(String(data.whatsapp).replace(/\D/g, ''), { delay: 80 });
-        await page.keyboard.press('Tab').catch(() => {});
-        await logPhase(customerId, 'fase4-whatsapp', 'warn', { message: 'fallback genérico aplicado' });
-      } else {
-        await screenshot(page, customerId, 'ERROR-whatsapp');
-        await logPhase(customerId, 'fase4-whatsapp', 'failed', { message: e.message });
-        throw e;
-      }
-    }
-    await delay(800);
+    // Aguardar campo WhatsApp aparecer (até 30s — pode demorar após auto-fill CPF)
+    console.log('   ⏳ Aguardando campo WhatsApp aparecer...');
+    const waFound = await page.waitForSelector(
+      'input[placeholder="Número do seu WhatsApp"], input[placeholder*="WhatsApp" i], input[placeholder*="celular" i]',
+      { timeout: 30000 }
+    ).catch(() => null);
 
-    // Confirme celular — mesmo padrão bulletproof
+    if (!waFound) {
+      // Scroll mais e tentar de novo
+      await page.evaluate(() => window.scrollBy(0, 500));
+      await delay(1000);
+    }
+
+    // Função interna: preencher campo de telefone com 4 estratégias
+    async function preencherTelefone(placeholder, valor, label) {
+      const digits = String(valor).replace(/\D/g, '');
+      // Estratégia 1: bulletproofType (mais confiável para campos com máscara)
+      try {
+        await bulletproofType(page, placeholder, digits, {
+          label,
+          maxAttempts: 5,
+          appearTimeoutMs: 15000,
+        });
+        console.log(`   ✅ ${label}: ${digits} (bulletproof)`);
+        return true;
+      } catch (_) {}
+
+      // Estratégia 2: locator direto + keyboard.type
+      try {
+        const loc = page.locator(`input[placeholder="${placeholder}"]`).first();
+        if (await loc.count() > 0 && await loc.isVisible().catch(() => false)) {
+          await loc.scrollIntoViewIfNeeded().catch(() => {});
+          await loc.click({ force: true });
+          await loc.evaluate(el => { el.value = ''; el.focus(); });
+          await page.keyboard.press('Control+a');
+          await page.keyboard.press('Backspace');
+          await page.keyboard.type(digits, { delay: 80 });
+          await page.keyboard.press('Tab');
+          await delay(300);
+          const val = await loc.inputValue().catch(() => '');
+          if (val.replace(/\D/g, '') === digits) {
+            console.log(`   ✅ ${label}: ${digits} (locator direto)`);
+            return true;
+          }
+        }
+      } catch (_) {}
+
+      // Estratégia 3: qualquer input de telefone visível (por posição)
+      try {
+        const allTel = await page.locator('input[placeholder*="celular" i], input[placeholder*="WhatsApp" i], input[type="tel"]').all();
+        for (const tel of allTel) {
+          if (!await tel.isVisible().catch(() => false)) continue;
+          const ph = await tel.getAttribute('placeholder').catch(() => '');
+          if (label.includes('onfirm') && !ph.toLowerCase().includes('confirm') && !ph.toLowerCase().includes('confirme')) continue;
+          if (!label.includes('onfirm') && (ph.toLowerCase().includes('confirm') || ph.toLowerCase().includes('confirme'))) continue;
+          await tel.scrollIntoViewIfNeeded().catch(() => {});
+          await tel.click({ force: true });
+          await tel.evaluate(el => { el.value = ''; el.focus(); });
+          await page.keyboard.press('Control+a');
+          await page.keyboard.press('Backspace');
+          await page.keyboard.type(digits, { delay: 80 });
+          await page.keyboard.press('Tab');
+          await delay(300);
+          console.log(`   ✅ ${label}: ${digits} (scan geral)`);
+          return true;
+        }
+      } catch (_) {}
+
+      // Estratégia 4: evaluate direto no DOM (último recurso)
+      try {
+        const filled = await page.evaluate(({ ph, val }) => {
+          const inputs = Array.from(document.querySelectorAll('input'));
+          for (const inp of inputs) {
+            const p = (inp.getAttribute('placeholder') || '').toLowerCase();
+            if (!p.includes('whatsapp') && !p.includes('celular')) continue;
+            if (inp.offsetParent === null) continue;
+            const nativeSet = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+            if (nativeSet) {
+              nativeSet.call(inp, val);
+              inp.dispatchEvent(new Event('input', { bubbles: true }));
+              inp.dispatchEvent(new Event('change', { bubbles: true }));
+              inp.dispatchEvent(new Event('blur', { bubbles: true }));
+              return true;
+            }
+          }
+          return false;
+        }, { ph: placeholder, val: digits });
+        if (filled) {
+          console.log(`   ✅ ${label}: ${digits} (evaluate DOM)`);
+          return true;
+        }
+      } catch (_) {}
+
+      console.warn(`   ⚠️  ${label}: todas as estratégias falharam — continuando mesmo assim`);
+      return false;
+    }
+
+    await preencherTelefone('Número do seu WhatsApp', data.whatsapp, 'WhatsApp');
+    await logPhase(customerId, 'fase4-whatsapp', 'ok', { duration_ms: Date.now() - waStart });
+    await delay(600);
+
+    // Confirme celular
     currentPhase = 'fase4b-confirme-celular';
     await logPhase(customerId, 'fase4b-confirme-celular', 'started');
     const cStart = Date.now();
 
-    // Aguardar campo "Confirme" aparecer após preencher o primeiro
-    await page.waitForSelector('input[placeholder*="onfirme" i][placeholder*="celular" i], input[placeholder*="onfirme" i][placeholder*="WhatsApp" i]', { timeout: 10000 }).catch(() => {});
+    // Aguardar campo "Confirme" aparecer
+    await page.waitForSelector(
+      'input[placeholder="Confirme seu celular"], input[placeholder*="onfirme" i]',
+      { timeout: 10000 }
+    ).catch(() => {});
     await delay(400);
 
-    try {
-      await bulletproofType(page, 'Confirme seu celular', data.whatsapp, {
-        label: 'Confirme celular',
-        maxAttempts: 5,
-        appearTimeoutMs: 15000,
-      });
-      await logPhase(customerId, 'fase4b-confirme-celular', 'ok', { duration_ms: Date.now() - cStart });
-    } catch (e) {
-      // Fallback: 2º input de telefone na página
-      console.warn(`   ⚠️  bulletproof Confirme falhou: ${e.message} — fallback nth(1)`);
-      const all = page.locator('input[placeholder*="celular" i], input[placeholder*="WhatsApp" i]');
-      if ((await all.count()) >= 2) {
-        const second = all.nth(1);
-        await second.click({ force: true }).catch(() => {});
-        await second.evaluate((el) => el.focus()).catch(() => {});
-        await page.keyboard.type(String(data.whatsapp).replace(/\D/g, ''), { delay: 80 });
-        await page.keyboard.press('Tab').catch(() => {});
-        await logPhase(customerId, 'fase4b-confirme-celular', 'warn', { message: 'fallback nth(1)' });
-      } else {
-        await screenshot(page, customerId, 'ERROR-confirme-celular');
-        await logPhase(customerId, 'fase4b-confirme-celular', 'failed', { message: e.message });
-        throw e;
-      }
-    }
+    await preencherTelefone('Confirme seu celular', data.whatsapp, 'Confirme celular');
+    await logPhase(customerId, 'fase4b-confirme-celular', 'ok', { duration_ms: Date.now() - cStart });
     await delay(800);
 
 
@@ -1505,77 +1565,112 @@ export async function executarAutomacao(customerId, options = {}) {
     console.log('\n📋 [5/16] Email...');
     console.log(`   📧 Email a usar: ${data.email}`);
 
-    // Aguardar campo aparecer (pode demorar após auto-fill do CPF)
-    await page.waitForSelector('input[placeholder="E-mail"], input[placeholder*="mail" i]', { timeout: 15000 }).catch(() => {});
-    await delay(500);
+    // Função interna: preencher campo de email com 4 estratégias
+    async function preencherEmail(placeholder, valor, label) {
+      // Aguardar campo aparecer
+      await page.waitForSelector(
+        `input[placeholder="${placeholder}"], input[placeholder*="mail" i], input[type="email"]`,
+        { timeout: 15000 }
+      ).catch(() => {});
+      await delay(400);
 
-    // Portal usa placeholder="E-mail"
-    let emailToUse = data.email; // já tem fallback garantido em formatarDados
-    const emailField = byPH('E-mail');
-    if (await emailField.count() > 0 && await emailField.isVisible().catch(() => false)) {
-      // Limpar e preencher com triple-click para garantir substituição
-      await emailField.click({ clickCount: 3 });
-      await emailField.fill('');
-      await emailField.type(emailToUse, { delay: 60 });
-      await emailField.dispatchEvent('blur');
-      console.log(`   ✅ Email: ${emailToUse}`);
-    } else {
-      // Fallback: qualquer input de email visível
-      const emailFallback = page.locator('input[type="email"], input[name="email"], input[placeholder*="mail" i]').first();
-      if (await emailFallback.count() > 0 && await emailFallback.isVisible().catch(() => false)) {
-        await emailFallback.click({ clickCount: 3 });
-        await emailFallback.fill('');
-        await emailFallback.type(emailToUse, { delay: 60 });
-        await emailFallback.dispatchEvent('blur');
-        console.log(`   ✅ Email (fallback): ${emailToUse}`);
-      } else {
-        throw new Error('Campo Email não encontrado no portal');
-      }
+      // Estratégia 1: locator exato + triple-click + type
+      try {
+        const loc = page.locator(`input[placeholder="${placeholder}"]`).first();
+        if (await loc.count() > 0 && await loc.isVisible().catch(() => false)) {
+          await loc.scrollIntoViewIfNeeded().catch(() => {});
+          await loc.click({ clickCount: 3 });
+          await loc.fill('');
+          await loc.type(valor, { delay: 60 });
+          await loc.dispatchEvent('blur');
+          await delay(300);
+          const val = await loc.inputValue().catch(() => '');
+          if (val === valor || val.includes('@')) {
+            console.log(`   ✅ ${label}: ${valor} (locator exato)`);
+            return true;
+          }
+        }
+      } catch (_) {}
+
+      // Estratégia 2: qualquer input de email visível
+      try {
+        const emailInputs = await page.locator('input[type="email"], input[placeholder*="mail" i], input[placeholder*="E-mail" i]').all();
+        for (const inp of emailInputs) {
+          if (!await inp.isVisible().catch(() => false)) continue;
+          const ph = await inp.getAttribute('placeholder').catch(() => '');
+          // Separar campo principal do campo de confirmação
+          const isConfirm = ph.toLowerCase().includes('confirm') || ph.toLowerCase().includes('confirme');
+          if (label.includes('onfirm') && !isConfirm) continue;
+          if (!label.includes('onfirm') && isConfirm) continue;
+          await inp.scrollIntoViewIfNeeded().catch(() => {});
+          await inp.click({ clickCount: 3 });
+          await inp.fill('');
+          await inp.type(valor, { delay: 60 });
+          await inp.dispatchEvent('blur');
+          await delay(300);
+          console.log(`   ✅ ${label}: ${valor} (scan email)`);
+          return true;
+        }
+      } catch (_) {}
+
+      // Estratégia 3: evaluate DOM direto
+      try {
+        const filled = await page.evaluate(({ isConfirm, val }) => {
+          const inputs = Array.from(document.querySelectorAll('input'));
+          for (const inp of inputs) {
+            const p = (inp.getAttribute('placeholder') || '').toLowerCase();
+            const t = (inp.getAttribute('type') || '').toLowerCase();
+            if (t !== 'email' && !p.includes('mail') && !p.includes('e-mail')) continue;
+            if (inp.offsetParent === null) continue;
+            const hasConfirm = p.includes('confirm') || p.includes('confirme');
+            if (isConfirm && !hasConfirm) continue;
+            if (!isConfirm && hasConfirm) continue;
+            const nativeSet = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+            if (nativeSet) {
+              nativeSet.call(inp, val);
+              inp.dispatchEvent(new Event('input', { bubbles: true }));
+              inp.dispatchEvent(new Event('change', { bubbles: true }));
+              inp.dispatchEvent(new Event('blur', { bubbles: true }));
+              return true;
+            }
+          }
+          return false;
+        }, { isConfirm: label.includes('onfirm'), val: valor });
+        if (filled) {
+          console.log(`   ✅ ${label}: ${valor} (evaluate DOM)`);
+          return true;
+        }
+      } catch (_) {}
+
+      console.warn(`   ⚠️  ${label}: todas as estratégias falharam — continuando mesmo assim`);
+      return false;
     }
-    await delay(800);
 
-    // ─── 8b. v11: detectar email DUPLICADO e aplicar fallback automático ─
-    // Portal valida unicidade: "Este email já está cadastrado para outro cliente"
+    let emailToUse = data.email; // já tem fallback tvmensal11@gmail.com garantido
+    await preencherEmail('E-mail', emailToUse, 'Email');
+    await delay(600);
+
+    // ─── 8b. Detectar email DUPLICADO ────────────────────────────────────
     currentPhase = 'fase5b-email-dup-check';
     await logPhase(customerId, 'fase5b-email-dup-check', 'started');
     {
       const dupCount = await page.locator('text=/(j[áa]\\s*est[áa]\\s*cadastrad)|(email.*j[áa].*cadastrad)/i').count().catch(() => 0);
       if (dupCount > 0) {
-        // Gerar email único baseado no CPF
         const cpfDigits = String(data.cpfDigits || '').replace(/\D/g, '');
         const fallback = `${cpfDigits || Date.now()}@igreen.temp.com.br`;
-        console.warn(`   ⚠️  Email duplicado detectado — aplicando fallback: ${fallback}`);
-        const refield = byPH('E-mail');
-        if (await refield.count() > 0) {
-          await refield.click({ clickCount: 3 });
-          await refield.fill('');
-          await refield.type(fallback, { delay: 50 });
-          emailToUse = fallback;
-          await logPhase(customerId, 'fase5b-email-dup-check', 'warn', { message: `Email duplicado → fallback ${fallback}` });
-          await delay(800);
-        }
+        console.warn(`   ⚠️  Email duplicado — fallback: ${fallback}`);
+        emailToUse = fallback;
+        await preencherEmail('E-mail', emailToUse, 'Email (fallback duplicado)');
+        await logPhase(customerId, 'fase5b-email-dup-check', 'warn', { message: `fallback ${fallback}` });
+        await delay(600);
       } else {
         await logPhase(customerId, 'fase5b-email-dup-check', 'ok');
       }
     }
 
-    // Confirmar email — aguardar campo aparecer
-    await page.waitForSelector('input[placeholder*="onfirme" i][placeholder*="mail" i], input[placeholder*="Confirme" i]', { timeout: 10000 }).catch(() => {});
-    await delay(400);
-    let confirmEmail = byPH('Confirme seu E-mail');
-    if (await confirmEmail.count() === 0) confirmEmail = byPHPartial('Confirme seu E-mail');
-    if (await confirmEmail.count() === 0) confirmEmail = page.locator('input[placeholder*="onfirme" i]').first();
-    if (await confirmEmail.count() > 0 && await confirmEmail.isVisible().catch(() => false)) {
-      await confirmEmail.click({ clickCount: 3 });
-      await confirmEmail.fill('');
-      await confirmEmail.type(emailToUse, { delay: 60 });
-      await confirmEmail.dispatchEvent('blur');
-      console.log(`   ✅ Confirmação Email: ${emailToUse}`);
-
-    } else {
-      throw new Error('Campo de confirmação de email não encontrado no portal');
-    }
-    await delay(2500);
+    // Confirmar email
+    await preencherEmail('Confirme seu E-mail', emailToUse, 'Confirme Email');
+    await delay(2000);
     
     // Scroll para ver campos seguintes
     await page.evaluate(() => window.scrollBy(0, 400));
