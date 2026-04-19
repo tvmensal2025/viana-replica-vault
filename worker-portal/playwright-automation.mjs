@@ -527,7 +527,7 @@ async function sendFacialLinkToCustomer(customerId, facialLink) {
     const remoteJid = `${phone}@s.whatsapp.net`;
 
     const nome = customer.name?.split(' ')[0] || '';
-    const message = `📲 *Validação Facial*\n\nOlá${nome ? ' ' + nome : ''}! Falta apenas a validação facial para concluir seu cadastro.\n\n🔗 Abra o link abaixo *no celular*:\n${facialLink}\n\n📱 Siga as instruções na tela (selfie + documento).\n\n⚠️ Use boa iluminação e tire o óculos se necessário.\n\nQualquer dúvida, estamos aqui! ☀️`;
+    const message = `📲 *Última etapa — Validação Facial*\n\nOlá${nome ? ' ' + nome : ''}! Falta apenas a validação facial para concluir seu cadastro.\n\n🔗 Abra o link abaixo *no celular*:\n${facialLink}\n\n📱 Siga as instruções na tela (selfie + documento).\n\n⚠️ Use boa iluminação e tire o óculos se necessário.\n\n✅ *Quando terminar, responda aqui:* PRONTO\n\nQualquer dúvida, estamos aqui! ☀️`;
 
     if (eUrl && eKey && instanceName) {
       const res = await fetch(`${eUrl}/message/sendText/${instanceName}`, {
@@ -2438,14 +2438,20 @@ export async function executarAutomacao(customerId, options = {}) {
         console.log(`   📲 Enviando link de reconhecimento facial ao cliente...`);
         const supabase = getSupabase();
         if (supabase) {
+          // Escreve nas DUAS colunas:
+          // - link_facial / aguardando_facial → usado pelo evolution-webhook para detectar
+          //   a confirmação manual do cliente ("PRONTO") e fechar como cadastro_concluido
+          // - link_assinatura / awaiting_signature → mantido para compatibilidade com
+          //   código legado e dashboards existentes
           await supabase.from('customers').update({
+            link_facial: facialLink,
             link_assinatura: facialLink,
-            conversation_step: 'aguardando_assinatura',
+            conversation_step: 'aguardando_facial',
             status: 'awaiting_signature',
             updated_at: new Date().toISOString(),
           }).eq('id', customerId);
         }
-        // Enviar link via WhatsApp
+        // Enviar link via WhatsApp (mensagem instrui cliente a responder "PRONTO")
         await sendFacialLinkToCustomer(customerId, facialLink);
         await atualizarStatus(customerId, 'awaiting_signature');
       } else if (/assinatura|contrato|sucesso|cadastro realizado|cadastro finalizado/i.test(finalPageText)) {
