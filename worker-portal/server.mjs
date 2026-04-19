@@ -202,8 +202,8 @@ async function processNextInQueue() {
 
     currentJob = null;
     isProcessingLock = false;
-    // Processar próximo da fila (delay de 2s)
-    setTimeout(() => processNextInQueue(), 2000);
+    // Processar próximo da fila (delay de 500ms)
+    setTimeout(() => processNextInQueue(), 500);
   }
 }
 

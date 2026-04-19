@@ -505,8 +505,8 @@ Deno.serve(async (req) => {
             await sendText(remoteJid, "⚠️ Tive um problema momentâneo ao enviar o vídeo. Mas vamos seguir com seu cadastro normalmente!");
           }
 
-          // Aguardar 3 segundos antes do menu pós-vídeo
-          await new Promise(r => setTimeout(r, 3000));
+          // Aguardar 1.5 segundos antes do menu pós-vídeo
+          await new Promise(r => setTimeout(r, 1500));
 
           const posVideoMsg = "📺 Assistiu o vídeo? Agora escolha como deseja prosseguir:";
           await sendButtons(remoteJid, posVideoMsg, [
@@ -597,28 +597,25 @@ Deno.serve(async (req) => {
           break;
         }
 
-        // 📦 Tentar upload imediato para MinIO (evita salvar data URL gigante no banco)
+        // 📦 Upload MinIO em BACKGROUND (fire-and-forget) — não bloqueia resposta ao cliente
         if (fileBase64) {
           const mime = imageMessage?.mimetype || documentMessage?.mimetype || "application/octet-stream";
-          const minioUrl = await uploadMediaToMinio({
-            fileBase64,
-            mimeType: mime,
-            consultantFolder: consultorId,
-            customerName: customer.name || "cliente",
-            customerBirth: customer.data_nascimento,
-            kind: "conta",
-          });
-          if (minioUrl) {
-            updates.electricity_bill_photo_url = minioUrl;
-            updates.media_storage = "minio";
-          } else {
-            // 🆘 FALLBACK: MinIO offline → salvar Base64 inline + messageId p/ worker re-baixar
-            console.warn("📦⚠️  MinIO offline — salvando conta como Base64 inline (fallback)");
-            updates.electricity_bill_photo_url = `data:${mime};base64,${fileBase64}`;
-            updates.bill_base64 = fileBase64;
-            updates.bill_message_id = messageId || null;
-            updates.media_storage = "inline";
-          }
+          // Salvar base64 inline imediatamente (resposta rápida) + disparar upload em background
+          updates.electricity_bill_photo_url = `data:${mime};base64,${fileBase64}`;
+          updates.bill_base64 = fileBase64;
+          updates.bill_message_id = messageId || null;
+          updates.media_storage = "inline";
+          // Fire-and-forget: upload MinIO em background, atualiza URL no banco quando terminar
+          const custId = customer.id;
+          uploadMediaToMinio({
+            fileBase64, mimeType: mime, consultantFolder: consultorId,
+            customerName: customer.name || "cliente", customerBirth: customer.data_nascimento, kind: "conta",
+          }).then(async (minioUrl) => {
+            if (minioUrl) {
+              await supabase.from("customers").update({ electricity_bill_photo_url: minioUrl, media_storage: "minio" }).eq("id", custId);
+              console.log(`📦✅ [BG] Conta uploaded MinIO: ${minioUrl.substring(0, 80)}`);
+            }
+          }).catch((e) => console.warn(`📦⚠️ [BG] MinIO conta falhou: ${e?.message}`));
         } else {
           updates.electricity_bill_photo_url = fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending";
           updates.bill_message_id = messageId || null;
@@ -823,28 +820,23 @@ Deno.serve(async (req) => {
           break;
         }
 
-        // 📦 Upload imediato para MinIO (frente do documento) — caminho único oficial
+        // 📦 Upload MinIO em BACKGROUND (fire-and-forget) — não bloqueia resposta
         if (fileBase64) {
           const mime = imageMessage?.mimetype || documentMessage?.mimetype || "application/octet-stream";
-          const minioUrl = await uploadMediaToMinio({
-            fileBase64,
-            mimeType: mime,
-            consultantFolder: consultorId,
-            customerName: customer.name || "cliente",
-            customerBirth: customer.data_nascimento,
-            kind: "doc_frente",
-          });
-          if (minioUrl) {
-            updates.document_front_url = minioUrl;
-            updates.media_storage = "minio";
-          } else {
-            // 🆘 FALLBACK: MinIO offline → salvar Base64 inline + messageId p/ worker re-baixar
-            console.warn("📦⚠️  MinIO offline — salvando doc_frente como Base64 inline (fallback)");
-            updates.document_front_url = `data:${mime};base64,${fileBase64}`;
-            updates.document_front_base64 = fileBase64;
-            updates.media_message_id = messageId || null;
-            updates.media_storage = "inline";
-          }
+          updates.document_front_url = `data:${mime};base64,${fileBase64}`;
+          updates.document_front_base64 = fileBase64;
+          updates.media_message_id = messageId || null;
+          updates.media_storage = "inline";
+          const custId = customer.id;
+          uploadMediaToMinio({
+            fileBase64, mimeType: mime, consultantFolder: consultorId,
+            customerName: customer.name || "cliente", customerBirth: customer.data_nascimento, kind: "doc_frente",
+          }).then(async (minioUrl) => {
+            if (minioUrl) {
+              await supabase.from("customers").update({ document_front_url: minioUrl, media_storage: "minio" }).eq("id", custId);
+              console.log(`📦✅ [BG] Doc frente uploaded MinIO: ${minioUrl.substring(0, 80)}`);
+            }
+          }).catch((e) => console.warn(`📦⚠️ [BG] MinIO doc_frente falhou: ${e?.message}`));
         } else {
           updates.document_front_url = fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending";
           updates.media_message_id = messageId || null;
@@ -924,24 +916,20 @@ Deno.serve(async (req) => {
           break;
         }
 
-        // 📦 Tentar upload imediato para MinIO (verso do documento)
+        // 📦 Upload MinIO em BACKGROUND (fire-and-forget) — não bloqueia resposta
         if (fileBase64) {
           const mime = imageMessage?.mimetype || documentMessage?.mimetype || "application/octet-stream";
-          const minioUrl = await uploadMediaToMinio({
-            fileBase64,
-            mimeType: mime,
-            consultantFolder: consultorId,
-            customerName: customer.name || "cliente",
-            customerBirth: customer.data_nascimento,
-            kind: "doc_verso",
-          });
-          if (minioUrl) {
-            updates.document_back_url = minioUrl;
-          } else {
-            // 🆘 FALLBACK: MinIO offline → salvar inline (verso é menor que frente)
-            console.warn("📦⚠️  MinIO offline — salvando doc_verso como Base64 inline (fallback)");
-            updates.document_back_url = `data:${mime};base64,${fileBase64}`;
-          }
+          updates.document_back_url = `data:${mime};base64,${fileBase64}`;
+          const custId = customer.id;
+          uploadMediaToMinio({
+            fileBase64, mimeType: mime, consultantFolder: consultorId,
+            customerName: customer.name || "cliente", customerBirth: customer.data_nascimento, kind: "doc_verso",
+          }).then(async (minioUrl) => {
+            if (minioUrl) {
+              await supabase.from("customers").update({ document_back_url: minioUrl }).eq("id", custId);
+              console.log(`📦✅ [BG] Doc verso uploaded MinIO: ${minioUrl.substring(0, 80)}`);
+            }
+          }).catch((e) => console.warn(`📦⚠️ [BG] MinIO doc_verso falhou: ${e?.message}`));
         } else {
           updates.document_back_url = fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending";
         }

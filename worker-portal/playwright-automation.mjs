@@ -67,16 +67,16 @@ async function reactFill(page, selector, value) {
         // Forçar foco real (click + focus JS) antes de digitar
         await fresh.click({ timeout: 3000 }).catch(() => {});
         await fresh.evaluate((input) => input.focus()).catch(() => {});
-        await new Promise(r => setTimeout(r, 120));
+        await new Promise(r => setTimeout(r, 60));
         // Limpar usando seleção + Backspace (não quebra máscara) em vez de fill('')
         await fresh.evaluate((input) => {
           input.select?.();
         }).catch(() => {});
         await page.keyboard.press('Backspace').catch(() => {});
-        await new Promise(r => setTimeout(r, 80));
-        await fresh.type(onlyDigitsValue, { delay: 70 });
+        await new Promise(r => setTimeout(r, 40));
+        await fresh.type(onlyDigitsValue, { delay: 35 });
         await fresh.evaluate((input) => input.dispatchEvent(new Event('blur', { bubbles: true }))).catch(() => {});
-        await new Promise(r => setTimeout(r, 250));
+        await new Promise(r => setTimeout(r, 150));
         const filled = await fresh.inputValue().catch(() => '');
         const onlyDigitsFilled = filled.replace(/\D/g, '');
         if (onlyDigitsFilled === onlyDigitsValue) {
@@ -135,7 +135,7 @@ async function reactFill(page, selector, value) {
 // 5. Digita via page.keyboard.type (foco no input, não importa se re-renderizar)
 // 6. Verifica valor; se não bater, retenta (até 5x). Aceita match por dígitos.
 async function bulletproofType(page, placeholder, value, opts = {}) {
-  const { maxAttempts = 5, appearTimeoutMs = 30000, label = placeholder } = opts;
+  const { maxAttempts = 5, appearTimeoutMs = 15000, label = placeholder } = opts;
   const onlyDigits = String(value).replace(/\D/g, '');
   const expected = onlyDigits || String(value);
   const escPh = placeholder.replace(/"/g, '\\"');
@@ -159,26 +159,26 @@ async function bulletproofType(page, placeholder, value, opts = {}) {
       await fresh.scrollIntoViewIfNeeded().catch(() => {});
       await fresh.click({ timeout: 5000, force: true }).catch(() => {});
       await fresh.evaluate((el) => el.focus()).catch(() => {});
-      await new Promise(r => setTimeout(r, 150));
+      await new Promise(r => setTimeout(r, 80));
 
       // Limpar
       await page.keyboard.down('Control').catch(() => {});
       await page.keyboard.press('a').catch(() => {});
       await page.keyboard.up('Control').catch(() => {});
       await page.keyboard.press('Backspace').catch(() => {});
-      await new Promise(r => setTimeout(r, 80));
+      await new Promise(r => setTimeout(r, 40));
 
       // Re-focar (Backspace pode ter desfocado em alguns browsers)
       const fresh2 = getLocator();
       await fresh2.click({ timeout: 3000, force: true }).catch(() => {});
       await fresh2.evaluate((el) => el.focus()).catch(() => {});
-      await new Promise(r => setTimeout(r, 80));
+      await new Promise(r => setTimeout(r, 40));
 
       // Digitar via teclado
-      await page.keyboard.type(expected, { delay: 60 });
-      await new Promise(r => setTimeout(r, 200));
+      await page.keyboard.type(expected, { delay: 30 });
+      await new Promise(r => setTimeout(r, 100));
       await page.keyboard.press('Tab').catch(() => {});
-      await new Promise(r => setTimeout(r, 250));
+      await new Promise(r => setTimeout(r, 120));
 
       const filled = await getLocator().inputValue().catch(() => '');
       if (filled.replace(/\D/g, '') === expected || filled === expected) {
@@ -189,7 +189,7 @@ async function bulletproofType(page, placeholder, value, opts = {}) {
     } catch (e) {
       console.log(`   ⚠️  [bulletproof attempt ${attempt}] erro: ${e.message}`);
     }
-    await new Promise(r => setTimeout(r, 500 + attempt * 200));
+    await new Promise(r => setTimeout(r, 300 + attempt * 100));
   }
 
   const finalVal = await getLocator().inputValue().catch(() => '');
@@ -207,7 +207,7 @@ async function bulletproofType(page, placeholder, value, opts = {}) {
   try {
     await el.click();
     await el.fill('');
-    await el.type(value, { delay: 80 });
+    await el.type(value, { delay: 40 });
     console.log(`   ✅ [reactFill T3] ${selectorStr}: "${value}"`);
     return true;
   } catch (e) {
@@ -220,7 +220,7 @@ async function bulletproofType(page, placeholder, value, opts = {}) {
 // ─── waitForAutoFill: aguarda portal preencher Nome + DataNasc após CPF ────
 // O portal iGreen consulta a Receita Federal via CPF e auto-preenche esses
 // campos. NUNCA sobrescrever — eles são a fonte da verdade.
-async function waitForAutoFill(page, timeoutMs = 15000) {
+async function waitForAutoFill(page, timeoutMs = 8000) {
   const start = Date.now();
   let result = { nome: '', nascimento: '' };
   while (Date.now() - start < timeoutMs) {
@@ -257,7 +257,7 @@ async function waitForAutoFill(page, timeoutMs = 15000) {
 // ─── waitForFieldByPlaceholder: detecção via MutationObserver ────────────
 // Espera por um campo aparecer no DOM observando mutações em vez de só
 // fazer polling. Retorna true se encontrou, false se timeout.
-async function waitForFieldByPlaceholder(page, regex, timeoutMs = 15000) {
+async function waitForFieldByPlaceholder(page, regex, timeoutMs = 8000) {
   try {
     const found = await page.evaluate(({ pattern, timeout }) => {
       return new Promise((resolve) => {
@@ -295,7 +295,7 @@ async function waitForFieldByPlaceholder(page, regex, timeoutMs = 15000) {
 // Múltiplos critérios em OR: placeholder, name, aria-label, type, label adjacente.
 // Retorna o handle do elemento (ou null em timeout).
 // Usado para campos críticos que demoram a aparecer (ex: WhatsApp após CPF).
-async function findFieldFast(page, criteria, timeoutMs = 12000) {
+async function findFieldFast(page, criteria, timeoutMs = 8000) {
   const start = Date.now();
   try {
     const handle = await page.waitForFunction(
@@ -1009,7 +1009,7 @@ async function screenshot(page, customerId, fase) {
 }
 
 // ─── Aguardar OTP via polling ─────────────────────────────────────────────────
-async function aguardarOTP(customerId, timeoutMs = 180000) {
+async function aguardarOTP(customerId, timeoutMs = 120000) {
   console.log(`\n⏳ Aguardando OTP no WhatsApp (timeout: ${timeoutMs / 1000}s)...`);
   const inicio = Date.now();
   let tentativas = 0;

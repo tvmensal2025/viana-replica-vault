@@ -6,7 +6,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { uploadBytesToMinio, base64ToBytes, MinioUploadInput } from "./minio-upload.ts";
 
-const MINIO_TIMEOUT_MS = 8_000; // 8s — se MinIO está offline, nem espera
+const MINIO_TIMEOUT_MS = 5_000; // 5s — se MinIO está offline, nem espera
 
 function normalizeName(text: string): string {
   return text

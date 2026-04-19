@@ -10,11 +10,11 @@ export function normalizePhone(raw: string): string {
 }
 
 // ─── Timeouts (ms) para evitar travamentos ──────────────────────────────
-export const TIMEOUT_VIA_CEP = 10_000;
-export const TIMEOUT_FETCH_IMAGE = 30_000;
-export const TIMEOUT_GEMINI = 50_000; // 50s (buffer de 10s antes do timeout da Edge Function)
-export const TIMEOUT_WHAPI = 20_000;
-export const TIMEOUT_EVOLUTION = 20_000;
+export const TIMEOUT_VIA_CEP = 6_000;    // 6s (era 10s)
+export const TIMEOUT_FETCH_IMAGE = 15_000; // 15s (era 30s)
+export const TIMEOUT_GEMINI = 30_000;      // 30s (era 50s) — Gemini 2.5 Flash responde em <10s normalmente
+export const TIMEOUT_WHAPI = 12_000;       // 12s (era 20s)
+export const TIMEOUT_EVOLUTION = 12_000;   // 12s (era 20s)
 
 // ─── Log estruturado (para troubleshooting) ──────────────────────────────
 export function logStructured(
@@ -59,7 +59,7 @@ export async function withRetry<T>(
   fn: () => Promise<T>,
   options: { maxAttempts?: number; delayMs?: number; retryOn?: (e: unknown) => boolean } = {}
 ): Promise<T> {
-  const { maxAttempts = 2, delayMs = 1000, retryOn = () => true } = options;
+  const { maxAttempts = 2, delayMs = 500, retryOn = () => true } = options;
   let lastError: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
