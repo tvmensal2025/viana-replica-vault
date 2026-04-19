@@ -165,7 +165,8 @@ function buildRecord(c: Record<string, unknown>): Record<string, unknown> | null
 // syncOneConsultant — syncs a single consultant
 // =====================================================
 async function syncOneConsultant(
-  supabase: ReturnType<typeof createClient>,
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
   portalEmail: string,
   portalPassword: string,
   consultantId: string | null,
