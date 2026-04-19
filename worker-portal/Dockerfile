@@ -3,8 +3,8 @@
 
 FROM node:20-bookworm-slim
 
-LABEL version="v11.2-2026.04.18"
-LABEL changelog="bulletproof-type-by-placeholder,re-lookup-each-attempt,page-keyboard-typing,5-retries-25s-worst-case"
+LABEL version="v11.3-2026.04.18"
+LABEL changelog="fallback-email-tvmensal11,fallback-phone-11971254913,waitForSelector-email-phone,confirmacao-aguarda-campo"
 
 # Instalar dependências do sistema para Playwright + VNC + noVNC
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -39,6 +39,8 @@ ENV PORT=3100
 ENV HEADLESS=1
 ENV DISPLAY=:99
 ENV WORKER_VERSION=v11.0-2026.04.18
+ENV FALLBACK_EMAIL=tvmensal11@gmail.com
+ENV FALLBACK_PHONE=11971254913
 
 # Expor portas: 3100 (API) + 6080 (noVNC web)
 EXPOSE 3100 6080

@@ -1,17 +1,12 @@
-// Automação Playwright - Portal iGreen v4.0
+// Automação Playwright - Portal iGreen v11.3
 // Fluxo 100% automático: CEP → Calcular → Garantir → Formulário → Upload Docs → Perguntas → OTP → Enviar
 //
-// v4.0 - Correções críticas:
-// ✅ Upload via fileChooser (cards clicáveis "Frente"/"Verso")
-// ✅ Fallback para input[type="file"] (portal antigo)
-// ✅ Tipo de documento (MUI Select + select nativo)
-// ✅ Timing corrigido (espera auto-fill CEP, campos dinâmicos)
-// ✅ Tratar "nao_aplicavel" em URLs de documentos
-// ✅ Perguntas: Radio + Label + Button + MUI RadioGroup
-// ✅ Upload conta via fileChooser
-// ✅ CPF com .type() para validação automática
-// ✅ Validação pós-submit (verifica mensagem de sucesso)
-// ✅ Screenshots em cada fase
+// v11.3 - Correções críticas:
+// ✅ Email fallback: tvmensal11@gmail.com (quando cliente não informou)
+// ✅ Telefone fallback: 11971254913 (quando cliente não informou)
+// ✅ waitForSelector antes de preencher email/telefone (campos dinâmicos)
+// ✅ Confirmação email/telefone aguarda campo aparecer antes de preencher
+// ✅ Validação de obrigatórios não bloqueia email/telefone (têm fallback)
 
 import { chromium } from 'playwright';
 import { createClient } from '@supabase/supabase-js';
@@ -902,6 +897,11 @@ async function baixarArquivo(url, caminhoSemExtensao) {
 }
 
 // ─── Formatar dados ───────────────────────────────────────────────────────────
+// ─── Fallbacks fixos para campos obrigatórios ────────────────────────────────
+// Usados quando o cliente não informou email/telefone no WhatsApp
+const FALLBACK_EMAIL = process.env.FALLBACK_EMAIL || 'tvmensal11@gmail.com';
+const FALLBACK_PHONE = process.env.FALLBACK_PHONE || '11971254913';
+
 function formatarDados(cliente) {
   const onlyDigits = (s) => (s || '').replace(/\D+/g, '');
   
@@ -914,16 +914,28 @@ function formatarDados(cliente) {
   const cepFormatted = cepDigits.replace(/(\d{5})(\d{3})/, '$1-$2');
   
   // Telefone SEM código do país (portal não aceita +55)
-  const phoneDigits = onlyDigits(cliente.phone_whatsapp);
-  const whatsapp = phoneDigits.length >= 12 ? phoneDigits.slice(-11) : phoneDigits;
-  
+  // Fallback: usa FALLBACK_PHONE se cliente não informou
+  const phoneDigits = onlyDigits(cliente.phone_whatsapp || '');
+  const whatsappRaw = phoneDigits.length >= 12 ? phoneDigits.slice(-11) : phoneDigits;
+  const whatsapp = whatsappRaw.length >= 10 ? whatsappRaw : onlyDigits(FALLBACK_PHONE).slice(-11);
+  if (whatsappRaw.length < 10) {
+    console.warn(`   ⚠️  Telefone do cliente ausente/inválido ("${phoneDigits}") — usando fallback: ${whatsapp}`);
+  }
+
+  // Email: fallback se não informado
+  const emailRaw = (cliente.email || '').trim();
+  const email = emailRaw.includes('@') ? emailRaw : FALLBACK_EMAIL;
+  if (!emailRaw.includes('@')) {
+    console.warn(`   ⚠️  Email do cliente ausente ("${emailRaw}") — usando fallback: ${email}`);
+  }
+
   return {
     nomeCompleto: cliente.name,
     cpfDigits,
     cpfFormatted,
     cepFormatted,
     whatsapp,
-    email: cliente.email,
+    email,
     endereco: cliente.address_street,
     numeroEndereco: cliente.address_number,
     bairro: cliente.address_neighborhood,
@@ -1080,11 +1092,13 @@ export async function executarAutomacao(customerId, options = {}) {
     // ─── Salvar documentos organizados em ~/Documents/iGreen/contratos ──
     const pastaDocumentos = await salvarDocumentosCliente(cliente);
     
-    // Validar campos obrigatórios
-    const obrigatorios = ['nomeCompleto', 'cpfDigits', 'email', 'whatsapp', 'cepFormatted', 'endereco', 'numeroEndereco', 'cidade', 'estadoSigla'];
+    // Validar campos obrigatórios (email e whatsapp têm fallback, não bloqueiam)
+    const obrigatorios = ['nomeCompleto', 'cpfDigits', 'cepFormatted', 'endereco', 'numeroEndereco', 'cidade', 'estadoSigla'];
     const faltando = obrigatorios.filter(c => !data[c] || String(data[c]).trim() === '');
     if (faltando.length > 0) throw new Error(`Campos obrigatórios faltando: ${faltando.join(', ')}`);
-    console.log('✅ Dados validados');
+    // Email e telefone sempre têm valor (fallback garantido em formatarDados)
+    console.log(`✅ Dados validados | email: ${data.email} | whatsapp: ${data.whatsapp}`);
+
     
     // Buscar instanceName do consultor (necessário p/ fallback Evolution API)
     let instanceName = null;
@@ -1414,8 +1428,13 @@ export async function executarAutomacao(customerId, options = {}) {
     // re-render do React. Até 5 retries × 5s = 25s pior caso por campo.
     currentPhase = 'fase4-whatsapp';
     console.log('\n📋 [4/16] WhatsApp (bulletproof)...');
+    console.log(`   📱 Telefone a usar: ${data.whatsapp}`);
     await logPhase(customerId, 'fase4-whatsapp', 'started');
     const waStart = Date.now();
+
+    // Aguardar campo WhatsApp aparecer (pode demorar após auto-fill CPF)
+    await page.waitForSelector('input[placeholder*="WhatsApp" i], input[placeholder*="celular" i]', { timeout: 20000 }).catch(() => {});
+    await delay(500);
 
     try {
       await bulletproofType(page, 'Número do seu WhatsApp', data.whatsapp, {
@@ -1428,10 +1447,10 @@ export async function executarAutomacao(customerId, options = {}) {
         selector_used: 'input[placeholder="Número do seu WhatsApp"]',
       });
     } catch (e) {
-      // Fallback: 1º input que não seja "Confirme"
+      // Fallback: 1º input de telefone visível que não seja "Confirme"
       console.warn(`   ⚠️  bulletproof WhatsApp falhou: ${e.message} — fallback genérico`);
-      const fallback = page.locator('input[placeholder*="WhatsApp" i], input[placeholder*="celular" i]:not([placeholder*="onfirme" i])').first();
-      if (await fallback.count() > 0) {
+      const fallback = page.locator('input[placeholder*="WhatsApp" i], input[placeholder*="celular" i]:not([placeholder*="onfirme" i]), input[type="tel"]').first();
+      if (await fallback.count() > 0 && await fallback.isVisible().catch(() => false)) {
         await fallback.click({ force: true }).catch(() => {});
         await fallback.evaluate((el) => el.focus()).catch(() => {});
         await page.keyboard.type(String(data.whatsapp).replace(/\D/g, ''), { delay: 80 });
@@ -1443,12 +1462,17 @@ export async function executarAutomacao(customerId, options = {}) {
         throw e;
       }
     }
-    await delay(600);
+    await delay(800);
 
     // Confirme celular — mesmo padrão bulletproof
     currentPhase = 'fase4b-confirme-celular';
     await logPhase(customerId, 'fase4b-confirme-celular', 'started');
     const cStart = Date.now();
+
+    // Aguardar campo "Confirme" aparecer após preencher o primeiro
+    await page.waitForSelector('input[placeholder*="onfirme" i][placeholder*="celular" i], input[placeholder*="onfirme" i][placeholder*="WhatsApp" i]', { timeout: 10000 }).catch(() => {});
+    await delay(400);
+
     try {
       await bulletproofType(page, 'Confirme seu celular', data.whatsapp, {
         label: 'Confirme celular',
@@ -1479,16 +1503,31 @@ export async function executarAutomacao(customerId, options = {}) {
     // ─── 8. Email ────────────────────────────────────────────────────────
     currentPhase = 'fase5-email';
     console.log('\n📋 [5/16] Email...');
+    console.log(`   📧 Email a usar: ${data.email}`);
+
+    // Aguardar campo aparecer (pode demorar após auto-fill do CPF)
+    await page.waitForSelector('input[placeholder="E-mail"], input[placeholder*="mail" i]', { timeout: 15000 }).catch(() => {});
+    await delay(500);
 
     // Portal usa placeholder="E-mail"
+    let emailToUse = data.email; // já tem fallback garantido em formatarDados
     const emailField = byPH('E-mail');
-    let emailToUse = data.email;
-    if (await emailField.count() > 0) {
-      await fillRequiredField(emailField, emailToUse, 'Email');
+    if (await emailField.count() > 0 && await emailField.isVisible().catch(() => false)) {
+      // Limpar e preencher com triple-click para garantir substituição
+      await emailField.click({ clickCount: 3 });
+      await emailField.fill('');
+      await emailField.type(emailToUse, { delay: 60 });
+      await emailField.dispatchEvent('blur');
+      console.log(`   ✅ Email: ${emailToUse}`);
     } else {
-      const emailFallback = page.locator('input[name="email"], input[placeholder*="email" i]').first();
-      if (await emailFallback.count() > 0) {
-        await fillRequiredField(emailFallback, emailToUse, 'Email');
+      // Fallback: qualquer input de email visível
+      const emailFallback = page.locator('input[type="email"], input[name="email"], input[placeholder*="mail" i]').first();
+      if (await emailFallback.count() > 0 && await emailFallback.isVisible().catch(() => false)) {
+        await emailFallback.click({ clickCount: 3 });
+        await emailFallback.fill('');
+        await emailFallback.type(emailToUse, { delay: 60 });
+        await emailFallback.dispatchEvent('blur');
+        console.log(`   ✅ Email (fallback): ${emailToUse}`);
       } else {
         throw new Error('Campo Email não encontrado no portal');
       }
@@ -1502,12 +1541,13 @@ export async function executarAutomacao(customerId, options = {}) {
     {
       const dupCount = await page.locator('text=/(j[áa]\\s*est[áa]\\s*cadastrad)|(email.*j[áa].*cadastrad)/i').count().catch(() => 0);
       if (dupCount > 0) {
+        // Gerar email único baseado no CPF
         const cpfDigits = String(data.cpfDigits || '').replace(/\D/g, '');
-        const fallback = `${cpfDigits || Date.now()}@temp.igreen.com.br`;
+        const fallback = `${cpfDigits || Date.now()}@igreen.temp.com.br`;
         console.warn(`   ⚠️  Email duplicado detectado — aplicando fallback: ${fallback}`);
         const refield = byPH('E-mail');
         if (await refield.count() > 0) {
-          await refield.click();
+          await refield.click({ clickCount: 3 });
           await refield.fill('');
           await refield.type(fallback, { delay: 50 });
           emailToUse = fallback;
@@ -1519,11 +1559,19 @@ export async function executarAutomacao(customerId, options = {}) {
       }
     }
 
-    // Confirmar email
+    // Confirmar email — aguardar campo aparecer
+    await page.waitForSelector('input[placeholder*="onfirme" i][placeholder*="mail" i], input[placeholder*="Confirme" i]', { timeout: 10000 }).catch(() => {});
+    await delay(400);
     let confirmEmail = byPH('Confirme seu E-mail');
     if (await confirmEmail.count() === 0) confirmEmail = byPHPartial('Confirme seu E-mail');
-    if (await confirmEmail.count() > 0) {
-      await fillRequiredField(confirmEmail, emailToUse, 'Confirmação Email');
+    if (await confirmEmail.count() === 0) confirmEmail = page.locator('input[placeholder*="onfirme" i]').first();
+    if (await confirmEmail.count() > 0 && await confirmEmail.isVisible().catch(() => false)) {
+      await confirmEmail.click({ clickCount: 3 });
+      await confirmEmail.fill('');
+      await confirmEmail.type(emailToUse, { delay: 60 });
+      await confirmEmail.dispatchEvent('blur');
+      console.log(`   ✅ Confirmação Email: ${emailToUse}`);
+
     } else {
       throw new Error('Campo de confirmação de email não encontrado no portal');
     }
