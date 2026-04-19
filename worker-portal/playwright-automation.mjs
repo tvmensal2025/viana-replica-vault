@@ -527,7 +527,7 @@ async function sendFacialLinkToCustomer(customerId, facialLink) {
     const remoteJid = `${phone}@s.whatsapp.net`;
 
     const nome = customer.name?.split(' ')[0] || '';
-    const message = `📲 *Validação Facial*\n\nOlá${nome ? ' ' + nome : ''}! Falta apenas a validação facial para concluir seu cadastro.\n\n🔗 Abra o link abaixo *no celular*:\n${facialLink}\n\n📱 Siga as instruções na tela (selfie + documento).\n\n⚠️ Use boa iluminação e tire o óculos se necessário.\n\nQualquer dúvida, estamos aqui! ☀️`;
+    const message = `📲 *Última etapa — Validação Facial*\n\nOlá${nome ? ' ' + nome : ''}! Falta apenas a validação facial para concluir seu cadastro.\n\n🔗 Abra o link abaixo *no celular*:\n${facialLink}\n\n📱 Siga as instruções na tela (selfie + documento).\n\n⚠️ Use boa iluminação e tire o óculos se necessário.\n\n✅ *Quando terminar, responda aqui:* PRONTO\n\nQualquer dúvida, estamos aqui! ☀️`;
 
     if (eUrl && eKey && instanceName) {
       const res = await fetch(`${eUrl}/message/sendText/${instanceName}`, {
