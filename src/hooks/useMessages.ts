@@ -165,11 +165,29 @@ export function useMessages(
   useEffect(() => {
     setMessages([]);
     fetchMessages();
-    if (instanceName && remoteJid) {
-      intervalRef.current = setInterval(fetchMessages, 15000); // 15s (was 5s)
-    }
+    if (!instanceName || !remoteJid) return;
+
+    const startPolling = () => {
+      if (intervalRef.current) return;
+      intervalRef.current = setInterval(fetchMessages, 15000);
+    };
+    const stopPolling = () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+    startPolling();
+
+    const onVisibility = () => {
+      if (document.hidden) stopPolling();
+      else { fetchMessages(); startPolling(); }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
     return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      stopPolling();
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [fetchMessages, instanceName, remoteJid]);
 

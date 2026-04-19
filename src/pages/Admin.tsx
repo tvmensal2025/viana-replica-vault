@@ -8,17 +8,18 @@ import { PrivacyModeProvider, usePrivacyMode } from "@/contexts/PrivacyModeConte
 import { useQueryClient } from "@tanstack/react-query";
 import { WhatsAppErrorBoundary } from "@/components/whatsapp/WhatsAppErrorBoundary";
 import { useWhatsApp } from "@/hooks/useWhatsApp";
-import { QRCodeSVG } from "qrcode.react";
-import { DashboardTab } from "@/components/admin/DashboardTab";
-import { DadosTab } from "@/components/admin/DadosTab";
-import { LinksTab } from "@/components/admin/LinksTab";
-import { PreviewTab } from "@/components/admin/PreviewTab";
-import { NotificationCenter } from "@/components/admin/NotificationCenter";
 import { useNotifications } from "@/hooks/useNotifications";
-import { AIChatPanel } from "@/components/admin/AIChatPanel";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { useConsultantForm } from "@/hooks/useConsultantForm";
 
+// Heavy panels — lazy load on demand
+const QRCodeSVG = lazy(() => import("qrcode.react").then(m => ({ default: m.QRCodeSVG })));
+const DashboardTab = lazy(() => import("@/components/admin/DashboardTab").then(m => ({ default: m.DashboardTab })));
+const DadosTab = lazy(() => import("@/components/admin/DadosTab").then(m => ({ default: m.DadosTab })));
+const LinksTab = lazy(() => import("@/components/admin/LinksTab").then(m => ({ default: m.LinksTab })));
+const PreviewTab = lazy(() => import("@/components/admin/PreviewTab").then(m => ({ default: m.PreviewTab })));
+const NotificationCenter = lazy(() => import("@/components/admin/NotificationCenter").then(m => ({ default: m.NotificationCenter })));
+const AIChatPanel = lazy(() => import("@/components/admin/AIChatPanel").then(m => ({ default: m.AIChatPanel })));
 const WhatsAppTab = lazy(() => import("@/components/whatsapp/WhatsAppTab").then(m => ({ default: m.WhatsAppTab })));
 const KanbanBoard = lazy(() => import("@/components/whatsapp/KanbanBoard").then(m => ({ default: m.KanbanBoard })));
 const CustomerManager = lazy(() => import("@/components/whatsapp/CustomerManager").then(m => ({ default: m.CustomerManager })));
@@ -171,17 +172,19 @@ const AdminContent = () => {
             >
               <Sparkles className="h-5 w-5" />
             </button>
-            <NotificationCenter
-              notifications={notifications}
-              unreadCount={unreadCount}
-              onMarkAllRead={markAllRead}
-              onMarkRead={markRead}
-              onClearAll={clearAll}
-              onAction={(n) => {
-                if (n.type === "new_lead" || n.type === "deal_moved") setActiveTab("crm");
-                else if (n.type === "devolutiva" || n.type === "status_change" || n.type === "new_customer") setActiveTab("clientes");
-              }}
-            />
+            <Suspense fallback={<div className="w-9 h-9" />}>
+              <NotificationCenter
+                notifications={notifications}
+                unreadCount={unreadCount}
+                onMarkAllRead={markAllRead}
+                onMarkRead={markRead}
+                onClearAll={clearAll}
+                onAction={(n) => {
+                  if (n.type === "new_lead" || n.type === "deal_moved") setActiveTab("crm");
+                  else if (n.type === "devolutiva" || n.type === "status_change" || n.type === "new_customer") setActiveTab("clientes");
+                }}
+              />
+            </Suspense>
             <Button variant="ghost" size="sm" onClick={handleLogout} className="text-muted-foreground hover:text-foreground gap-2 rounded-xl">
               <LogOut className="w-4 h-4" />
               <span className="hidden sm:inline">Sair</span>
@@ -222,19 +225,19 @@ const AdminContent = () => {
 
       {/* Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-        {activeTab === "dashboard" && userId && (
-          <DashboardTab userId={userId} form={form} onFormUpdate={handleFormChange} periodDays={periodDays} onPeriodChange={setPeriodDays} />
-        )}
-
-        {activeTab === "dados" && (
-          <DadosTab form={form} photoPreview={effectivePhotoPreview} saving={saving} onFormChange={handleFormChange} onPhotoChange={handlePhotoChange} onSave={handleSave} userId={userId || ""} />
-        )}
-
-        {activeTab === "links" && (
-          <LinksTab slug={slug} baseUrl={baseUrl} onCopy={copyLink} onQrOpen={(url, label) => setQrModal({ url, label })} />
-        )}
-
         <Suspense fallback={<div className="flex justify-center py-12"><div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" /></div>}>
+          {activeTab === "dashboard" && userId && (
+            <DashboardTab userId={userId} form={form} onFormUpdate={handleFormChange} periodDays={periodDays} onPeriodChange={setPeriodDays} />
+          )}
+
+          {activeTab === "dados" && (
+            <DadosTab form={form} photoPreview={effectivePhotoPreview} saving={saving} onFormChange={handleFormChange} onPhotoChange={handlePhotoChange} onSave={handleSave} userId={userId || ""} />
+          )}
+
+          {activeTab === "links" && (
+            <LinksTab slug={slug} baseUrl={baseUrl} onCopy={copyLink} onQrOpen={(url, label) => setQrModal({ url, label })} />
+          )}
+
           {activeTab === "materiais" && (
             <MaterialsTab />
           )}
@@ -273,12 +276,11 @@ const AdminContent = () => {
           {userId && activeTab === "historico" && (
             <AutoMessageLog consultantId={userId} />
           )}
-        </Suspense>
 
-        {/* Preview Tab */}
-        <div className="space-y-4" style={{ display: activeTab === "preview" ? "block" : "none" }}>
-          <PreviewTab slug={slug} baseUrl={baseUrl} />
-        </div>
+          {activeTab === "preview" && (
+            <PreviewTab slug={slug} baseUrl={baseUrl} />
+          )}
+        </Suspense>
       </main>
 
       {/* QR Code Modal */}
@@ -293,7 +295,9 @@ const AdminContent = () => {
             </div>
             <p className="text-sm text-muted-foreground">{qrModal.label}</p>
             <div className="flex justify-center bg-white rounded-xl p-6">
-              <QRCodeSVG id="qr-canvas" value={qrModal.url} size={200} level="H" includeMargin={false} />
+              <Suspense fallback={<div className="w-[200px] h-[200px] flex items-center justify-center"><div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full" /></div>}>
+                <QRCodeSVG id="qr-canvas" value={qrModal.url} size={200} level="H" includeMargin={false} />
+              </Suspense>
             </div>
             <p className="text-xs text-muted-foreground text-center break-all">{qrModal.url}</p>
             <div className="flex gap-3">
@@ -325,7 +329,11 @@ const AdminContent = () => {
       )}
 
       {/* AI Chat Panel */}
-      <AIChatPanel open={aiChatOpen} onClose={() => setAiChatOpen(false)} />
+      {aiChatOpen && (
+        <Suspense fallback={null}>
+          <AIChatPanel open={aiChatOpen} onClose={() => setAiChatOpen(false)} />
+        </Suspense>
+      )}
     </div>
   );
 };
