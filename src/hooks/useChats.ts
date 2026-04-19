@@ -291,9 +291,27 @@ export function useChats(instanceName: string | null) {
     };
     init();
 
-    intervalRef.current = setInterval(fetchChats, 30000);
+    const startPolling = () => {
+      if (intervalRef.current) return;
+      intervalRef.current = setInterval(fetchChats, 30000);
+    };
+    const stopPolling = () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+    startPolling();
+
+    const onVisibility = () => {
+      if (document.hidden) stopPolling();
+      else { fetchChats(); startPolling(); }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
     return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      stopPolling();
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [fetchContacts, fetchChats, instanceName]);
 
