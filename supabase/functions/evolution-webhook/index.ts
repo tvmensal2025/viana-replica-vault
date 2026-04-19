@@ -1427,8 +1427,8 @@ Deno.serve(async (req) => {
           updates.otp_code = otpCode;
           updates.otp_received_at = new Date().toISOString();
           // NÃO mudar conversation_step — o Worker faz polling no otp_code
-          // e ele mesmo mudará para aguardando_assinatura após preencher
-          reply = `✅ Código *${otpCode}* recebido! ⏳ Validando no portal...\n\nAguarde alguns instantes...`;
+          // e ele mesmo mudará para aguardando_facial após validar
+          reply = `✅ Código *${otpCode}* recebido! ⏳ Validando no portal...\n\nEm instantes vou te enviar o link da *validação facial* (última etapa).`;
         } else {
           reply = "📱 Por favor, digite o *código numérico* que você recebeu no WhatsApp.\n\n(Geralmente são 4 a 6 dígitos)";
         }
@@ -1440,12 +1440,32 @@ Deno.serve(async (req) => {
         break;
       }
 
+      // ─── 13. FACIAL (validação biométrica via link do portal) ────────
+      case "aguardando_facial":
       case "aguardando_assinatura": {
-        const link = customer.link_assinatura;
-        if (link) {
-          reply = `🔗 O link para validação facial já foi enviado:\n\n${link}\n\nAbra o link e siga as instruções para finalizar seu cadastro.`;
+        const link = customer.link_facial || customer.link_assinatura;
+
+        // Detecta confirmação manual do cliente
+        const txt = (messageText || "").toLowerCase().trim();
+        const confirmou = /\b(pronto|prontinho|conclu[ií]do|conclui|conclu[ií]|finalizei|terminei|fiz|feito|ok|certo|sim)\b/.test(txt);
+
+        if (confirmou && link) {
+          updates.facial_confirmed_at = new Date().toISOString();
+          updates.conversation_step = "complete";
+          updates.status = "cadastro_concluido";
+          reply =
+            "🎉 *Cadastro concluído com sucesso!*\n\n" +
+            "Recebemos a confirmação da sua validação facial. ✅\n\n" +
+            "Em breve você receberá os próximos passos da iGreen Energy. " +
+            "Obrigado por confiar em nós! ☀️💚";
+        } else if (link) {
+          reply =
+            "📸 *Última etapa: Validação Facial*\n\n" +
+            "👉 Abra este link no seu celular e siga as instruções:\n" +
+            `${link}\n\n` +
+            "Quando terminar a selfie, me responda *PRONTO* aqui que finalizamos seu cadastro! ✅";
         } else {
-          reply = "⏳ Estamos preparando o link de assinatura. Você será notificado em breve!";
+          reply = "⏳ Estamos preparando o link da validação facial. Você será notificado em instantes!";
         }
         break;
       }
