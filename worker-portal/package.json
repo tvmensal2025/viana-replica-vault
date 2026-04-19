@@ -10,11 +10,10 @@
     "test": "node ../scripts/submit-lead-to-portal.mjs --file=../scripts/fixtures/lead-test.json"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.21.0",
     "@supabase/supabase-js": "^2.97.0",
     "dotenv": "^17.3.1",
     "express": "^4.22.1",
-    "playwright": "^1.49.1"
+    "playwright-chromium": "^1.49.1"
   },
   "engines": {
     "node": ">=18.0.0"

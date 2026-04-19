@@ -44,7 +44,7 @@ ENV WORKER_VERSION=v11.0-2026.04.18
 EXPOSE 3100 6080
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
   CMD curl -f http://localhost:3100/health || exit 1
 
 # Iniciar via script (Xvfb + x11vnc + noVNC + Node)
