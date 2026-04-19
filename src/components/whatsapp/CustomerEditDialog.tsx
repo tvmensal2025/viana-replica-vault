@@ -1,6 +1,6 @@
 import { useState } from "react";
 import {
-  Search, MapPin, Zap, User, Save, X, Loader2, Users,
+  Search, MapPin, Zap, User, Save, X, Loader2, Users, ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -203,6 +203,48 @@ export function CustomerEditDialog({ customer, onClose, onSaved }: CustomerEditD
           <div>
             <Label className="text-[11px] text-muted-foreground">Média de Consumo (R$)</Label>
             <Input type="number" value={editForm.electricity_bill_value || ""} onChange={(e) => updateEdit("electricity_bill_value", e.target.value)} className="h-9 text-xs mt-1 bg-secondary/30 border-border/50" />
+          </div>
+
+          <SectionLabel icon={ShieldCheck} title="Status do Cadastro (Portal)" />
+          <div className="col-span-2">
+            <Label className="text-[11px] text-muted-foreground">Etapa atual</Label>
+            <Input
+              value={customer?.conversation_step || "—"}
+              readOnly
+              className="h-9 text-xs mt-1 bg-secondary/20 border-border/40 font-mono"
+            />
+          </div>
+          <div>
+            <Label className="text-[11px] text-muted-foreground">Código OTP</Label>
+            <Input
+              value={(customer as any)?.otp_code || "—"}
+              readOnly
+              className="h-9 text-xs mt-1 bg-secondary/20 border-border/40 font-mono"
+            />
+          </div>
+          <div>
+            <Label className="text-[11px] text-muted-foreground">OTP recebido em</Label>
+            <Input
+              value={(customer as any)?.otp_received_at ? new Date((customer as any).otp_received_at).toLocaleString("pt-BR") : "—"}
+              readOnly
+              className="h-9 text-xs mt-1 bg-secondary/20 border-border/40"
+            />
+          </div>
+          <div className="col-span-2">
+            <Label className="text-[11px] text-muted-foreground">Link Validação Facial</Label>
+            <Input
+              value={(customer as any)?.link_facial || (customer as any)?.link_assinatura || "—"}
+              readOnly
+              className="h-9 text-xs mt-1 bg-secondary/20 border-border/40"
+            />
+          </div>
+          <div className="col-span-2">
+            <Label className="text-[11px] text-muted-foreground">Facial confirmada em</Label>
+            <Input
+              value={(customer as any)?.facial_confirmed_at ? new Date((customer as any).facial_confirmed_at).toLocaleString("pt-BR") : "—"}
+              readOnly
+              className="h-9 text-xs mt-1 bg-secondary/20 border-border/40"
+            />
           </div>
         </div>
 
