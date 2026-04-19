@@ -8,17 +8,18 @@ import { PrivacyModeProvider, usePrivacyMode } from "@/contexts/PrivacyModeConte
 import { useQueryClient } from "@tanstack/react-query";
 import { WhatsAppErrorBoundary } from "@/components/whatsapp/WhatsAppErrorBoundary";
 import { useWhatsApp } from "@/hooks/useWhatsApp";
-import { QRCodeSVG } from "qrcode.react";
-import { DashboardTab } from "@/components/admin/DashboardTab";
-import { DadosTab } from "@/components/admin/DadosTab";
-import { LinksTab } from "@/components/admin/LinksTab";
-import { PreviewTab } from "@/components/admin/PreviewTab";
-import { NotificationCenter } from "@/components/admin/NotificationCenter";
 import { useNotifications } from "@/hooks/useNotifications";
-import { AIChatPanel } from "@/components/admin/AIChatPanel";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { useConsultantForm } from "@/hooks/useConsultantForm";
 
+// Heavy panels — lazy load on demand
+const QRCodeSVG = lazy(() => import("qrcode.react").then(m => ({ default: m.QRCodeSVG })));
+const DashboardTab = lazy(() => import("@/components/admin/DashboardTab").then(m => ({ default: m.DashboardTab })));
+const DadosTab = lazy(() => import("@/components/admin/DadosTab").then(m => ({ default: m.DadosTab })));
+const LinksTab = lazy(() => import("@/components/admin/LinksTab").then(m => ({ default: m.LinksTab })));
+const PreviewTab = lazy(() => import("@/components/admin/PreviewTab").then(m => ({ default: m.PreviewTab })));
+const NotificationCenter = lazy(() => import("@/components/admin/NotificationCenter").then(m => ({ default: m.NotificationCenter })));
+const AIChatPanel = lazy(() => import("@/components/admin/AIChatPanel").then(m => ({ default: m.AIChatPanel })));
 const WhatsAppTab = lazy(() => import("@/components/whatsapp/WhatsAppTab").then(m => ({ default: m.WhatsAppTab })));
 const KanbanBoard = lazy(() => import("@/components/whatsapp/KanbanBoard").then(m => ({ default: m.KanbanBoard })));
 const CustomerManager = lazy(() => import("@/components/whatsapp/CustomerManager").then(m => ({ default: m.CustomerManager })));
