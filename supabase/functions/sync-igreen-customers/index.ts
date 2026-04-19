@@ -357,9 +357,9 @@ async function syncOneConsultant(
         .eq("consultant_id", consultantId);
 
       if (existingMembers) {
-        const staleIds = existingMembers
-          .map(m => m.igreen_id)
-          .filter(id => !apiIds.includes(id));
+        const staleIds = (existingMembers as Array<{ igreen_id: number }>)
+          .map((m) => m.igreen_id)
+          .filter((id) => !apiIds.includes(id));
         if (staleIds.length > 0) {
           console.log(`Removing ${staleIds.length} stale members:`, staleIds);
           const { error: delErr } = await supabase
@@ -469,7 +469,7 @@ async function syncOneConsultant(
       .in("phone_whatsapp", chunk)
       .not("conversation_step", "is", null);
     if (existing) {
-      for (const e of existing) {
+      for (const e of existing as Array<{ phone_whatsapp: string; conversation_step: string | null }>) {
         // If a customer has an active conversation_step (not 'complete'), protect them
         if (e.conversation_step && e.conversation_step !== "complete") {
           midConvoPhones.add(e.phone_whatsapp);
