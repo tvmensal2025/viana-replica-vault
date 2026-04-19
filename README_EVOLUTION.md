@@ -35,7 +35,7 @@ Sistema completo de cadastro de clientes via WhatsApp usando Evolution API, com 
 - ✅ **Validações completas** (CPF, CEP, email, telefone)
 - ✅ **Edição de dados** (conta + documento)
 - ✅ **Portal Worker** (integração completa)
-- ✅ **OTP** (validação SMS)
+- ✅ **OTP** (validação via WhatsApp)
 - ✅ **MinIO** (upload documentos)
 - ✅ **Logs completos** (rastreamento total)
 
@@ -250,7 +250,7 @@ supabase functions logs evolution-webhook --follow
 15. Clique: "Finalizar"
 16. Recebe: "Processando cadastro..."
 17. Sistema envia ao Portal Worker
-18. Recebe: "Aguarde código SMS"
+18. Recebe: "Aguarde código no WhatsApp"
 
 ### **Teste 2: Edição de Dados**
 1. No passo de confirmação, clique: "EDITAR"

@@ -80,7 +80,7 @@
 - `ask_finalizar` - Botão finalizar
 - `finalizando` - Validação completa + Portal Worker + MinIO
 - `portal_submitting` - Enviando ao portal
-- `aguardando_otp` - Aguarda código SMS
+- `aguardando_otp` - Aguarda código via WhatsApp
 - `validando_otp` - Valida OTP
 - `aguardando_assinatura` - Aguarda assinatura
 - `complete` - Cadastro completo
@@ -108,7 +108,7 @@
 - Fire-and-forget (não bloqueia fluxo)
 
 **OTP:**
-- Recebe código SMS (4-8 dígitos)
+- Recebe código via WhatsApp (4-8 dígitos)
 - Chama edge function `submit-otp`
 - Valida no portal iGreen
 - Atualiza status do cliente

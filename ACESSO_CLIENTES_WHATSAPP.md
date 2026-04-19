@@ -173,7 +173,7 @@ Cada cliente mostra:
 - 🟢 **Cadastrado iGreen** - Já está no portal
 - 🟡 **Pendente** - Em processo
 - 🟡 **Enviando** - Enviando ao portal
-- 🟡 **Aguardando OTP** - Esperando código SMS
+- 🟡 **Aguardando OTP** - Esperando código via WhatsApp
 - 🟡 **Validando OTP** - Validando código
 - 🟡 **Aguardando Assinatura** - Esperando assinatura
 - 🔴 **Worker Offline** - Worker não está online

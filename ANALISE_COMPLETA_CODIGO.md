@@ -198,7 +198,7 @@ Framework: React + Vite + Supabase
 35. ask_finalizar            // Botão finalizar
 36. finalizando              // Validação + Portal Worker
 37. portal_submitting        // Enviando ao portal
-38. aguardando_otp           // Aguarda código SMS
+38. aguardando_otp           // Aguarda código via WhatsApp
 39. validando_otp            // Valida OTP
 40. aguardando_assinatura    // Aguarda assinatura
 41. complete                 // Completo
@@ -624,8 +624,8 @@ POST /functions/v1/upload-documents-minio
 4. Acessa portal iGreen com link único do consultor
 5. Preenche TODOS os campos
 6. Envia formulário
-7. Portal iGreen envia SMS com código
-8. Cliente recebe SMS
+7. Portal iGreen envia código via WhatsApp
+8. Cliente recebe código no WhatsApp
 ```
 
 ### **5. Cliente Digita OTP**

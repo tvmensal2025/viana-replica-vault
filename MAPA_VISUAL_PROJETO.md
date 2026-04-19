@@ -106,12 +106,12 @@
    ├─► Acessa portal iGreen (link único)
    ├─► Preenche 24 campos
    ├─► Envia formulário
-   └─► Portal iGreen: Envia SMS com código
+   └─► Portal iGreen: Envia código via WhatsApp
        │
        ▼
 5. CÓDIGO OTP
    │
-   ├─► Cliente: Recebe SMS
+   ├─► Cliente: Recebe código no WhatsApp
    ├─► Cliente: Digita código no WhatsApp
    ├─► Bot: Recebe código
    ├─► Bot: Envia para Portal Worker
@@ -386,7 +386,7 @@
     ├─► Acessa: https://digital.igreenenergy.com.br/?id={CONSULTOR_ID}
     ├─► Preenche 24 campos
     ├─► Envia formulário
-    └─► Portal iGreen: Envia SMS
+    └─► Portal iGreen: Envia código via WhatsApp
         │
         ▼
 14. CLIENTE DIGITA OTP

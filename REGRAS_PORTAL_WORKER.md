@@ -187,8 +187,9 @@ if (await otpInput.count() > 0) {
 
 **Quando OTP é necessário:**
 - Portal iGreen solicita verificação
+- O código é enviado via WhatsApp pelo canal oficial da iGreen (NÃO é SMS)
 - Status → `awaiting_otp`
-- Sistema aguarda código via WhatsApp
+- Cliente recebe o código no WhatsApp e digita na conversa com o consultor
 
 **Busca do código OTP:**
 

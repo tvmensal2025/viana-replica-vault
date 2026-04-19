@@ -152,7 +152,7 @@
 - Mensagem ao cliente em caso de erro
 
 ### **6. OTP** ✅
-- Recebe código SMS (4-8 dígitos)
+- Recebe código via WhatsApp (4-8 dígitos)
 - Chama edge function `submit-otp`
 - Valida no portal iGreen
 - Atualiza status do cliente

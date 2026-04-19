@@ -80,7 +80,7 @@ type: feature
 - Bloco "Conta de energia" com botão upload → próximo input file livre
 
 ### ETAPA 4: Finalizar
-- `button:has-text("Finalizar")` → dispara OTP via WhatsApp/SMS
+- `button:has-text("Finalizar")` → dispara OTP via WhatsApp
 
 ## Estratégia de Seletores (Worker)
 

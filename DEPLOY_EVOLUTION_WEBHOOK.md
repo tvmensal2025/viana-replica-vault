@@ -219,7 +219,7 @@ supabase secrets set WORKER_SECRET=seu-secret
 2. Clique: "Finalizar"
 3. Recebe: "Processando cadastro..."
 4. Sistema envia ao Portal Worker
-5. Recebe: "Aguarde código SMS"
+5. Recebe: "Aguarde código no WhatsApp"
 
 ---
 

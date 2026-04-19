@@ -14,8 +14,8 @@ const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY") || "";
 
 const STUCK_HOURS = 24;
 const FOLLOWUP_MESSAGE =
-  "🔔 Olá! Notamos que ainda estamos aguardando o código de verificação enviado por SMS para finalizar seu cadastro na iGreen Energy.\n\n" +
-  "📱 Por favor, verifique suas mensagens de SMS e nos envie o código aqui no WhatsApp.\n\n" +
+  "🔔 Olá! Notamos que ainda estamos aguardando o código de verificação para finalizar seu cadastro na iGreen Energy.\n\n" +
+  "📱 Por favor, verifique suas mensagens no WhatsApp e nos envie o código aqui.\n\n" +
   "Se você não recebeu o código ou precisa de ajuda, é só responder esta mensagem!";
 
 async function sendWhatsAppText(instanceName: string, remoteJid: string, text: string) {

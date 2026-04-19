@@ -357,12 +357,12 @@ await btn.click()
 // waitForLoadState('networkidle')
 
 // Verificar se apareceu OTP:
-// /código|OTP|verificação|SMS|token/i.test(pageText)
+// /código|OTP|verificação|whatsapp|token/i.test(pageText)
 ```
 
 ### FASE 5: OTP VIA WHATSAPP
 ```
-Portal iGreen envia SMS/WhatsApp com código OTP
+Portal iGreen envia código via WhatsApp oficial
   ↓
 Cliente recebe: "Seu código é: 123456"
   ↓

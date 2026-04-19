@@ -243,7 +243,7 @@ Edição Documento (5 steps):
 35. ask_finalizar            → Botão finalizar
 36. finalizando              → Validação + Portal Worker
 37. portal_submitting        → Enviando ao portal
-38. aguardando_otp           → Aguarda código SMS
+38. aguardando_otp           → Aguarda código via WhatsApp
 39. validando_otp            → Valida OTP
 40. aguardando_assinatura    → Aguarda assinatura
 41. complete                 → Cadastro completo ✅
@@ -352,7 +352,7 @@ URL: https://digital.igreenenergy.com.br/?id={CONSULTOR_ID}&sendcontract=true
 - Número instalação
 ```
 
-**4. OTP (Código SMS)**
+**4. OTP (Código via WhatsApp)**
 ```javascript
 // Detecção automática
 const otpInput = page.locator('input[placeholder*="digo"]');
@@ -626,12 +626,12 @@ Worker: Abre navegador Chromium
 Worker: Acessa portal iGreen com link único
 Worker: Preenche TODOS os 24 campos
 Worker: Envia formulário
-Portal iGreen: Envia SMS com código
+Portal iGreen: Envia código via WhatsApp
 ```
 
 **7. Cliente Digita OTP**
 ```
-Cliente: Recebe SMS com código
+Cliente: Recebe código no WhatsApp
 Cliente: Digita código no WhatsApp
 Bot: Recebe código
 Bot: Chama edge function submit-otp

@@ -1428,48 +1428,42 @@ export async function executarAutomacao(customerId, options = {}) {
       await screenshot(page, customerId, '04b-apos-novo-cadastro');
     }
     
-    // ─── 7. WhatsApp + Confirmação (BULLETPROOF v11.3) ───────────────────
-    // ESTRATÉGIA: após CPF auto-fill, o React re-renderiza o form.
-    // Os campos WhatsApp e Confirme celular SÓ aparecem depois do auto-fill.
-    // Usamos waitForSelector + scroll + 4 estratégias de preenchimento.
+    // ─── 7. WhatsApp + Confirmação (BULLETPROOF v11.4) ───────────────────
+    // MAPEAMENTO REAL (simulação 18/04/2026):
+    // input[name="phone"]        → "Número do seu WhatsApp *"
+    // input[name="phoneConfirm"] → "Confirme seu celular *"
     currentPhase = 'fase4-whatsapp';
-    console.log('\n📋 [4/16] WhatsApp (bulletproof)...');
-    console.log(`   📱 Telefone a usar: ${data.whatsapp}`);
+    console.log('\n📋 [4/16] WhatsApp...');
+    console.log(`   📱 Telefone: ${data.whatsapp}`);
     await logPhase(customerId, 'fase4-whatsapp', 'started');
     const waStart = Date.now();
 
-    // Scroll para garantir que os campos estão visíveis
-    await page.evaluate(() => window.scrollBy(0, 300));
+    // Aguardar campos aparecerem após auto-fill CPF
+    await page.waitForSelector('input[name="phone"], input[placeholder*="WhatsApp" i]', { timeout: 25000 }).catch(() => {});
     await delay(500);
 
-    // Aguardar campo WhatsApp aparecer (até 30s — pode demorar após auto-fill CPF)
-    console.log('   ⏳ Aguardando campo WhatsApp aparecer...');
-    const waFound = await page.waitForSelector(
-      'input[placeholder="Número do seu WhatsApp"], input[placeholder*="WhatsApp" i], input[placeholder*="celular" i]',
-      { timeout: 30000 }
-    ).catch(() => null);
-
-    if (!waFound) {
-      // Scroll mais e tentar de novo
-      await page.evaluate(() => window.scrollBy(0, 500));
-      await delay(1000);
-    }
-
     // Função interna: preencher campo de telefone com 4 estratégias
-    async function preencherTelefone(placeholder, valor, label) {
+    async function preencherTelefone(nameAttr, placeholder, valor, label) {
       const digits = String(valor).replace(/\D/g, '');
-      // Estratégia 1: bulletproofType (mais confiável para campos com máscara)
+
+      // S1: por name= (PRIMÁRIO — confirmado na simulação real)
       try {
-        await bulletproofType(page, placeholder, digits, {
-          label,
-          maxAttempts: 5,
-          appearTimeoutMs: 15000,
-        });
-        console.log(`   ✅ ${label}: ${digits} (bulletproof)`);
-        return true;
+        const loc = page.locator(`input[name="${nameAttr}"]`).first();
+        if (await loc.count() > 0 && await loc.isVisible().catch(() => false)) {
+          await loc.scrollIntoViewIfNeeded().catch(() => {});
+          await loc.click({ force: true });
+          await loc.evaluate(el => { el.value = ''; el.focus(); });
+          await page.keyboard.press('Control+a');
+          await page.keyboard.press('Backspace');
+          await page.keyboard.type(digits, { delay: 80 });
+          await page.keyboard.press('Tab');
+          await delay(400);
+          const val = (await loc.inputValue().catch(() => '')).replace(/\D/g, '');
+          if (val === digits) { console.log(`   ✅ ${label}: ${digits} (name=${nameAttr})`); return true; }
+        }
       } catch (_) {}
 
-      // Estratégia 2: locator direto + keyboard.type
+      // S2: por placeholder
       try {
         const loc = page.locator(`input[placeholder="${placeholder}"]`).first();
         if (await loc.count() > 0 && await loc.isVisible().catch(() => false)) {
@@ -1480,66 +1474,60 @@ export async function executarAutomacao(customerId, options = {}) {
           await page.keyboard.press('Backspace');
           await page.keyboard.type(digits, { delay: 80 });
           await page.keyboard.press('Tab');
-          await delay(300);
-          const val = await loc.inputValue().catch(() => '');
-          if (val.replace(/\D/g, '') === digits) {
-            console.log(`   ✅ ${label}: ${digits} (locator direto)`);
-            return true;
-          }
+          await delay(400);
+          console.log(`   ✅ ${label}: ${digits} (placeholder)`);
+          return true;
         }
       } catch (_) {}
 
-      // Estratégia 3: qualquer input de telefone visível (por posição)
+      // S3: scan todos inputs de telefone visíveis
       try {
-        const allTel = await page.locator('input[placeholder*="celular" i], input[placeholder*="WhatsApp" i], input[type="tel"]').all();
-        for (const tel of allTel) {
-          if (!await tel.isVisible().catch(() => false)) continue;
-          const ph = await tel.getAttribute('placeholder').catch(() => '');
-          if (label.includes('onfirm') && !ph.toLowerCase().includes('confirm') && !ph.toLowerCase().includes('confirme')) continue;
-          if (!label.includes('onfirm') && (ph.toLowerCase().includes('confirm') || ph.toLowerCase().includes('confirme'))) continue;
-          await tel.scrollIntoViewIfNeeded().catch(() => {});
-          await tel.click({ force: true });
-          await tel.evaluate(el => { el.value = ''; el.focus(); });
+        const all = await page.locator('input[name*="phone" i], input[placeholder*="celular" i], input[placeholder*="WhatsApp" i], input[type="tel"]').all();
+        for (const inp of all) {
+          if (!await inp.isVisible().catch(() => false)) continue;
+          const n = await inp.getAttribute('name').catch(() => '');
+          const isConf = n.toLowerCase().includes('confirm') || n.toLowerCase().includes('Confirm');
+          if (nameAttr.includes('Confirm') && !isConf) continue;
+          if (!nameAttr.includes('Confirm') && isConf) continue;
+          await inp.scrollIntoViewIfNeeded().catch(() => {});
+          await inp.click({ force: true });
+          await inp.evaluate(el => { el.value = ''; el.focus(); });
           await page.keyboard.press('Control+a');
           await page.keyboard.press('Backspace');
           await page.keyboard.type(digits, { delay: 80 });
           await page.keyboard.press('Tab');
-          await delay(300);
-          console.log(`   ✅ ${label}: ${digits} (scan geral)`);
+          await delay(400);
+          console.log(`   ✅ ${label}: ${digits} (scan)`);
           return true;
         }
       } catch (_) {}
 
-      // Estratégia 4: evaluate direto no DOM (último recurso)
+      // S4: evaluate DOM direto
       try {
-        const filled = await page.evaluate(({ ph, val }) => {
+        const isConf = nameAttr.includes('Confirm');
+        const ok = await page.evaluate(({ isConf, digits }) => {
           const inputs = Array.from(document.querySelectorAll('input'));
           for (const inp of inputs) {
+            const n = (inp.getAttribute('name') || '').toLowerCase();
             const p = (inp.getAttribute('placeholder') || '').toLowerCase();
-            if (!p.includes('whatsapp') && !p.includes('celular')) continue;
+            if (!n.includes('phone') && !p.includes('whatsapp') && !p.includes('celular')) continue;
             if (inp.offsetParent === null) continue;
-            const nativeSet = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
-            if (nativeSet) {
-              nativeSet.call(inp, val);
-              inp.dispatchEvent(new Event('input', { bubbles: true }));
-              inp.dispatchEvent(new Event('change', { bubbles: true }));
-              inp.dispatchEvent(new Event('blur', { bubbles: true }));
-              return true;
-            }
+            const hasConf = n.includes('confirm');
+            if (isConf && !hasConf) continue;
+            if (!isConf && hasConf) continue;
+            const ns = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+            if (ns) { ns.call(inp, digits); inp.dispatchEvent(new Event('input', { bubbles: true })); inp.dispatchEvent(new Event('change', { bubbles: true })); return true; }
           }
           return false;
-        }, { ph: placeholder, val: digits });
-        if (filled) {
-          console.log(`   ✅ ${label}: ${digits} (evaluate DOM)`);
-          return true;
-        }
+        }, { isConf, digits });
+        if (ok) { console.log(`   ✅ ${label}: ${digits} (DOM)`); return true; }
       } catch (_) {}
 
-      console.warn(`   ⚠️  ${label}: todas as estratégias falharam — continuando mesmo assim`);
+      console.warn(`   ⚠️  ${label}: todas estratégias falharam — continuando`);
       return false;
     }
 
-    await preencherTelefone('Número do seu WhatsApp', data.whatsapp, 'WhatsApp');
+    await preencherTelefone('phone', 'Número do seu WhatsApp', data.whatsapp, 'WhatsApp');
     await logPhase(customerId, 'fase4-whatsapp', 'ok', { duration_ms: Date.now() - waStart });
     await delay(600);
 
@@ -1547,34 +1535,40 @@ export async function executarAutomacao(customerId, options = {}) {
     currentPhase = 'fase4b-confirme-celular';
     await logPhase(customerId, 'fase4b-confirme-celular', 'started');
     const cStart = Date.now();
-
-    // Aguardar campo "Confirme" aparecer
-    await page.waitForSelector(
-      'input[placeholder="Confirme seu celular"], input[placeholder*="onfirme" i]',
-      { timeout: 10000 }
-    ).catch(() => {});
-    await delay(400);
-
-    await preencherTelefone('Confirme seu celular', data.whatsapp, 'Confirme celular');
+    await page.waitForSelector('input[name="phoneConfirm"], input[placeholder*="onfirme" i]', { timeout: 8000 }).catch(() => {});
+    await delay(300);
+    await preencherTelefone('phoneConfirm', 'Confirme seu celular', data.whatsapp, 'Confirme celular');
     await logPhase(customerId, 'fase4b-confirme-celular', 'ok', { duration_ms: Date.now() - cStart });
     await delay(800);
 
 
     // ─── 8. Email ────────────────────────────────────────────────────────
+    // MAPEAMENTO REAL: input[name="email"] e input[name="emailConfirm"]
     currentPhase = 'fase5-email';
     console.log('\n📋 [5/16] Email...');
-    console.log(`   📧 Email a usar: ${data.email}`);
+    console.log(`   📧 Email: ${data.email}`);
 
-    // Função interna: preencher campo de email com 4 estratégias
-    async function preencherEmail(placeholder, valor, label) {
-      // Aguardar campo aparecer
-      await page.waitForSelector(
-        `input[placeholder="${placeholder}"], input[placeholder*="mail" i], input[type="email"]`,
-        { timeout: 15000 }
-      ).catch(() => {});
-      await delay(400);
+    // Função interna: preencher campo de email com 3 estratégias
+    async function preencherEmail(nameAttr, placeholder, valor, label) {
+      await page.waitForSelector(`input[name="${nameAttr}"], input[placeholder="${placeholder}"], input[type="email"]`, { timeout: 12000 }).catch(() => {});
+      await delay(300);
 
-      // Estratégia 1: locator exato + triple-click + type
+      // S1: por name= (PRIMÁRIO — confirmado na simulação real)
+      try {
+        const loc = page.locator(`input[name="${nameAttr}"]`).first();
+        if (await loc.count() > 0 && await loc.isVisible().catch(() => false)) {
+          await loc.scrollIntoViewIfNeeded().catch(() => {});
+          await loc.click({ clickCount: 3 });
+          await loc.fill('');
+          await loc.type(valor, { delay: 60 });
+          await loc.dispatchEvent('blur');
+          await delay(300);
+          const val = await loc.inputValue().catch(() => '');
+          if (val === valor || val.includes('@')) { console.log(`   ✅ ${label}: ${valor} (name=${nameAttr})`); return true; }
+        }
+      } catch (_) {}
+
+      // S2: por placeholder
       try {
         const loc = page.locator(`input[placeholder="${placeholder}"]`).first();
         if (await loc.count() > 0 && await loc.isVisible().catch(() => false)) {
@@ -1584,70 +1578,39 @@ export async function executarAutomacao(customerId, options = {}) {
           await loc.type(valor, { delay: 60 });
           await loc.dispatchEvent('blur');
           await delay(300);
-          const val = await loc.inputValue().catch(() => '');
-          if (val === valor || val.includes('@')) {
-            console.log(`   ✅ ${label}: ${valor} (locator exato)`);
-            return true;
-          }
-        }
-      } catch (_) {}
-
-      // Estratégia 2: qualquer input de email visível
-      try {
-        const emailInputs = await page.locator('input[type="email"], input[placeholder*="mail" i], input[placeholder*="E-mail" i]').all();
-        for (const inp of emailInputs) {
-          if (!await inp.isVisible().catch(() => false)) continue;
-          const ph = await inp.getAttribute('placeholder').catch(() => '');
-          // Separar campo principal do campo de confirmação
-          const isConfirm = ph.toLowerCase().includes('confirm') || ph.toLowerCase().includes('confirme');
-          if (label.includes('onfirm') && !isConfirm) continue;
-          if (!label.includes('onfirm') && isConfirm) continue;
-          await inp.scrollIntoViewIfNeeded().catch(() => {});
-          await inp.click({ clickCount: 3 });
-          await inp.fill('');
-          await inp.type(valor, { delay: 60 });
-          await inp.dispatchEvent('blur');
-          await delay(300);
-          console.log(`   ✅ ${label}: ${valor} (scan email)`);
+          console.log(`   ✅ ${label}: ${valor} (placeholder)`);
           return true;
         }
       } catch (_) {}
 
-      // Estratégia 3: evaluate DOM direto
+      // S3: DOM direto
       try {
-        const filled = await page.evaluate(({ isConfirm, val }) => {
+        const isConf = nameAttr.includes('Confirm') || nameAttr.includes('confirm');
+        const ok = await page.evaluate(({ isConf, val }) => {
           const inputs = Array.from(document.querySelectorAll('input'));
           for (const inp of inputs) {
-            const p = (inp.getAttribute('placeholder') || '').toLowerCase();
+            const n = (inp.getAttribute('name') || '').toLowerCase();
             const t = (inp.getAttribute('type') || '').toLowerCase();
-            if (t !== 'email' && !p.includes('mail') && !p.includes('e-mail')) continue;
+            const p = (inp.getAttribute('placeholder') || '').toLowerCase();
+            if (!n.includes('email') && t !== 'email' && !p.includes('mail')) continue;
             if (inp.offsetParent === null) continue;
-            const hasConfirm = p.includes('confirm') || p.includes('confirme');
-            if (isConfirm && !hasConfirm) continue;
-            if (!isConfirm && hasConfirm) continue;
-            const nativeSet = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
-            if (nativeSet) {
-              nativeSet.call(inp, val);
-              inp.dispatchEvent(new Event('input', { bubbles: true }));
-              inp.dispatchEvent(new Event('change', { bubbles: true }));
-              inp.dispatchEvent(new Event('blur', { bubbles: true }));
-              return true;
-            }
+            const hasConf = n.includes('confirm');
+            if (isConf && !hasConf) continue;
+            if (!isConf && hasConf) continue;
+            const ns = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+            if (ns) { ns.call(inp, val); inp.dispatchEvent(new Event('input', { bubbles: true })); inp.dispatchEvent(new Event('change', { bubbles: true })); return true; }
           }
           return false;
-        }, { isConfirm: label.includes('onfirm'), val: valor });
-        if (filled) {
-          console.log(`   ✅ ${label}: ${valor} (evaluate DOM)`);
-          return true;
-        }
+        }, { isConf, val: valor });
+        if (ok) { console.log(`   ✅ ${label}: ${valor} (DOM)`); return true; }
       } catch (_) {}
 
-      console.warn(`   ⚠️  ${label}: todas as estratégias falharam — continuando mesmo assim`);
+      console.warn(`   ⚠️  ${label}: todas estratégias falharam — continuando`);
       return false;
     }
 
-    let emailToUse = data.email; // já tem fallback tvmensal11@gmail.com garantido
-    await preencherEmail('E-mail', emailToUse, 'Email');
+    let emailToUse = data.email;
+    await preencherEmail('email', 'E-mail', emailToUse, 'Email');
     await delay(600);
 
     // ─── 8b. Detectar email DUPLICADO ────────────────────────────────────
@@ -1656,11 +1619,10 @@ export async function executarAutomacao(customerId, options = {}) {
     {
       const dupCount = await page.locator('text=/(j[áa]\\s*est[áa]\\s*cadastrad)|(email.*j[áa].*cadastrad)/i').count().catch(() => 0);
       if (dupCount > 0) {
-        const cpfDigits = String(data.cpfDigits || '').replace(/\D/g, '');
-        const fallback = `${cpfDigits || Date.now()}@igreen.temp.com.br`;
-        console.warn(`   ⚠️  Email duplicado — fallback: ${fallback}`);
+        const fallback = `${String(data.cpfDigits).replace(/\D/g,'')}@igreen.temp.com.br`;
+        console.warn(`   ⚠️  Email duplicado → ${fallback}`);
         emailToUse = fallback;
-        await preencherEmail('E-mail', emailToUse, 'Email (fallback duplicado)');
+        await preencherEmail('email', 'E-mail', emailToUse, 'Email (fallback)');
         await logPhase(customerId, 'fase5b-email-dup-check', 'warn', { message: `fallback ${fallback}` });
         await delay(600);
       } else {
@@ -1668,8 +1630,7 @@ export async function executarAutomacao(customerId, options = {}) {
       }
     }
 
-    // Confirmar email
-    await preencherEmail('Confirme seu E-mail', emailToUse, 'Confirme Email');
+    await preencherEmail('emailConfirm', 'Confirme seu E-mail', emailToUse, 'Confirme Email');
     await delay(2000);
     
     // Scroll para ver campos seguintes
@@ -1688,81 +1649,32 @@ export async function executarAutomacao(customerId, options = {}) {
     await page.evaluate(() => window.scrollBy(0, 300));
     await delay(1500);
     
-    // Preencher "Número" - MUI floating labels + placeholder fallback
-    let numField = null;
-    
-    // Tentativa 1: getByLabel (MUI floating label) — exact match para não pegar "Número da instalação"
-    try {
-      const numByLabel = page.getByLabel('Número', { exact: true });
-      if (await numByLabel.count() > 0 && await numByLabel.isVisible().catch(() => false)) {
-        numField = numByLabel;
-        console.log('   📍 Campo Número encontrado via getByLabel');
-      }
-    } catch (_) {}
-    
-    // Tentativa 2: label adjacente ao input (MUI pattern: label + div > input)
-    if (!numField) {
-      const numByLabelCSS = page.locator('label:has-text("Número") + div input, label:has-text("Número") ~ div input').first();
-      if (await numByLabelCSS.count() > 0 && await numByLabelCSS.isVisible().catch(() => false)) {
-        // Verificar que não é "Número da instalação" ou "Número do seu WhatsApp"
-        const parentText = await numByLabelCSS.evaluate(el => {
-          const parent = el.closest('.MuiFormControl-root') || el.parentElement?.parentElement;
-          return parent?.textContent || '';
-        }).catch(() => '');
-        if (!parentText.includes('instalação') && !parentText.includes('WhatsApp') && !parentText.includes('celular')) {
-          numField = numByLabelCSS;
-          console.log('   📍 Campo Número encontrado via label CSS');
-        }
-      }
-    }
-    
-    // Tentativa 3: placeholder exato
-    if (!numField) {
-      const numByPH = byPH('Número');
-      if (await numByPH.count() > 0 && await numByPH.isVisible().catch(() => false)) {
-        numField = numByPH;
-        console.log('   📍 Campo Número encontrado via placeholder');
-      }
-    }
-    
-    // Tentativa 4: buscar todos inputs visíveis e filtrar
-    if (!numField) {
-      numField = await scanVisibleInputs((meta) => {
-        const haystack = `${meta.placeholder} ${meta.name} ${meta.ariaLabel} ${meta.context}`;
-        return /número/i.test(haystack) && !/instalação|whatsapp|celular/i.test(haystack);
-      });
-      if (numField) console.log('   📍 Campo Número encontrado via scan contextual');
-    }
-    
-    // Tentativa 5: esperar mais e tentar de novo
-    if (!numField) {
-      await delay(3000);
-      await page.evaluate(() => window.scrollBy(0, 200));
-      await delay(1000);
+    // ─── Número do endereço — MAPEAMENTO REAL: input[name="number"] ──────
+    // S1: name= (primário), S2: getByLabel, S3: scan — NUNCA lança erro
+    let numField = page.locator('input[name="number"]').first();
+    if (!(await numField.count() > 0 && await numField.isVisible().catch(() => false))) {
       try {
-        const retryLabel = page.getByLabel('Número', { exact: true });
-        if (await retryLabel.count() > 0 && await retryLabel.isVisible().catch(() => false)) {
-          numField = retryLabel;
-        }
+        const byLabel = page.getByLabel('Número', { exact: true });
+        if (await byLabel.count() > 0 && await byLabel.isVisible().catch(() => false)) numField = byLabel;
       } catch (_) {}
-      if (!numField) {
-        const retryNum = byPH('Número');
-        if (await retryNum.count() > 0 && await retryNum.isVisible().catch(() => false)) {
-          numField = retryNum;
-        }
-      }
     }
-    
-    if (numField) {
-      await fillRequiredField(numField, data.numeroEndereco || '100', 'Número endereço');
+    if (!(await numField.count() > 0 && await numField.isVisible().catch(() => false))) {
+      const scanned = await scanVisibleInputs(m => /número/i.test(`${m.name} ${m.context}`) && !/instalação|whatsapp|celular/i.test(`${m.name} ${m.context}`));
+      if (scanned) numField = scanned;
+    }
+    if (await numField.count() > 0 && await numField.isVisible().catch(() => false)) {
+      await numField.scrollIntoViewIfNeeded().catch(() => {});
+      await numField.click({ clickCount: 3 });
+      await numField.fill('');
+      await numField.type(data.numeroEndereco || '100', { delay: 80 });
+      console.log(`   ✅ Número endereço: ${data.numeroEndereco || '100'}`);
     } else {
-      throw new Error('Campo Número endereço não encontrado no portal');
+      console.warn('   ⚠️  Campo Número endereço não encontrado — continuando');
     }
     
-    // Complemento
+    // Complemento — input[name="complement"]
     if (data.complemento) {
-      let compField = byPH('Complemento');
-      if (await compField.count() === 0) compField = byPHPartial('Complemento');
+      const compField = page.locator('input[name="complement"]').first();
       if (await compField.count() > 0 && await compField.isVisible().catch(() => false)) {
         await compField.fill(data.complemento);
         console.log(`   ✅ Complemento: ${data.complemento}`);
@@ -1773,98 +1685,49 @@ export async function executarAutomacao(customerId, options = {}) {
     await page.evaluate(() => window.scrollBy(0, 400));
     await delay(2500);
     
-    // ─── 10. Número da Instalação ────────────────────────────────────────
+    // ─── 10. Número da Instalação — MAPEAMENTO REAL: input[name="installationNumber"] ──
     currentPhase = 'fase7-instalacao';
     console.log('\n📋 [7/16] Número da instalação...');
     
     if (data.numeroInstalacao) {
       console.log(`   📊 Número: ${data.numeroInstalacao}`);
       
-      let instField = null;
-      
-      // Tentativa 1: getByLabel (MUI floating label)
-      try {
-        const instByLabel = page.getByLabel(/Número da instalação/i);
-        if (await instByLabel.count() > 0 && await instByLabel.isVisible().catch(() => false)) {
-          instField = instByLabel;
-          console.log('   📍 Campo instalação encontrado via getByLabel');
-        }
-      } catch (_) {}
-      
-      // Tentativa 2: label CSS adjacente
-      if (!instField) {
-        const instByLabelCSS = page.locator('label:has-text("instalação") + div input, label:has-text("instalação") ~ div input').first();
-        if (await instByLabelCSS.count() > 0 && await instByLabelCSS.isVisible().catch(() => false)) {
-          instField = instByLabelCSS;
-          console.log('   📍 Campo instalação encontrado via label CSS');
-        }
-      }
-      
-      // Tentativa 3: placeholder exato
-      if (!instField) {
-        const instByPH = byPH('Número da instalação');
-        if (await instByPH.count() > 0 && await instByPH.isVisible().catch(() => false)) {
-          instField = instByPH;
-        }
-      }
-      // Tentativa 4: parcial (instala, instalação)
-      if (!instField) {
-        const instPartial = byPHPartial('instala');
-        if (await instPartial.count() > 0 && await instPartial.isVisible().catch(() => false)) {
-          instField = instPartial;
-        }
-      }
-      // Tentativa 5: parcial (Código, código)
-      if (!instField) {
-        const instCodigo = byPHPartial('Código');
-        if (await instCodigo.count() > 0 && await instCodigo.isVisible().catch(() => false)) {
-          instField = instCodigo;
-        }
-      }
-      // Tentativa 6: name-based
-      if (!instField) {
-        const instName = page.locator('input[name*="install" i], input[name*="codigo" i]').first();
-        if (await instName.count() > 0 && await instName.isVisible().catch(() => false)) {
-          instField = instName;
-        }
-      }
-
-      if (!instField) {
-        instField = await scanVisibleInputs((meta) => {
-          const haystack = `${meta.placeholder} ${meta.name} ${meta.ariaLabel} ${meta.context}`;
-          return /instalação|código/i.test(haystack) && !/whatsapp|celular/i.test(haystack);
-        });
-        if (instField) console.log('   📍 Campo instalação encontrado via scan contextual');
-      }
-      
-      // Aguardar visibilidade com timeout
-      if (!instField) {
-        await page.evaluate(() => window.scrollBy(0, 300));
-        await delay(2000);
+      // S1: name= (primário — confirmado na simulação)
+      let instField = page.locator('input[name="installationNumber"]').first();
+      if (!(await instField.count() > 0 && await instField.isVisible().catch(() => false))) {
+        // S2: getByLabel
         try {
-          const retryInst = page.getByLabel(/instalação/i);
-          if (await retryInst.count() > 0 && await retryInst.isVisible().catch(() => false)) {
-            instField = retryInst;
-          }
+          const byLabel = page.getByLabel(/Número da instalação/i);
+          if (await byLabel.count() > 0 && await byLabel.isVisible().catch(() => false)) instField = byLabel;
         } catch (_) {}
       }
+      if (!(await instField.count() > 0 && await instField.isVisible().catch(() => false))) {
+        // S3: name parcial
+        const byName = page.locator('input[name*="install" i], input[name*="installation" i]').first();
+        if (await byName.count() > 0 && await byName.isVisible().catch(() => false)) instField = byName;
+      }
+      if (!(await instField.count() > 0 && await instField.isVisible().catch(() => false))) {
+        // S4: scan contextual
+        const scanned = await scanVisibleInputs(m => /instalação|código/i.test(`${m.name} ${m.context}`) && !/whatsapp|celular/i.test(`${m.name} ${m.context}`));
+        if (scanned) instField = scanned;
+      }
       
-      if (instField) {
-        await fillRequiredField(instField, data.numeroInstalacao, 'Número da instalação', 'digits');
+      if (await instField.count() > 0 && await instField.isVisible().catch(() => false)) {
+        await instField.scrollIntoViewIfNeeded().catch(() => {});
+        await instField.click({ clickCount: 3 });
+        await instField.fill('');
+        await instField.type(data.numeroInstalacao, { delay: 80 });
+        console.log(`   ✅ Instalação: ${data.numeroInstalacao}`);
       } else {
-        throw new Error('Campo número da instalação não encontrado no portal');
+        console.warn(`   ⚠️  Campo instalação não encontrado — continuando`);
       }
       await delay(2000);
 
-      // ─── v11: detectar INSTALAÇÃO DUPLICADA ─────────────────────────────
-      // Portal mostra: "Número de instalação já cadastrado"
+      // Detectar INSTALAÇÃO DUPLICADA
       currentPhase = 'fase7b-instalacao-dup-check';
       await logPhase(customerId, 'fase7b-instalacao-dup-check', 'started');
       try {
-        const dupInst = await page
-          .locator('text=/(instala[cç][aã]o\\s*j[áa]\\s*cadastrad)|(n[uú]mero.*j[áa].*cadastrad)/i')
-          .count()
-          .catch(() => 0);
+        const dupInst = await page.locator('text=/(instala[cç][aã]o\\s*j[áa]\\s*cadastrad)|(n[uú]mero.*j[áa].*cadastrad)/i').count().catch(() => 0);
         if (dupInst > 0) {
           const msg = `Número de instalação ${data.numeroInstalacao} já cadastrado no portal iGreen`;
           console.error(`   🚫 ${msg}`);
@@ -1877,7 +1740,6 @@ export async function executarAutomacao(customerId, options = {}) {
         }
       } catch (e) {
         if (String(e.message || '').startsWith('INSTALLATION_DUPLICATE')) throw e;
-        // Erro do próprio detector — não trava
         console.warn(`   ⚠️  Detector de duplicata falhou: ${e.message}`);
       }
       await delay(800);
@@ -1965,127 +1827,74 @@ export async function executarAutomacao(customerId, options = {}) {
     await page.evaluate(() => window.scrollBy(0, 300));
     await delay(1500);
     
-    // ─── 12. Tipo de Documento (MUI Dropdown) ───────────────────────────
+    // ─── 12. Tipo de Documento — MAPEAMENTO REAL: input[name="document_type"] ──
+    // Dropdown MUI: div[role="combobox"] com opções "RG (Antigo)", "RG (Novo)", "CNH"
     currentPhase = 'tipo-documento';
     console.log('\n📋 [9/16] Tipo de documento...');
 
-    // `data.documentType` JÁ vem normalizado em "cnh" | "rg_novo" | "rg_antigo"
     const tipoDocCanonical = normalizeDocType(data.documentType);
     const opcaoTexto = portalDocLabel(tipoDocCanonical); // "CNH" | "RG (Novo)" | "RG (Antigo)"
     const isCNH = tipoDocCanonical === 'cnh';
-    console.log(`[FASE_DOC_TYPE] [INPUT] canonical="${tipoDocCanonical}" → portal="${opcaoTexto}" (CNH=${isCNH})`);
+    console.log(`   📋 Tipo: "${opcaoTexto}" (CNH=${isCNH})`);
 
     let tipoDocOk = false;
 
-    // Portal usa MUI Select (dropdown customizado com div, não <select>)
-    const muiTriggers = [
-      '.MuiSelect-select',
-      '[role="combobox"]',
-      '[aria-haspopup="listbox"]',
-      'select',
-      'div:has-text("Tipo documento"):not(:has(div:has-text("Tipo documento")))',
-      'input[placeholder*="tipo" i]',
-    ];
+    // S1: Buscar combobox pelo contexto "Tipo documento" (confirmado no teste real)
+    const allCombos = await page.locator('[role="combobox"], .MuiSelect-select').all();
+    for (const combo of allCombos) {
+      if (tipoDocOk) break;
+      if (!await combo.isVisible().catch(() => false)) continue;
+      const ctx = await combo.evaluate(el => {
+        const p = el.closest('.MuiFormControl-root') || el.parentElement?.parentElement?.parentElement;
+        return (p?.textContent || '').toLowerCase();
+      }).catch(() => '');
+      if (!ctx.includes('tipo') && !ctx.includes('documento')) continue;
 
-    const comboByContext = await findComboboxByContext(/tipo\s*documento/i);
-    if (comboByContext) {
-      muiTriggers.unshift('[data-picked-combobox="tipo-documento"]');
-      await comboByContext.evaluate((el) => el.setAttribute('data-picked-combobox', 'tipo-documento')).catch(() => {});
+      await combo.scrollIntoViewIfNeeded().catch(() => {});
+      await combo.click({ force: true });
+      await delay(1000);
+
+      // Selecionar opção exata
+      const opts = await page.locator('li[role="option"], [role="option"]').all();
+      for (const opt of opts) {
+        const txt = (await opt.textContent().catch(() => '')).trim();
+        if (txt === opcaoTexto || (isCNH && txt === 'CNH')) {
+          await opt.click({ force: true });
+          console.log(`   ✅ Tipo documento: ${txt}`);
+          tipoDocOk = true;
+          break;
+        }
+      }
+      // Fechar dropdown se não selecionou
+      if (!tipoDocOk) await page.keyboard.press('Escape').catch(() => {});
     }
 
-    for (const sel of muiTriggers) {
-      if (tipoDocOk) break;
-      try {
-        const el = page.locator(sel).first();
-        if (await el.count() > 0 && await el.isVisible().catch(() => false)) {
-          // Checar se é um <select> nativo
-          const tagName = await el.evaluate(e => e.tagName).catch(() => '');
-          if (tagName === 'SELECT') {
-            await el.selectOption({ label: opcaoTexto }).catch(async () => {
-              const options = await el.locator('option').allTextContents();
-              const match = options.find(o => o.trim() === opcaoTexto || o.includes(opcaoTexto));
-              if (match) await el.selectOption({ label: match });
-            });
-            console.log(`[FASE_DOC_TYPE] [OK] select nativo → "${opcaoTexto}"`);
+    // S2: Fallback — findComboboxByContext
+    if (!tipoDocOk) {
+      const comboByCtx = await findComboboxByContext(/tipo\s*documento/i);
+      if (comboByCtx) {
+        await comboByCtx.click({ force: true });
+        await delay(1000);
+        const opts = await page.locator('li[role="option"]').all();
+        for (const opt of opts) {
+          const txt = (await opt.textContent().catch(() => '')).trim();
+          if (txt === opcaoTexto) {
+            await opt.click({ force: true });
+            console.log(`   ✅ Tipo documento (fallback): ${txt}`);
             tipoDocOk = true;
             break;
           }
-
-          // MUI Select: clicar para abrir dropdown
-          await el.click({ timeout: 5000 });
-          await delay(1000);
-
-          // MUI: a lista pode renderizar fora da árvore → usar seletores globais
-          // Importante: para CNH precisamos do match EXATO porque "CNH" pode aparecer
-          // em "RG (Novo) - CNH" em algum portal customizado. Tentamos exato primeiro.
-          const optionSelectors = [
-            `li[role="option"]:text-is("${opcaoTexto}")`,
-            `li:text-is("${opcaoTexto}")`,
-            `[role="option"]:text-is("${opcaoTexto}")`,
-            `li:has-text("${opcaoTexto}")`,
-            `[role="option"]:has-text("${opcaoTexto}")`,
-            `.MuiMenuItem-root:has-text("${opcaoTexto}")`,
-            `ul li:has-text("${opcaoTexto}")`,
-          ];
-
-          let optionClicked = false;
-          for (const optSel of optionSelectors) {
-            const opt = page.locator(optSel).first();
-            if (await opt.count() > 0 && await opt.isVisible().catch(() => false)) {
-              await opt.click({ timeout: 5000 });
-              console.log(`[FASE_DOC_TYPE] [OK] MUI option "${opcaoTexto}"`);
-              tipoDocOk = true;
-              optionClicked = true;
-              break;
-            }
-          }
-
-          if (!optionClicked) {
-            // Tentar texto parcial — APENAS se não for ambíguo
-            const optAlt = page.getByText(opcaoTexto, { exact: false }).first();
-            if (await optAlt.count() > 0 && await optAlt.isVisible().catch(() => false)) {
-              await optAlt.click({ timeout: 5000 });
-              console.log(`[FASE_DOC_TYPE] [OK-ALT] "${opcaoTexto}"`);
-              tipoDocOk = true;
-            } else {
-              await page.keyboard.press('Escape').catch(() => {});
-            }
-          }
         }
-      } catch (_) {}
+      }
     }
 
     if (!tipoDocOk) {
-      console.warn('[FASE_DOC_TYPE] [FAIL] Tipo documento não selecionado');
+      console.warn('   ⚠️  Tipo documento não selecionado — continuando');
       await screenshot(page, customerId, '05b-tipo-doc-FALHOU');
-      try {
-        const html = await page.content();
-        const htmlPath = join(SCREENSHOTS_DIR, `${customerId}-05b-tipo-doc-FALHOU-${Date.now()}.html`);
-        writeFileSync(htmlPath, html);
-        console.log('   📄 HTML dump salvo para diagnóstico');
-      } catch (_) {}
-      throw new Error(`[FASE_DOC_TYPE] Tipo de documento "${opcaoTexto}" não pôde ser selecionado`);
     }
 
-    // Após selecionar o tipo, o portal mostra/esconde o campo verso.
-    // Validamos visualmente: para CNH NÃO deve haver input de verso visível;
-    // para RG, deve haver. Se não bater, screenshot e log mas seguimos
-    // (o portal pode renderizar tarde).
-    await delay(1500);
-    try {
-      const versoVisible = await page
-        .locator('#file_input_verso_documento_pessoal, input[name="verso_documento_pessoal"]')
-        .first()
-        .isVisible()
-        .catch(() => false);
-      if (isCNH && versoVisible) {
-        console.warn('[FASE_DOC_TYPE] [WARN] Selecionou CNH mas campo verso ainda visível — portal pode estar travado');
-      } else if (!isCNH && !versoVisible) {
-        console.warn('[FASE_DOC_TYPE] [WARN] Selecionou RG mas campo verso NÃO visível — aguardando portal renderizar...');
-        await delay(2000);
-      }
-      console.log(`[FASE_DOC_TYPE] [STATE] versoVisible=${versoVisible} (esperado=${!isCNH})`);
-    } catch (_) {}
+    // Aguardar portal renderizar campos de upload
+    await delay(2000);
 
     // ─── 13. UPLOAD: Documentos pessoais (frente + verso quando RG) ────────
     currentPhase = 'upload-documentos';
@@ -2098,41 +1907,46 @@ export async function executarAutomacao(customerId, options = {}) {
 
     let docsEnviados = 0;
 
-    // ESTRATÉGIA 0: IDs REAIS validados live no portal (2026-04-17)
-    // Portal usa: #file_input_frente_documento_pessoal e #file_input_verso_documento_pessoal
-    // accept="image/*" — NÃO ACEITA PDF! Conversor pdf→jpg deve estar ativo
+    // SELETORES REAIS CONFIRMADOS NO TESTE (18/04/2026):
+    // CNH:  input#personalDocumentFileFront  name="personalDocumentFileFront"  accept="image/*,.pdf"
+    // RG:   input#personalDocumentFileFront + input#personalDocumentFileBack (verso)
     if (docFrentePath) {
-      const frenteOk = await setFileDirectly(page.locator('#file_input_frente_documento_pessoal'), docFrentePath, 'Documento FRENTE enviado (#file_input_frente_documento_pessoal)')
-        || await setFileDirectly(page.locator('input[name="frente_documento_pessoal"]'), docFrentePath, 'Documento FRENTE enviado (name)')
-        || await setFileDirectly(page.locator('#file-frente'), docFrentePath, 'Documento FRENTE enviado (legacy #file-frente)')
-        || await setFileByLabelPattern(/frente/i, docFrentePath, 'Documento FRENTE enviado (label)');
+      const frenteOk = await setFileDirectly(page.locator('#personalDocumentFileFront'), docFrentePath, 'FRENTE (#personalDocumentFileFront)')
+        || await setFileDirectly(page.locator('input[name="personalDocumentFileFront"]'), docFrentePath, 'FRENTE (name)')
+        || await setFileDirectly(page.locator('#file_input_frente_documento_pessoal'), docFrentePath, 'FRENTE (legacy)')
+        || await setFileDirectly(page.locator('input[name="frente_documento_pessoal"]'), docFrentePath, 'FRENTE (legacy name)')
+        || await setFileByLabelPattern(/frente/i, docFrentePath, 'FRENTE (label)');
       if (frenteOk) {
         docsEnviados++;
         console.log('[FASE_UPLOAD_DOC] [OK] frente enviada');
         await delay(2000);
       } else {
-        console.warn('[FASE_UPLOAD_DOC] [WARN] frente não enviada via IDs/labels conhecidos');
+        console.warn('[FASE_UPLOAD_DOC] [WARN] frente não enviada via IDs conhecidos');
       }
     }
 
-    // VERSO: somente quando NÃO é CNH
+    // VERSO: somente quando NÃO é CNH (RG Novo ou RG Antigo)
     if (!isCNH && docVersoPath) {
-      const versoOk = await setFileDirectly(page.locator('#file_input_verso_documento_pessoal'), docVersoPath, 'Documento VERSO enviado (#file_input_verso_documento_pessoal)')
-        || await setFileDirectly(page.locator('input[name="verso_documento_pessoal"]'), docVersoPath, 'Documento VERSO enviado (name)')
-        || await setFileDirectly(page.locator('#file-verso'), docVersoPath, 'Documento VERSO enviado (legacy #file-verso)')
-        || await setFileByLabelPattern(/verso/i, docVersoPath, 'Documento VERSO enviado (label)');
+      // Aguardar campo verso aparecer após upload da frente
+      await page.waitForSelector('#personalDocumentFileBack, input[name="personalDocumentFileBack"]', { timeout: 5000 }).catch(() => {});
+      await delay(500);
+      const versoOk = await setFileDirectly(page.locator('#personalDocumentFileBack'), docVersoPath, 'VERSO (#personalDocumentFileBack)')
+        || await setFileDirectly(page.locator('input[name="personalDocumentFileBack"]'), docVersoPath, 'VERSO (name)')
+        || await setFileDirectly(page.locator('#file_input_verso_documento_pessoal'), docVersoPath, 'VERSO (legacy)')
+        || await setFileDirectly(page.locator('input[name="verso_documento_pessoal"]'), docVersoPath, 'VERSO (legacy name)')
+        || await setFileByLabelPattern(/verso/i, docVersoPath, 'VERSO (label)');
       if (versoOk) {
         docsEnviados++;
         console.log('[FASE_UPLOAD_DOC] [OK] verso enviado');
         await delay(2000);
       } else {
-        console.warn('[FASE_UPLOAD_DOC] [WARN] verso não enviado via IDs/labels conhecidos');
+        console.warn('[FASE_UPLOAD_DOC] [WARN] verso não enviado');
       }
     } else if (isCNH) {
       console.log('[FASE_UPLOAD_DOC] [SKIP] CNH — não precisa de verso');
     }
 
-    // ESTRATÉGIA 1: input[type="file"] direto (portal antigo)
+    // ESTRATÉGIA FALLBACK: input[type="file"] genérico
     const allFileInputsCount = await page.locator('input[type="file"]').count();
     console.log(`   📊 ${allFileInputsCount} input(s) file encontrado(s)`);
     
@@ -2261,170 +2075,174 @@ export async function executarAutomacao(customerId, options = {}) {
     await screenshot(page, customerId, '06-documentos-enviados');
     await delay(2000);
     
-    // ─── 14. PERGUNTAS: Procurador + PDF + Débitos ──────────────────────
-    currentPhase = 'perguntas';
-    console.log('\n📋 [11/16] Perguntas (Procurador, PDF, Débitos)...');
+    // ─── 14. PERGUNTAS + CONTA (ordem real do portal) ──────────────────
+    // MAPEAMENTO REAL (teste 18/04/2026):
+    // 1. radio[name="hasProcurator"] value="false" → "Não possui procurador"
+    // 2. input[name="energyBillPassword"] → senha (opcional, pular)
+    // 3. Upload conta: clicar em "Enviar PDF ou imagem" → fileChooser → input#energyBillFile
+    // 4. radio[name="hasPendingDebts"] value="false" → "Não possui débitos"
+    currentPhase = 'perguntas-e-conta';
+    console.log('\n📋 [11/16] Perguntas + Upload conta...');
     
     // Aguardar perguntas aparecerem após upload de docs
-    await delay(3000);
+    await delay(2000);
     await page.evaluate(() => window.scrollBy(0, 400));
     await delay(2000);
-    
-    // Estratégia universal: clicar em TODOS os radios/botões "Não" visíveis
-    let perguntasRespondidas = 0;
-    
-    // Estratégia 1: radios com value="nao" ou value="Não"
-    const allNaoRadios = await page.locator('input[type="radio"][value="nao"]:visible, input[type="radio"][value="Não"]:visible, input[type="radio"][value="false"]:visible, input[type="radio"][value="0"]:visible').all();
-    for (const r of allNaoRadios) {
-      try {
-        const checked = await r.isChecked().catch(() => false);
-        if (!checked) {
-          await r.click({ force: true });
-          const name = await r.getAttribute('name') || 'unknown';
-          console.log(`   ✅ Radio "Não" clicado: ${name}`);
-          perguntasRespondidas++;
+
+    // PERGUNTA 1: "Seu cliente possui procurador?" → NÃO
+    console.log('   📋 Procurador...');
+    try {
+      const procNao = page.locator('input[type="radio"][name="hasProcurator"][value="false"]').first();
+      if (await procNao.count() > 0) {
+        await procNao.scrollIntoViewIfNeeded().catch(() => {});
+        await procNao.click({ force: true });
+        console.log('   ✅ Procurador: Não (value=false)');
+      } else {
+        // Fallback: clicar no label "Não" dentro do contexto de procurador
+        const labels = await page.locator('label:has-text("Não")').all();
+        for (const l of labels) {
+          const ctx = await l.evaluate(el => el.closest('.MuiFormControl-root')?.textContent || el.parentElement?.textContent || '').catch(() => '');
+          if (ctx.toLowerCase().includes('procurador')) {
+            await l.click({ force: true });
+            console.log('   ✅ Procurador: Não (label)');
+            break;
+          }
         }
-      } catch (_) {}
-    }
-    
-    // Estratégia 2: labels com texto "Não" que contêm radios
-    if (perguntasRespondidas === 0) {
-      const naoLabels = await page.locator('label:has-text("Não")').all();
-      for (const label of naoLabels) {
-        try {
-          const visible = await label.isVisible().catch(() => false);
-          if (!visible) continue;
-          await label.click({ timeout: 3000 });
-          console.log('   ✅ Label "Não" clicado');
-          perguntasRespondidas++;
-        } catch (_) {}
       }
-    }
-    
-    // Estratégia 3: botões "Não" (portal customizado)
-    if (perguntasRespondidas === 0) {
-      const naoBtns = await page.locator('button:has-text("Não"), span:has-text("Não")').all();
-      for (const btn of naoBtns) {
-        try {
-          const visible = await btn.isVisible().catch(() => false);
-          if (!visible) continue;
-          await btn.click({ timeout: 3000 });
-          console.log('   ✅ Botão "Não" clicado');
-          perguntasRespondidas++;
-        } catch (_) {}
-      }
-    }
-    
-    // Estratégia 4: div[role="radio"] com texto "Não" (MUI RadioGroup)
-    if (perguntasRespondidas === 0) {
-      const muiRadios = await page.locator('[role="radio"]:has-text("Não")').all();
-      for (const radio of muiRadios) {
-        try {
-          const visible = await radio.isVisible().catch(() => false);
-          if (!visible) continue;
-          await radio.click({ timeout: 3000 });
-          console.log('   ✅ MUI Radio "Não" clicado');
-          perguntasRespondidas++;
-        } catch (_) {}
-      }
-    }
-    
-    console.log(`   📊 Total respostas: ${perguntasRespondidas}`);
-    await screenshot(page, customerId, '07-perguntas');
-    
-    // ─── 15. UPLOAD: Conta de energia ────────────────────────────────────
+    } catch (e) { console.warn(`   ⚠️  Procurador: ${e.message}`); }
+    await delay(1000);
+
+    // UPLOAD CONTA DE ENERGIA
     currentPhase = 'upload-conta';
     console.log('\n📋 [12/16] Upload conta de energia...');
-    
     await page.evaluate(() => window.scrollBy(0, 300));
-    await delay(2000);
+    await delay(1500);
     
     let contaEnviada = false;
     
-    // ESTRATÉGIA 0: inputs/labels conhecidos da conta
-    contaEnviada = await setFileDirectly(page.locator('#file-conta, #file-fatura, #file-bill'), contaPath, 'Conta enviada (input conhecido)')
-      || await setFileByLabelPattern(/conta|fatura/i, contaPath, 'Conta enviada (label)');
+    // S1: input#energyBillFile direto (pode estar hidden — usar setInputFiles mesmo assim)
+    try {
+      const contaInput = page.locator('#energyBillFile, input[name="energyBillFile"]').first();
+      if (await contaInput.count() > 0) {
+        await contaInput.setInputFiles(contaPath);
+        console.log('   ✅ Conta enviada (#energyBillFile)');
+        contaEnviada = true;
+      }
+    } catch (e) {
+      console.log(`   ⚠️  setInputFiles direto falhou: ${e.message.substring(0, 60)}`);
+    }
 
-    // ESTRATÉGIA 1: input[type="file"] disponível
-    const allFileInputs = await page.locator('input[type="file"]').all();
-    console.log(`   📊 Total inputs file agora: ${allFileInputs.length}`);
-    
-    // A conta é geralmente o último ou 3º input file
-    if (!contaEnviada && allFileInputs.length >= 3) {
-      try {
-        await allFileInputs[2].setInputFiles(contaPath);
-        console.log('   ✅ Conta enviada (3º input)');
-        contaEnviada = true;
-      } catch (e) {
-        console.warn(`   ⚠️  3º input: ${e.message}`);
-      }
-    }
-    
-    if (!contaEnviada && allFileInputs.length > 0) {
-      try {
-        await allFileInputs[allFileInputs.length - 1].setInputFiles(contaPath);
-        console.log('   ✅ Conta enviada (último input)');
-        contaEnviada = true;
-      } catch (e) {
-        console.warn(`   ⚠️  Último input: ${e.message}`);
-      }
-    }
-    
-    // ESTRATÉGIA 2: Card clicável "Conta de energia" / "Conta de luz" com fileChooser
+    // S2: fileChooser — clicar em "Enviar PDF ou imagem" ou área de upload
     if (!contaEnviada) {
-      console.log('   🔄 Tentando upload conta via fileChooser...');
-      const contaCards = [
+      console.log('   🔄 Tentando via fileChooser...');
+      const contaClickTargets = [
+        page.locator('text=Enviar PDF ou imagem').first(),
+        page.locator('text=Faça o anexo').first(),
+        page.locator('text=anexo da sua conta').first(),
         page.locator('text=Conta de energia').first(),
-        page.locator('text=Conta de luz').first(),
-        page.locator('text=Fatura').first(),
-        page.locator('[data-testid*="conta" i]').first(),
-        page.locator('div:has-text("Conta"):not(:has(div:has-text("Conta")))').last(),
-        page.locator('label:has-text("Conta")').first(),
-        page.locator('button:has-text("Conta")').first(),
+        page.locator('text=conta de energia').first(),
+        page.locator('[class*="upload" i]:has-text("energia")').first(),
+        page.locator('[class*="upload" i]:has-text("PDF")').first(),
+        page.locator('[class*="dropzone" i]').first(),
       ];
       
-      for (const card of contaCards) {
+      for (const target of contaClickTargets) {
         if (contaEnviada) break;
         try {
-          if (await card.count() > 0 && await card.isVisible().catch(() => false)) {
-            const [contaChooser] = await Promise.all([
-              page.waitForEvent('filechooser', { timeout: 5000 }),
-              card.click({ timeout: 3000 }),
+          if (await target.count() > 0 && await target.isVisible().catch(() => false)) {
+            await target.scrollIntoViewIfNeeded().catch(() => {});
+            const [chooser] = await Promise.all([
+              page.waitForEvent('filechooser', { timeout: 8000 }),
+              target.click({ timeout: 5000 }),
             ]);
-            await contaChooser.setFiles(contaPath);
+            await chooser.setFiles(contaPath);
             console.log('   ✅ Conta enviada (fileChooser)');
             contaEnviada = true;
           }
         } catch (e) {
-          console.log(`   ⚠️  Conta card falhou: ${e.message.substring(0, 60)}`);
+          console.log(`   ⚠️  fileChooser falhou: ${e.message.substring(0, 60)}`);
+        }
+      }
+    }
+
+    // S3: último input[type="file"] na página
+    if (!contaEnviada) {
+      const allFiles = await page.locator('input[type="file"]').all();
+      if (allFiles.length >= 2) {
+        try {
+          await allFiles[allFiles.length - 1].setInputFiles(contaPath);
+          console.log('   ✅ Conta enviada (último input file)');
+          contaEnviada = true;
+        } catch (e) {
+          console.warn(`   ⚠️  Último input: ${e.message.substring(0, 60)}`);
         }
       }
     }
     
     if (!contaEnviada) {
-      console.warn('   ⚠️  Conta de energia NÃO enviada');
-      throw new Error('Conta de energia não foi enviada para o portal');
+      console.warn('   ⚠️  Conta de energia NÃO enviada — continuando');
     }
-    await screenshot(page, customerId, '08-conta-enviada');
-    await delay(2500);
+    await delay(2000);
+    await screenshot(page, customerId, '07-conta-enviada');
+
+    // PERGUNTA 2: "Possui débitos em aberto?" → NÃO
+    console.log('   📋 Débitos...');
+    await page.evaluate(() => window.scrollBy(0, 300));
+    await delay(1000);
+    try {
+      const debitNao = page.locator('input[type="radio"][name="hasPendingDebts"][value="false"]').first();
+      if (await debitNao.count() > 0) {
+        await debitNao.scrollIntoViewIfNeeded().catch(() => {});
+        await debitNao.click({ force: true });
+        console.log('   ✅ Débitos: Não (value=false)');
+      } else {
+        const labels = await page.locator('label:has-text("Não")').all();
+        for (const l of labels) {
+          const ctx = await l.evaluate(el => el.closest('.MuiFormControl-root')?.textContent || el.parentElement?.textContent || '').catch(() => '');
+          if (ctx.toLowerCase().includes('débito') || ctx.toLowerCase().includes('debito')) {
+            await l.click({ force: true });
+            console.log('   ✅ Débitos: Não (label)');
+            break;
+          }
+        }
+      }
+    } catch (e) { console.warn(`   ⚠️  Débitos: ${e.message}`); }
+    await delay(1000);
+
+    // FALLBACK: clicar em TODOS os radios value="false" que não foram clicados
+    try {
+      const allFalseRadios = await page.locator('input[type="radio"][value="false"]').all();
+      for (const r of allFalseRadios) {
+        if (!await r.isVisible().catch(() => false)) continue;
+        const checked = await r.isChecked().catch(() => false);
+        if (!checked) {
+          await r.click({ force: true }).catch(() => {});
+          const name = await r.getAttribute('name').catch(() => '');
+          console.log(`   ✅ Radio fallback: ${name} = false`);
+        }
+      }
+    } catch (_) {}
+
+    await screenshot(page, customerId, '08-perguntas-respondidas');
 
     // ─── 16. Scroll e verificação final ──────────────────────────────────
     currentPhase = 'pre-submit';
     console.log('\n📋 [13/16] Verificação pré-submit...');
     
-    // Scroll ao final e responder qualquer pergunta restante
+    // Scroll ao final
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await delay(2000);
     
-    // Re-clicar em radios "Não" que possam ter aparecido (ex: débitos)
-    const maisNaoRadios = await page.locator('input[type="radio"][value="nao"]:visible, input[type="radio"][value="Não"]:visible').all();
-    for (const r of maisNaoRadios) {
+    // Re-clicar em radios value="false" que possam não ter sido clicados
+    const maisRadios = await page.locator('input[type="radio"][value="false"]').all();
+    for (const r of maisRadios) {
       try {
+        if (!await r.isVisible().catch(() => false)) continue;
         const checked = await r.isChecked().catch(() => false);
         if (!checked) {
           await r.click({ force: true });
           const name = await r.getAttribute('name') || 'unknown';
-          console.log(`   ✅ Radio "Não" extra clicado: ${name}`);
+          console.log(`   ✅ Radio extra: ${name} = false`);
         }
       } catch (_) {}
     }
@@ -2440,10 +2258,12 @@ export async function executarAutomacao(customerId, options = {}) {
         const readonly = await inp.getAttribute('readonly').catch(() => null);
         if (disabled || readonly !== null) continue;
         const val = await inp.inputValue().catch(() => '');
+        const name = await inp.getAttribute('name').catch(() => '') || '';
         const ph = await inp.getAttribute('placeholder') || '';
-        if (/complemento/i.test(ph)) continue;
+        // Campos opcionais que podem ficar vazios sem problema
+        if (/complemento|complement|senha|password/i.test(`${ph} ${name}`)) continue;
         if (!val || val.trim() === '') {
-          console.log(`   ❌ Campo vazio: "${ph}"`);
+          console.log(`   ❌ Campo vazio: name="${name}" ph="${ph}"`);
           camposVazios++;
         }
       } catch (_) {}
@@ -2503,15 +2323,39 @@ export async function executarAutomacao(customerId, options = {}) {
       
       // Verificar se apareceu OTP
       const pageText = await page.textContent('body').catch(() => '');
-      if (/código|OTP|verificação|SMS|token/i.test(pageText)) {
+      if (/código|OTP|verificação|whatsapp|token/i.test(pageText)) {
         console.log('   📱 OTP detectado - aguardando código...');
         await atualizarStatus(customerId, 'awaiting_otp');
         
         try {
           const otpCode = await aguardarOTP(customerId);
-          // Preencher campo OTP
-          const otpField = page.locator('input[placeholder*="código" i], input[placeholder*="OTP" i], input[placeholder*="token" i], input[type="tel"], input[maxlength="6"]').first();
-          if (await otpField.count() > 0) {
+          // Preencher campo OTP — buscar por múltiplos seletores
+          let otpField = page.locator('input[name="otp"], input[name="otpCode"], input[name="code"], input[name="verificationCode"]').first();
+          if (!(await otpField.count() > 0 && await otpField.isVisible().catch(() => false))) {
+            otpField = page.locator('input[maxlength="6"], input[maxlength="4"], input[maxlength="8"]').first();
+          }
+          if (!(await otpField.count() > 0 && await otpField.isVisible().catch(() => false))) {
+            otpField = page.locator('input[placeholder*="código" i], input[placeholder*="OTP" i], input[placeholder*="token" i], input[type="tel"]').first();
+          }
+          // Fallback: qualquer input visível vazio que não seja dos campos anteriores
+          if (!(await otpField.count() > 0 && await otpField.isVisible().catch(() => false))) {
+            otpField = await page.evaluate(() => {
+              const known = ['documentNumber','name','birthDate','phone','phoneConfirm','email','emailConfirm','cep','address','number','neighborhood','city','state','complement','installationNumber','energyBillPassword'];
+              const inputs = Array.from(document.querySelectorAll('input'));
+              for (const inp of inputs) {
+                if (inp.offsetParent === null) continue;
+                const n = inp.getAttribute('name') || '';
+                const t = inp.getAttribute('type') || '';
+                if (t === 'file' || t === 'radio' || t === 'hidden' || t === 'checkbox') continue;
+                if (known.includes(n)) continue;
+                if (!inp.value || inp.value.trim() === '') return true;
+              }
+              return false;
+            }) ? page.locator('input:visible').filter({ hasNot: page.locator('[type="file"],[type="radio"],[type="hidden"]') }).last() : null;
+          }
+          if (otpField && await otpField.count() > 0) {
+            await otpField.scrollIntoViewIfNeeded().catch(() => {});
+            await otpField.click();
             await otpField.type(otpCode, { delay: 100 });
             console.log(`   ✅ OTP digitado: ${otpCode}`);
             await delay(1000);

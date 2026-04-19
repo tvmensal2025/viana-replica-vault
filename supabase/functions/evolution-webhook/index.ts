@@ -1428,7 +1428,7 @@ Deno.serve(async (req) => {
 
       // ─── 11b. PORTAL SUBMITTING (Worker está processando) ─────────
       case "portal_submitting": {
-        reply = "⏳ Estamos processando seu cadastro no portal...\n\n📱 Em breve você receberá um *código de verificação por SMS*. Quando receber, *digite aqui*!\n\nAguarde alguns instantes...";
+        reply = "⏳ Estamos processando seu cadastro no portal...\n\n📱 Em breve você receberá um *código de verificação no WhatsApp*. Quando receber, *digite aqui*!\n\nAguarde alguns instantes...";
         break;
       }
 
@@ -1442,7 +1442,7 @@ Deno.serve(async (req) => {
           // e ele mesmo mudará para aguardando_assinatura após preencher
           reply = `✅ Código *${otpCode}* recebido! ⏳ Validando no portal...\n\nAguarde alguns instantes...`;
         } else {
-          reply = "📱 Por favor, digite o *código numérico* que você recebeu por SMS.\n\n(Geralmente são 4 a 6 dígitos)";
+          reply = "📱 Por favor, digite o *código numérico* que você recebeu no WhatsApp.\n\n(Geralmente são 4 a 6 dígitos)";
         }
         break;
       }
@@ -1535,7 +1535,7 @@ Deno.serve(async (req) => {
         await sendText(remoteJid,
           "✅ *Todos os dados coletados com sucesso!* 🎉\n\n" +
           "⏳ Estamos processando seu cadastro no portal...\n\n" +
-          "📱 Em breve você receberá um *código de verificação por SMS*. Quando receber, *digite aqui*!\n\n" +
+          "📱 Em breve você receberá um *código de verificação no WhatsApp*. Quando receber, *digite aqui*!\n\n" +
           "Obrigado pela confiança! ☀️🌱"
         );
 

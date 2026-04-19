@@ -139,7 +139,7 @@ Qualquer dúvida, estamos à disposição.
 00:26 - Portal solicita OTP (campo detectado)
 00:26 - Worker atualiza banco (status: awaiting_otp)
 00:26 - Worker inicia polling (a cada 3s)
-00:30 - Cliente recebe SMS/WhatsApp com código
+00:30 - Cliente recebe código via WhatsApp oficial da iGreen
 00:35 - Cliente envia "123456" no WhatsApp
 00:35 - Webhook extrai OTP automaticamente
 00:35 - Webhook salva no banco + memória
