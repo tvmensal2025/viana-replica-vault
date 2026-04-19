@@ -1457,9 +1457,9 @@ Deno.serve(async (req) => {
 
       // ─── DEFAULT (step desconhecido — NUNCA travar) ──────────────────
       default: {
-        console.warn(`⚠️ Step desconhecido: ${currentStep} — resetando para aguardando_conta`);
+        console.warn(`⚠️ Step desconhecido: ${step} — resetando para aguardando_conta`);
         // Não resetar se é um step de edição (editing_*)
-        if (currentStep?.startsWith("editing_")) {
+        if (step?.startsWith("editing_")) {
           reply = "❌ Opção inválida. Digite novamente:";
         } else {
           updates.conversation_step = "aguardando_conta";
