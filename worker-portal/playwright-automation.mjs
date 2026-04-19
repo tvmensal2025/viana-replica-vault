@@ -8,7 +8,7 @@
 // ✅ Confirmação email/telefone aguarda campo aparecer antes de preencher
 // ✅ Validação de obrigatórios não bloqueia email/telefone (têm fallback)
 
-import { chromium } from 'playwright';
+import { chromium } from 'playwright-chromium';
 import { createClient } from '@supabase/supabase-js';
 import { mkdir, writeFile } from 'fs/promises';
 import { existsSync, writeFileSync, readFileSync, copyFileSync } from 'fs';
