@@ -209,7 +209,7 @@ export function CustomerEditDialog({ customer, onClose, onSaved }: CustomerEditD
           <div className="col-span-2">
             <Label className="text-[11px] text-muted-foreground">Etapa atual</Label>
             <Input
-              value={customer?.conversation_step || "—"}
+              value={(customer as any)?.conversation_step || "—"}
               readOnly
               className="h-9 text-xs mt-1 bg-secondary/20 border-border/40 font-mono"
             />
