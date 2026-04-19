@@ -225,19 +225,19 @@ const AdminContent = () => {
 
       {/* Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-        {activeTab === "dashboard" && userId && (
-          <DashboardTab userId={userId} form={form} onFormUpdate={handleFormChange} periodDays={periodDays} onPeriodChange={setPeriodDays} />
-        )}
-
-        {activeTab === "dados" && (
-          <DadosTab form={form} photoPreview={effectivePhotoPreview} saving={saving} onFormChange={handleFormChange} onPhotoChange={handlePhotoChange} onSave={handleSave} userId={userId || ""} />
-        )}
-
-        {activeTab === "links" && (
-          <LinksTab slug={slug} baseUrl={baseUrl} onCopy={copyLink} onQrOpen={(url, label) => setQrModal({ url, label })} />
-        )}
-
         <Suspense fallback={<div className="flex justify-center py-12"><div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" /></div>}>
+          {activeTab === "dashboard" && userId && (
+            <DashboardTab userId={userId} form={form} onFormUpdate={handleFormChange} periodDays={periodDays} onPeriodChange={setPeriodDays} />
+          )}
+
+          {activeTab === "dados" && (
+            <DadosTab form={form} photoPreview={effectivePhotoPreview} saving={saving} onFormChange={handleFormChange} onPhotoChange={handlePhotoChange} onSave={handleSave} userId={userId || ""} />
+          )}
+
+          {activeTab === "links" && (
+            <LinksTab slug={slug} baseUrl={baseUrl} onCopy={copyLink} onQrOpen={(url, label) => setQrModal({ url, label })} />
+          )}
+
           {activeTab === "materiais" && (
             <MaterialsTab />
           )}
@@ -276,12 +276,11 @@ const AdminContent = () => {
           {userId && activeTab === "historico" && (
             <AutoMessageLog consultantId={userId} />
           )}
-        </Suspense>
 
-        {/* Preview Tab */}
-        <div className="space-y-4" style={{ display: activeTab === "preview" ? "block" : "none" }}>
-          <PreviewTab slug={slug} baseUrl={baseUrl} />
-        </div>
+          {activeTab === "preview" && (
+            <PreviewTab slug={slug} baseUrl={baseUrl} />
+          )}
+        </Suspense>
       </main>
 
       {/* QR Code Modal */}
