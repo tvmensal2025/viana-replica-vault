@@ -172,17 +172,19 @@ const AdminContent = () => {
             >
               <Sparkles className="h-5 w-5" />
             </button>
-            <NotificationCenter
-              notifications={notifications}
-              unreadCount={unreadCount}
-              onMarkAllRead={markAllRead}
-              onMarkRead={markRead}
-              onClearAll={clearAll}
-              onAction={(n) => {
-                if (n.type === "new_lead" || n.type === "deal_moved") setActiveTab("crm");
-                else if (n.type === "devolutiva" || n.type === "status_change" || n.type === "new_customer") setActiveTab("clientes");
-              }}
-            />
+            <Suspense fallback={<div className="w-9 h-9" />}>
+              <NotificationCenter
+                notifications={notifications}
+                unreadCount={unreadCount}
+                onMarkAllRead={markAllRead}
+                onMarkRead={markRead}
+                onClearAll={clearAll}
+                onAction={(n) => {
+                  if (n.type === "new_lead" || n.type === "deal_moved") setActiveTab("crm");
+                  else if (n.type === "devolutiva" || n.type === "status_change" || n.type === "new_customer") setActiveTab("clientes");
+                }}
+              />
+            </Suspense>
             <Button variant="ghost" size="sm" onClick={handleLogout} className="text-muted-foreground hover:text-foreground gap-2 rounded-xl">
               <LogOut className="w-4 h-4" />
               <span className="hidden sm:inline">Sair</span>
