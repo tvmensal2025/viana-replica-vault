@@ -37,6 +37,7 @@ export default defineConfig({
           ],
           "charts": ["recharts"],
           "icons": ["lucide-react"],
+          "xlsx": ["xlsx"],
         },
       },
     },
