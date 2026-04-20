@@ -99,7 +99,8 @@ const CadastroPage = () => {
         <img
           src="/images/mutirao-lei-14300.png"
           alt=""
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+          onError={(e) => console.error('[Print] Falha ao carregar banner:', e)}
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: 0 }}
         />
 
         {/* QR Code real do consultor — cobre o QR fake da arte (canto inf. esquerdo) */}
