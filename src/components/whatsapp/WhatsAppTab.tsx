@@ -1,16 +1,24 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useWhatsApp } from "@/hooks/useWhatsApp";
 import { useTemplates } from "@/hooks/useTemplates";
 import { useChats } from "@/hooks/useChats";
 import { ConnectionPanel } from "./ConnectionPanel";
-import { BulkBlockSendPanel } from "./BulkBlockSendPanel";
-import { TemplateManager } from "./TemplateManager";
 import { ChatSidebar } from "./ChatSidebar";
 import { ChatView } from "./ChatView";
-import { SchedulePanel } from "./SchedulePanel";
-import { WhatsAppDashboard } from "./WhatsAppDashboard";
 import { BarChart3, MessageSquare, Send, FileText, Clock } from "lucide-react";
+
+// Heavy panels — load only when their sub-tab is opened
+const BulkBlockSendPanel = lazy(() => import("./BulkBlockSendPanel").then(m => ({ default: m.BulkBlockSendPanel })));
+const TemplateManager = lazy(() => import("./TemplateManager").then(m => ({ default: m.TemplateManager })));
+const SchedulePanel = lazy(() => import("./SchedulePanel").then(m => ({ default: m.SchedulePanel })));
+const WhatsAppDashboard = lazy(() => import("./WhatsAppDashboard").then(m => ({ default: m.WhatsAppDashboard })));
+
+const LazyFallback = () => (
+  <div className="flex items-center justify-center py-12">
+    <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full" />
+  </div>
+);
 
 interface WhatsAppTabProps {
   userId: string;
@@ -215,7 +223,9 @@ export function WhatsAppTab({ userId, pendingChatPhone, pendingChatMessage, onPe
       {/* Content area */}
       <div className="flex-1 border border-t-0 border-border rounded-b-lg overflow-hidden bg-background">
         {activeSubTab === "dashboard" && (
-          <WhatsAppDashboard consultantId={userId} />
+          <Suspense fallback={<LazyFallback />}>
+            <WhatsAppDashboard consultantId={userId} />
+          </Suspense>
         )}
 
         {activeSubTab === "conversas" && (
@@ -302,14 +312,16 @@ export function WhatsAppTab({ userId, pendingChatPhone, pendingChatMessage, onPe
         {activeSubTab === "envio_massa" && (
           <div className="p-4 overflow-auto h-full">
             {isConnected && instanceName ? (
-              <BulkBlockSendPanel
-                instanceName={instanceName}
-                customers={customers}
-                templates={templates}
-                applyTemplate={applyTemplate}
-                consultantId={userId}
-                onCreateTemplate={(name, content, mediaType, mediaUrl, imageUrl) => createTemplate(name, content, mediaType, mediaUrl, imageUrl)}
-              />
+              <Suspense fallback={<LazyFallback />}>
+                <BulkBlockSendPanel
+                  instanceName={instanceName}
+                  customers={customers}
+                  templates={templates}
+                  applyTemplate={applyTemplate}
+                  consultantId={userId}
+                  onCreateTemplate={(name, content, mediaType, mediaUrl, imageUrl) => createTemplate(name, content, mediaType, mediaUrl, imageUrl)}
+                />
+              </Suspense>
             ) : (
               <div className="flex items-center justify-center h-40 text-sm text-muted-foreground">
                 Conecte o WhatsApp para enviar mensagens em massa.
@@ -320,24 +332,28 @@ export function WhatsAppTab({ userId, pendingChatPhone, pendingChatMessage, onPe
 
         {activeSubTab === "templates" && (
           <div className="p-4 overflow-auto h-full">
-            <TemplateManager
-              templates={templates}
-              isLoading={templatesLoading}
-              consultantId={userId}
-              onCreateTemplate={(name, content, mediaType, mediaUrl, imageUrl) => createTemplate(name, content, mediaType, mediaUrl, imageUrl)}
-              onUpdateTemplate={updateTemplate}
-              onDeleteTemplate={deleteTemplate}
-            />
+            <Suspense fallback={<LazyFallback />}>
+              <TemplateManager
+                templates={templates}
+                isLoading={templatesLoading}
+                consultantId={userId}
+                onCreateTemplate={(name, content, mediaType, mediaUrl, imageUrl) => createTemplate(name, content, mediaType, mediaUrl, imageUrl)}
+                onUpdateTemplate={updateTemplate}
+                onDeleteTemplate={deleteTemplate}
+              />
+            </Suspense>
           </div>
         )}
 
         {activeSubTab === "agendamentos" && (
           <div className="p-4 overflow-auto h-full">
             {isConnected && instanceName ? (
-              <SchedulePanel
-                consultantId={userId}
-                instanceName={instanceName}
-              />
+              <Suspense fallback={<LazyFallback />}>
+                <SchedulePanel
+                  consultantId={userId}
+                  instanceName={instanceName}
+                />
+              </Suspense>
             ) : (
               <div className="flex items-center justify-center h-40 text-sm text-muted-foreground">
                 Conecte o WhatsApp para gerenciar agendamentos.
