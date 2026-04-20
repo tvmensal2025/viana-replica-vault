@@ -508,8 +508,16 @@ function OrgChartNode({ node, depth = 0, onSelect }: { node: TreeNode; depth?: n
 
 /* ── Main Panel ── */
 export function NetworkPanel({ consultantId }: NetworkPanelProps) {
-  const [members, setMembers] = useState<NetworkMember[]>([]);
+  // Hidrata do sessionStorage para nunca mostrar lista vazia ao abrir/F5.
+  const [members, setMembers] = useState<NetworkMember[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const cached = sessionStorage.getItem(`network_cache_${consultantId}`);
+      return cached ? (JSON.parse(cached) as NetworkMember[]) : [];
+    } catch { return []; }
+  });
   const [loading, setLoading] = useState(true);
+  const fetchAbortRef = useRef<AbortController | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<"tree" | "table">("tree");
@@ -518,20 +526,43 @@ export function NetworkPanel({ consultantId }: NetworkPanelProps) {
   const { toast } = useToast();
 
   const fetchMembers = useCallback(async () => {
+    fetchAbortRef.current?.abort();
+    const controller = new AbortController();
+    fetchAbortRef.current = controller;
     setLoading(true);
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    let attempt = 0;
+    let lastError: unknown = null;
     try {
-      const { data, error } = await supabase
-        .from("network_members" as any)
-        .select("*")
-        .eq("consultant_id", consultantId)
-        .order("nivel", { ascending: true })
-        .order("igreen_id", { ascending: true });
-      if (error) throw error;
-      setMembers((data as unknown as NetworkMember[]) || []);
-    } catch { /* silently handle */ } finally { setLoading(false); }
+      while (attempt < 3) {
+        if (controller.signal.aborted) return;
+        const { data, error } = await supabase
+          .from("network_members" as any)
+          .select("*")
+          .eq("consultant_id", consultantId)
+          .order("nivel", { ascending: true })
+          .order("igreen_id", { ascending: true });
+        if (controller.signal.aborted) return;
+        if (!error) {
+          const list = (data as unknown as NetworkMember[]) || [];
+          setMembers(list);
+          try { sessionStorage.setItem(`network_cache_${consultantId}`, JSON.stringify(list)); } catch { /* quota */ }
+          return;
+        }
+        lastError = error;
+        attempt++;
+        if (attempt < 3) await sleep(1000 * 2 ** (attempt - 1));
+      }
+      // Falhou tudo: mantém lista atual (cache) e avisa o usuário.
+      console.error("[fetchMembers] falhou após retries — mantendo cache", lastError);
+      toast({ title: "Não foi possível atualizar a rede", description: "Mostrando últimos dados em cache. Tente sincronizar.", variant: "destructive" });
+    } finally {
+      if (!controller.signal.aborted) setLoading(false);
+    }
   }, [consultantId]);
 
   useEffect(() => { fetchMembers(); }, [fetchMembers]);
+  useEffect(() => () => { fetchAbortRef.current?.abort(); }, []);
 
   const handleSync = async () => {
     setSyncing(true);
