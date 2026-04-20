@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
 export interface DailyViews {
@@ -60,8 +60,16 @@ export function useAnalytics(consultantId: string | null, periodDays: number = 3
   return useQuery({
     queryKey: ["analytics", consultantId, periodDays],
     enabled: !!consultantId,
-    refetchOnMount: "always",
-    staleTime: 30_000, // 30s to avoid excessive re-fetches
+    refetchOnMount: true,
+    // Keep data fresh in memory for 5 minutes — sync happens on demand,
+    // no need to refetch every 30s and risk wiping numbers on a transient error.
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
+    // Show previous data while a new fetch is in flight (no zero/empty flash).
+    placeholderData: keepPreviousData,
+    // Survive transient network blips before falling back to error state.
+    retry: 3,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
     queryFn: async () => {
       const sinceDate = new Date();
       sinceDate.setDate(sinceDate.getDate() - periodDays);
