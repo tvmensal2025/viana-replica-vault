@@ -1,105 +1,86 @@
 
 
-# Plano: Organização hierárquica MinIO por consultor + cliente
+# Plano: Template de impressão "Mutirão Lei 14.300" com QR dinâmico
 
-## Estrutura atual (problema)
+## O que muda
 
-```
-igreen/
-└── documentos/
-    └── 124661/                                    ← só ID, sem nome
-        ├── joao_silva_19930720_conta.pdf          ← arquivos soltos
-        ├── joao_silva_19930720_doc_frente.jpg     ← misturados na raiz
-        ├── joao_silva_19930720_doc_verso.jpg
-        ├── maria_santos_19850315_conta.pdf
-        └── maria_santos_19850315_doc_frente.jpg
-```
+Substituir a tela atual de impressão (`CadastroPage.tsx` no modo `showPrintView`) por um novo layout baseado na imagem de referência **ENERGIA-QRCODE.png** (Mutirão de Desconto na Fatura de Energia – Lei 14.300), onde:
 
-## Estrutura nova (proposta)
+1. A imagem original é usada como **fundo de página inteira A4**
+2. O QR code "fake" que aparece na imagem original (canto inferior esquerdo) é **coberto** por um QR code branco real, gerado dinamicamente para o WhatsApp/instância de cada consultor
+3. O nome e telefone do licenciado também ficam dinâmicos no rodapé (sobre a faixa "LICENCIADO: ...")
 
-```
-igreen/
-└── documentos/
-    ├── 124661_joao_consultor/                     ← ID + nome do consultor
-    │   ├── joao_silva_19930720/                   ← pasta por cliente (nome + nascimento)
-    │   │   ├── conta.pdf                          ← tipo do doc como nome
-    │   │   ├── doc_frente.jpg
-    │   │   └── doc_verso.jpg
-    │   └── maria_santos_19850315/
-    │       ├── conta.pdf
-    │       └── doc_frente.jpg
-    └── 124662_pedro_consultor/
-        └── ana_costa_19880225/
-            ├── conta.pdf
-            └── doc_frente.jpg
-```
+Resultado: cada consultor clica em **"Imprimir QR Code"** no `/cadastro/{licenca}` e gera um PDF A4 personalizado com o QR apontando pro WhatsApp da instância dele — quando o cliente escaneia, cai direto no bot que dispara a automação.
 
-**Ganhos**: navegar no MinIO fica intuitivo, vê o nome do consultor sem precisar consultar banco, e cada cliente tem uma pastinha própria fácil de baixar/zipar inteira.
+## Passos de implementação
 
-## Mudanças no código
+### 1. Adicionar a imagem como asset
+- Copiar `user-uploads://ENERGIA-QRCODE.png` para `public/images/mutirao-lei-14300.jpg` (uso direto via `<img src="...">` na tela de print, sem bundling)
 
-### 1. `supabase/functions/upload-documents-minio/index.ts`
+### 2. Refatorar o bloco `if (showPrintView)` em `src/pages/CadastroPage.tsx`
 
-Trocar a montagem do caminho:
+Substituir todo o conteúdo atual do print view (linhas ~64-260) por um layout novo:
 
-```ts
-// ANTES
-const baseFileName = `${firstNameNorm}_${lastNameNorm}_${dateFormatted}`;
-const folderPath = `documentos/${consultantId}`;
-const objectKey = `${folderPath}/${baseFileName}_conta.${ext}`;
-// → documentos/124661/joao_silva_19930720_conta.pdf
+```tsx
+<div className="print-page">
+  {/* Fundo: imagem do mutirão ocupando A4 inteiro */}
+  <img src="/images/mutirao-lei-14300.jpg" 
+       style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover' }} />
 
-// DEPOIS
-const consultantFolder = `${consultantId}_${normalizeFileName(consultantName)}`;
-const customerFolder = `${firstNameNorm}_${lastNameNorm}_${dateFormatted}`;
-const folderPath = `documentos/${consultantFolder}/${customerFolder}`;
-const objectKey = `${folderPath}/conta.${ext}`;
-// → documentos/124661_joao_consultor/joao_silva_19930720/conta.pdf
+  {/* Bloco branco que cobre o QR antigo (canto inf. esquerdo da imagem) */}
+  <div style={{
+    position:'absolute',
+    left:'4.5%',          // posição calibrada sobre o QR fake
+    bottom:'12%',
+    width:'24%',          // ~140px no A4 a 96dpi
+    aspectRatio:'1/1',
+    background:'white',
+    borderRadius:'6px',
+    padding:'8px',
+    boxShadow:'0 4px 16px rgba(0,0,0,0.4)'
+  }}>
+    <QRCodeSVG value={whatsappBotUrl} size={500} level="H" includeMargin={false}
+               style={{ width:'100%', height:'100%' }} />
+  </div>
+
+  {/* Cobertura branca/escura sobre nome + telefone do rodapé, com dados do consultor */}
+  <div style={{
+    position:'absolute', left:'5%', bottom:'5.5%', width:'90%',
+    display:'flex', justifyContent:'space-between', alignItems:'center',
+    color:'white', fontFamily:'Arial Black', fontSize:'14px'
+  }}>
+    <span>LICENCIADO: {consultant.full_name?.toUpperCase()}</span>
+    <span>WHATSAPP: {formatPhone(phoneNumber)}</span>
+  </div>
+</div>
 ```
 
-Mesmo padrão pros 3 uploads (conta, doc_frente, doc_verso).
+### 3. Calibrar posição do QR
+Os valores `left/bottom/width` serão ajustados visualmente após o primeiro render pra alinhar exatamente sobre o QR fake da imagem original (que fica em ~5% left, ~13% bottom, ~22% width na arte).
 
-### 2. `supabase/functions/_shared/minio-upload.ts`
+### 4. Garantir CSS de impressão A4
+Manter o `@media print` existente (`@page { size: A4; margin: 0 }`) e `print-color-adjust: exact` pra preservar cores.
 
-Atualizar a interface `MinioUploadInput` pra aceitar `consultantName` e ajustar a montagem do `objectKey`:
-
-```ts
-export interface MinioUploadInput {
-  bytes: Uint8Array;
-  contentType: string;
-  consultantFolder: string;     // igreen_id ou uuid
-  consultantName?: string;       // NOVO: nome do consultor pra pasta
-  customerName: string;
-  customerBirth?: string | null;
-  kind: "conta" | "doc_frente" | "doc_verso";
-}
-
-// montagem
-const consultantSlug = `${normalizeName(input.consultantFolder)}_${normalizeName(input.consultantName || "")}`.replace(/_+$/, "");
-const customerSlug = `${first}_${last}_${dateStr}`;
-const folder = `documentos/${consultantSlug}/${customerSlug}`;
-const objectKey = `${folder}/${input.kind}.${ext}`;
+### 5. URL do QR (já existe, sem mudanças)
 ```
+https://api.whatsapp.com/send?phone={phoneNumber}&text=Olá! Gostaria de fazer meu cadastro...
+```
+Onde `phoneNumber` vem de `useInstancePhone(consultant.id)` (telefone real da instância Evolution conectada do consultor). Quando o cliente escaneia → abre o WhatsApp → manda mensagem → cai no `evolution-webhook` daquela instância → bot inicia automação.
 
-### 3. `supabase/functions/evolution-webhook/` (chamadores)
+## Arquivos afetados
 
-Procurar onde `uploadBytesToMinio` é chamado e passar `consultantName` (já temos `nomeRepresentante` no `BotContext`). Pequeno ajuste em 2-3 chamadas.
+| Arquivo | Mudança |
+|---|---|
+| `public/images/mutirao-lei-14300.jpg` | **Novo** (copiado do upload) |
+| `src/pages/CadastroPage.tsx` | Substituir bloco `showPrintView` (~200 linhas → ~80 linhas) |
 
-## Compatibilidade com arquivos antigos
+## Comportamento
 
-Arquivos já enviados no formato antigo (`documentos/124661/joao_silva_..._conta.pdf`) **continuam acessíveis** pelas URLs salvas no banco — nada quebra. A nova estrutura só vale pra uploads novos a partir do deploy.
+- A tela web (`/cadastro/{licenca}`) **continua igual** — a imagem do mutirão só aparece quando o usuário clica em **"Imprimir QR Code"**
+- Cada consultor gera um PDF único com seu próprio QR
+- QR aponta pra instância WhatsApp dele → automação inicia ao escanear
 
-Não vou migrar arquivos antigos automaticamente (risco alto, sem ganho funcional). Se quiser organizar o histórico depois, fazemos um script separado.
+## Risco
 
-## Resumo
-
-| Item | Antes | Depois |
-|---|---|---|
-| Pasta do consultor | `124661/` | `124661_joao_consultor/` |
-| Arquivos do cliente | soltos na raiz | dentro de `joao_silva_19930720/` |
-| Nome do arquivo | `joao_silva_19930720_conta.pdf` | `conta.pdf` |
-| Encontrar consultor sem banco | impossível | nome na pasta |
-| Baixar todos docs de 1 cliente | filtrar por prefixo | baixar pasta inteira |
-
-**Risco**: baixo. Só muda nomenclatura, mesma API MinIO, mesmas credenciais, URLs antigas preservadas.
+Baixo. Mudança isolada no print view de uma única página. Tela normal e fluxo de automação não tocados.
 
