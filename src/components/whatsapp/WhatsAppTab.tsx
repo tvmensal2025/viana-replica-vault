@@ -223,7 +223,9 @@ export function WhatsAppTab({ userId, pendingChatPhone, pendingChatMessage, onPe
       {/* Content area */}
       <div className="flex-1 border border-t-0 border-border rounded-b-lg overflow-hidden bg-background">
         {activeSubTab === "dashboard" && (
-          <WhatsAppDashboard consultantId={userId} />
+          <Suspense fallback={<LazyFallback />}>
+            <WhatsAppDashboard consultantId={userId} />
+          </Suspense>
         )}
 
         {activeSubTab === "conversas" && (
@@ -310,14 +312,16 @@ export function WhatsAppTab({ userId, pendingChatPhone, pendingChatMessage, onPe
         {activeSubTab === "envio_massa" && (
           <div className="p-4 overflow-auto h-full">
             {isConnected && instanceName ? (
-              <BulkBlockSendPanel
-                instanceName={instanceName}
-                customers={customers}
-                templates={templates}
-                applyTemplate={applyTemplate}
-                consultantId={userId}
-                onCreateTemplate={(name, content, mediaType, mediaUrl, imageUrl) => createTemplate(name, content, mediaType, mediaUrl, imageUrl)}
-              />
+              <Suspense fallback={<LazyFallback />}>
+                <BulkBlockSendPanel
+                  instanceName={instanceName}
+                  customers={customers}
+                  templates={templates}
+                  applyTemplate={applyTemplate}
+                  consultantId={userId}
+                  onCreateTemplate={(name, content, mediaType, mediaUrl, imageUrl) => createTemplate(name, content, mediaType, mediaUrl, imageUrl)}
+                />
+              </Suspense>
             ) : (
               <div className="flex items-center justify-center h-40 text-sm text-muted-foreground">
                 Conecte o WhatsApp para enviar mensagens em massa.
@@ -328,24 +332,28 @@ export function WhatsAppTab({ userId, pendingChatPhone, pendingChatMessage, onPe
 
         {activeSubTab === "templates" && (
           <div className="p-4 overflow-auto h-full">
-            <TemplateManager
-              templates={templates}
-              isLoading={templatesLoading}
-              consultantId={userId}
-              onCreateTemplate={(name, content, mediaType, mediaUrl, imageUrl) => createTemplate(name, content, mediaType, mediaUrl, imageUrl)}
-              onUpdateTemplate={updateTemplate}
-              onDeleteTemplate={deleteTemplate}
-            />
+            <Suspense fallback={<LazyFallback />}>
+              <TemplateManager
+                templates={templates}
+                isLoading={templatesLoading}
+                consultantId={userId}
+                onCreateTemplate={(name, content, mediaType, mediaUrl, imageUrl) => createTemplate(name, content, mediaType, mediaUrl, imageUrl)}
+                onUpdateTemplate={updateTemplate}
+                onDeleteTemplate={deleteTemplate}
+              />
+            </Suspense>
           </div>
         )}
 
         {activeSubTab === "agendamentos" && (
           <div className="p-4 overflow-auto h-full">
             {isConnected && instanceName ? (
-              <SchedulePanel
-                consultantId={userId}
-                instanceName={instanceName}
-              />
+              <Suspense fallback={<LazyFallback />}>
+                <SchedulePanel
+                  consultantId={userId}
+                  instanceName={instanceName}
+                />
+              </Suspense>
             ) : (
               <div className="flex items-center justify-center h-40 text-sm text-muted-foreground">
                 Conecte o WhatsApp para gerenciar agendamentos.
