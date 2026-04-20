@@ -5,7 +5,6 @@ import { getNextMissingStep, getReplyForStep, validarCPFDigitos } from "../_shar
 import { ocrContaEnergia, ocrDocumentoFrenteVerso } from "../_shared/ocr.ts";
 import { createEvolutionSender, parseEvolutionMessage, extractMediaUrl } from "../_shared/evolution-api.ts";
 import { checkAndMarkProcessed, logStepTransition, jsonLog, generateCorrelationId } from "../_shared/audit.ts";
-import { uploadMediaUnified } from "../_shared/media-storage.ts";
 import { normalizeDocumentType, isCNH, friendlyLabel } from "../_shared/document-type.ts";
 import {
   uploadMediaToMinio,
