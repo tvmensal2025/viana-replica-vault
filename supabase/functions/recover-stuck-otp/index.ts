@@ -40,6 +40,17 @@ async function sendWhatsAppText(instanceName: string, remoteJid: string, text: s
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
+  // ─── Auth: only the cron job (with shared secret) can trigger this ─────
+  const expectedSecret = Deno.env.get("CRON_SECRET") || Deno.env.get("WORKER_SECRET");
+  const providedSecret = req.headers.get("x-cron-secret") || req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  if (expectedSecret && providedSecret !== expectedSecret) {
+    console.warn("[recover-stuck-otp] Unauthorized attempt");
+    return new Response(JSON.stringify({ error: "unauthorized" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
