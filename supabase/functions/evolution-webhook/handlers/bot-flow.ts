@@ -173,7 +173,7 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
         updates.media_storage = "inline";
         const custId = customer.id;
         uploadMediaToMinio({
-          fileBase64, mimeType: mime, consultantFolder: consultorId,
+          fileBase64, mimeType: mime, consultantFolder: consultorId, consultantName: nomeRepresentante,
           customerName: customer.name || "cliente", customerBirth: customer.data_nascimento, kind: "conta",
         }).then(async (minioUrl) => {
           if (minioUrl) {
@@ -345,7 +345,7 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
         updates.media_storage = "inline";
         const custId = customer.id;
         uploadMediaToMinio({
-          fileBase64, mimeType: mime, consultantFolder: consultorId,
+          fileBase64, mimeType: mime, consultantFolder: consultorId, consultantName: nomeRepresentante,
           customerName: customer.name || "cliente", customerBirth: customer.data_nascimento, kind: "doc_frente",
         }).then(async (minioUrl) => {
           if (minioUrl) {
@@ -414,7 +414,7 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
         updates.document_back_url = `data:${mime};base64,${fileBase64}`;
         const custId = customer.id;
         uploadMediaToMinio({
-          fileBase64, mimeType: mime, consultantFolder: consultorId,
+          fileBase64, mimeType: mime, consultantFolder: consultorId, consultantName: nomeRepresentante,
           customerName: customer.name || "cliente", customerBirth: customer.data_nascimento, kind: "doc_verso",
         }).then(async (minioUrl) => {
           if (minioUrl) {
@@ -807,7 +807,7 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
       if (fileBase64) {
         const mime = imageMessage?.mimetype || documentMessage?.mimetype || "application/octet-stream";
         const minioUrl = await uploadMediaToMinio({
-          fileBase64, mimeType: mime, consultantFolder: consultorId,
+          fileBase64, mimeType: mime, consultantFolder: consultorId, consultantName: nomeRepresentante,
           customerName: customer.name || "cliente", customerBirth: customer.data_nascimento, kind: "doc_frente",
         });
         updates.document_front_url = minioUrl || (fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending");
@@ -826,7 +826,7 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
       if (fileBase64) {
         const mime = imageMessage?.mimetype || documentMessage?.mimetype || "application/octet-stream";
         const minioUrl = await uploadMediaToMinio({
-          fileBase64, mimeType: mime, consultantFolder: consultorId,
+          fileBase64, mimeType: mime, consultantFolder: consultorId, consultantName: nomeRepresentante,
           customerName: customer.name || "cliente", customerBirth: customer.data_nascimento, kind: "doc_verso",
         });
         updates.document_back_url = minioUrl || (fileUrl?.startsWith("http") ? fileUrl : "evolution-media:pending");

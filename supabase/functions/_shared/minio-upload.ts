@@ -58,6 +58,7 @@ export interface MinioUploadInput {
   bytes: Uint8Array;
   contentType: string;
   consultantFolder: string; // ex: igreen_id ou consultant uuid
+  consultantName?: string;   // nome do consultor para compor a pasta
   customerName: string;
   customerBirth?: string | null;
   kind: "conta" | "doc_frente" | "doc_verso";
@@ -99,9 +100,17 @@ export async function uploadBytesToMinio(input: MinioUploadInput): Promise<Minio
   }
 
   const ext = extFromMime(input.contentType);
-  const baseName = `${first}_${last}_${dateStr}`;
-  const folder = `documentos/${normalizeName(input.consultantFolder || "sem_consultor")}`;
-  const objectKey = `${folder}/${baseName}_${input.kind}.${ext}`;
+  // Pasta do consultor: {id}_{nome_normalizado} (ex: 124661_joao_silva)
+  const consultantId = normalizeName(input.consultantFolder || "sem_consultor");
+  const consultantNameNorm = normalizeName(input.consultantName || "");
+  const consultantSlug = consultantNameNorm
+    ? `${consultantId}_${consultantNameNorm}`
+    : consultantId;
+  // Pasta do cliente: {primeiro_nome}_{sobrenome}_{YYYYMMDD}
+  const customerSlug = `${first}_${last}_${dateStr}`;
+  const folder = `documentos/${consultantSlug}/${customerSlug}`;
+  // Nome do arquivo: apenas o tipo (conta.pdf, doc_frente.jpg, doc_verso.jpg)
+  const objectKey = `${folder}/${input.kind}.${ext}`;
 
   // AWS SigV4
   const url = new URL(serverUrl);

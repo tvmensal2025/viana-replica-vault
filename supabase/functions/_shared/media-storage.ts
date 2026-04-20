@@ -44,6 +44,7 @@ export interface UnifiedUploadInput {
   fileBase64: string;
   mimeType: string;
   consultantFolder: string;
+  consultantName?: string;
   customerName: string;
   customerBirth?: string | null;
   kind: "conta" | "doc_frente" | "doc_verso";
@@ -72,6 +73,7 @@ export async function uploadMediaUnified(
         bytes,
         contentType,
         consultantFolder: opts.consultantFolder,
+        consultantName: opts.consultantName,
         customerName: opts.customerName,
         customerBirth: opts.customerBirth,
         kind: opts.kind,
@@ -100,8 +102,12 @@ export async function uploadMediaUnified(
     if (m) dateStr = `${m[3]}${m[2]}${m[1]}`;
   }
   const ext = extFromMime(contentType);
-  const folder = `documentos/${normalizeName(opts.consultantFolder || "sem_consultor")}`;
-  const objectKey = `${folder}/${first}_${last}_${dateStr}_${opts.kind}_${Date.now()}.${ext}`;
+  const consultantId = normalizeName(opts.consultantFolder || "sem_consultor");
+  const consultantNameNorm = normalizeName(opts.consultantName || "");
+  const consultantSlug = consultantNameNorm ? `${consultantId}_${consultantNameNorm}` : consultantId;
+  const customerSlug = `${first}_${last}_${dateStr}`;
+  const folder = `documentos/${consultantSlug}/${customerSlug}`;
+  const objectKey = `${folder}/${opts.kind}_${Date.now()}.${ext}`;
 
   const { error: upErr } = await supabase.storage
     .from("whatsapp-media")

@@ -261,13 +261,22 @@ Deno.serve(async (req) => {
     // Normalizar nome para usar no arquivo
     const firstNameNorm = normalizeFileName(firstName);
     const lastNameNorm = normalizeFileName(lastName);
-    
-    // FORMATO: consultor_id/nome_sobrenome_data
-    const baseFileName = `${firstNameNorm}_${lastNameNorm}_${dateFormatted}`;
-    const folderPath = `documentos/${consultantId}`;
+    const consultantNameNorm = normalizeFileName(consultantName);
 
-    console.log(`📝 Consultor: ${consultantId}`);
-    console.log(`📝 Nome base do arquivo: ${baseFileName}`);
+    // NOVO FORMATO HIERÁRQUICO:
+    //   documentos/{consultantId}_{consultantName}/{firstName}_{lastName}_{YYYYMMDD}/{kind}.{ext}
+    // Ex: documentos/124661_joao_silva/maria_santos_19850315/conta.pdf
+    const consultantSlug = consultantNameNorm
+      ? `${consultantId}_${consultantNameNorm}`
+      : `${consultantId}`;
+    const customerSlug = `${firstNameNorm}_${lastNameNorm}_${dateFormatted}`;
+    const folderPath = `documentos/${consultantSlug}/${customerSlug}`;
+    // baseFileName mantido apenas para resposta/log (não compõe mais o nome do arquivo)
+    const baseFileName = customerSlug;
+
+    console.log(`📝 Pasta consultor: ${consultantSlug}`);
+    console.log(`📝 Pasta cliente: ${customerSlug}`);
+    console.log(`📝 Folder path: ${folderPath}`);
 
     const uploads: Array<{ type: string; url: string; success: boolean; error?: string }> = [];
 
@@ -277,7 +286,7 @@ Deno.serve(async (req) => {
         console.log("📄 Baixando conta de energia...");
         const { bytes, contentType } = await downloadFile(customer.electricity_bill_photo_url);
         const ext = getFileExtension(contentType, customer.electricity_bill_photo_url);
-        const objectKey = `${folderPath}/${baseFileName}_conta.${ext}`;
+        const objectKey = `${folderPath}/conta.${ext}`;
 
         console.log(`📤 Uploading conta: ${objectKey}`);
         await uploadToMinIO({
@@ -305,7 +314,7 @@ Deno.serve(async (req) => {
         console.log("📄 Baixando documento frente...");
         const { bytes, contentType } = await downloadFile(customer.document_front_url);
         const ext = getFileExtension(contentType, customer.document_front_url);
-        const objectKey = `${folderPath}/${baseFileName}_doc_frente.${ext}`;
+        const objectKey = `${folderPath}/doc_frente.${ext}`;
 
         console.log(`📤 Uploading doc frente: ${objectKey}`);
         await uploadToMinIO({
@@ -333,7 +342,7 @@ Deno.serve(async (req) => {
         console.log("📄 Baixando documento verso...");
         const { bytes, contentType } = await downloadFile(customer.document_back_url);
         const ext = getFileExtension(contentType, customer.document_back_url);
-        const objectKey = `${folderPath}/${baseFileName}_doc_verso.${ext}`;
+        const objectKey = `${folderPath}/doc_verso.${ext}`;
 
         console.log(`📤 Uploading doc verso: ${objectKey}`);
         await uploadToMinIO({
