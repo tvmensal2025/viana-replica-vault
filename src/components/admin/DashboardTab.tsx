@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from "react";
-import { Eye, Users, MousePointerClick, Zap, TrendingUp, RefreshCw, Loader2, Filter, KeyRound, FileDown } from "lucide-react";
+import { Eye, Users, MousePointerClick, Zap, TrendingUp, RefreshCw, Loader2, Filter, KeyRound, FileDown, AlertTriangle } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,11 +34,34 @@ export function DashboardTab({ userId, form, onFormUpdate, periodDays, onPeriodC
   const [showCredPassword, setShowCredPassword] = useState(false);
   const dashboardRef = useRef<HTMLDivElement>(null);
   const [exporting, setExporting] = useState(false);
+  const [sharedAccountCount, setSharedAccountCount] = useState(0);
 
   useEffect(() => {
     const stored = localStorage.getItem("sync_cooldown_until");
     if (stored) { const remaining = Math.ceil((parseInt(stored) - Date.now()) / 1000); if (remaining > 0) setSyncCooldown(remaining); }
   }, []);
+
+  // Detecta se outro consultor usa a mesma credencial do portal iGreen.
+  // RLS dos `consultants` só deixa SELECT no próprio registro, então
+  // perguntamos ao Postgres via head/count com o mesmo email — nenhum
+  // dado sensível trafega.
+  useEffect(() => {
+    const email = form.igreen_portal_email?.trim().toLowerCase();
+    if (!email) { setSharedAccountCount(0); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { count } = await supabase
+          .from("consultants")
+          .select("id", { count: "exact", head: true })
+          .eq("igreen_portal_email", email);
+        if (cancelled) return;
+        // count inclui o próprio consultor — só sinalizamos se houver outros.
+        setSharedAccountCount(Math.max(0, (count ?? 1) - 1));
+      } catch { /* RLS pode bloquear; ignora silenciosamente */ }
+    })();
+    return () => { cancelled = true; };
+  }, [form.igreen_portal_email]);
 
   useEffect(() => {
     if (syncCooldown <= 0) return;
@@ -145,6 +168,15 @@ export function DashboardTab({ userId, form, onFormUpdate, periodDays, onPeriodC
 
   return (
     <div ref={dashboardRef} className="space-y-6">
+      {sharedAccountCount > 0 && (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
+          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+          <div className="text-amber-200/90">
+            <strong className="text-amber-300">Conta iGreen compartilhada</strong> com {sharedAccountCount} outro{sharedAccountCount > 1 ? "s" : ""} consultor{sharedAccountCount > 1 ? "es" : ""}.
+            Cada consultor vê apenas seus próprios clientes no painel — a sincronização não afeta os dados dos outros.
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-end gap-2">
         <Button variant="outline" size="sm" onClick={handleExportPdf} disabled={exporting} className="h-8 text-xs gap-1.5">
           {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
