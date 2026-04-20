@@ -1,102 +1,96 @@
 
 
-# Plano: Estabilizar contagem de Clientes e Licenciados (não somem mais)
+# Plano: Build 100% verde + arquivos modulares (sem quebrar nada)
 
 ## Diagnóstico
 
-Confirmei no banco que os dados **NÃO somem** — eles continuam lá:
+**Build quebrado agora**: `evolution-webhook/index.ts` linha 222 referencia `RATE_LIMIT_MAX` e `RATE_LIMIT_WINDOW_MS` que moveram para `_helpers.ts` e não foram re-importadas.
 
-| Consultor | Clientes | Licenciados | Última sync |
-|---|---|---|---|
-| Rafael Ferreira Dias (`0c2711ad…`) | **613** | **48** | 20/04 16:53 |
-| Bruna Roberta (`0063ce99…`) | **638** | **49** | 15/04 04:15 |
-
-A sensação de "sumiu" vem de **3 bugs no front-end**, não de delete no banco:
-
-### Bug 1 — `fetchCustomers` em `Admin.tsx` engole erros e zera a tela
-```tsx
-} catch { /* silently handle */ }   // ← se 1 página da paginação falhar, customers fica []
-```
-Se a primeira chamada `range(0, 999)` retornar erro de rede transitório, a tela mostra **0 clientes** sem aviso, sem retry. O usuário pensa que sumiram.
-
-### Bug 2 — Race condition entre fetch e troca de aba
-```tsx
-React.useEffect(() => {
-  if (activeTab === "clientes" || activeTab === "dashboard") {
-    fetchCustomers();   // dispara cada vez que troca aba
-  }
-}, [activeTab, fetchCustomers]);
-```
-Se o usuário troca de aba rápido, duas requests acontecem em paralelo. A segunda pode terminar antes e ser sobrescrita pela primeira (que retorna parcial). Sem `AbortController`.
-
-### Bug 3 — `useAnalytics` (Dashboard) tem o mesmo padrão sem `staleTime` longo
-`staleTime: 30_000` força refetch a cada 30s. Se o refetch falha no `throw`, a `data` cai pra `undefined` e os números do Dashboard viram 0/zerados temporariamente.
-
-### Bug 4 — `NetworkPanel.fetchMembers` também engole erro
-```tsx
-} catch { /* silently handle */ } finally { setLoading(false); }
-```
-Mesmo problema: erro silencioso → tela vazia → usuário acha que sumiu.
-
-### Bug 5 — Conta iGreen compartilhada entre 2 consultores (você confirmou)
-`rafael.ids@icloud.com` está vinculado em `0c2711ad…` (Rafael) E `0063ce99…` (Bruna). O código usa `customer.consultant_id = consultantId` no upsert — então cada um tem seu próprio conjunto separado, mas **a sync faz `delete stale` filtrando por consultant_id**, então não apaga o do outro consultor. Hoje convive bem, mas se algum dia rodar a sync de um e a contagem cair, o usuário pensa que sumiu (eram dados do outro consultor que ele estava olhando logado errado). Como você pediu "compartilhada", apenas adiciono um aviso visual.
-
-## O que vamos fazer
-
-### 1. Tornar `fetchCustomers` robusto e visível (Admin.tsx)
-- Adicionar `AbortController` para cancelar request anterior quando troca de aba
-- Trocar o `catch silent` por `console.error` + manter `customers` antigo (não zerar em erro)
-- Adicionar **retry automático** (3 tentativas com backoff 1s/2s/4s) em caso de erro de rede
-- Adicionar `loading` state visível na UI quando busca está rodando (skeleton no card de Clientes)
-
-### 2. Cache local persistente (não some no F5)
-- Salvar última lista de `customers` em `sessionStorage` (chave `customers_${userId}`)
-- Ao abrir a página, hidratar imediatamente do cache E disparar refetch em background
-- Resultado: usuário **nunca vê 0** ao abrir o painel — vê dados antigos enquanto atualiza
-
-### 3. Reforçar `useAnalytics` (Dashboard)
-- `staleTime` de 30s → **5 minutos** (dados de cliente não mudam tanto)
-- Adicionar `keepPreviousData: true` (React Query mantém dados anteriores enquanto refaz)
-- `retry: 3` com `retryDelay: exponential`
-- Em caso de erro final, manter `previousData` em vez de virar `undefined`
-
-### 4. Reforçar `NetworkPanel.fetchMembers`
-- Mesmo padrão: AbortController, retry, cache em `sessionStorage`, mantém última lista em erro
-- Toast vermelho se falhar de verdade ("Erro ao carregar rede — mostrando dados em cache")
-
-### 5. Indicador visual "última sincronização"
-- Mostrar ao lado do botão Sincronizar: "Atualizado há 2 minutos" (já existe `lastSync` em settings, só preciso exibir consistente)
-- Nunca esconder a contagem antiga durante a sincronização
-
-### 6. Aviso de conta compartilhada (Bug 5)
-- No card de credenciais (Dados), se a query detectar que outro consultor usa a mesma `igreen_portal_email`, mostrar badge amarelo: *"Esta conta iGreen é compartilhada com X outro(s) consultor(es). Cada um vê seus próprios clientes."*
-
-## Detalhes técnicos
-
-| Arquivo | Mudança | Risco |
+**Arquivos gigantes** (relatório de auditoria):
+| Arquivo | Linhas | Status |
 |---|---|---|
-| `src/pages/Admin.tsx` | AbortController + retry + cache sessionStorage + não zerar em erro | Baixo |
-| `src/hooks/useAnalytics.ts` | staleTime 5min + keepPreviousData + retry 3x | Zero |
-| `src/components/admin/NetworkPanel.tsx` | Mesmo padrão de robustez no fetchMembers | Baixo |
-| `src/components/whatsapp/CustomerManager.tsx` | Toast quando lista vier vazia mas o cache tem dados | Zero |
-| `src/components/admin/DashboardTab.tsx` | Badge "conta compartilhada" se detectar duplicidade | Zero |
+| `supabase/functions/evolution-webhook/index.ts` | 1.702 | Crítico |
+| `worker-portal/playwright-automation.mjs` | 1.661 | Fora do build (Worker VPS) |
+| `src/hooks/useWhatsApp.ts` | 854 | Grande |
+| `src/components/whatsapp/TemplateManager.tsx` | 830 | Grande |
+| `supabase/functions/sync-igreen-customers/index.ts` | ~700 | Médio |
 
-**Nada de mudança no banco. Nada de mexer na edge function `sync-igreen-customers`.** O sync já está correto — ele só faz upsert e nunca deleta clientes (só deleta `network_members` stale, e isso é correto). O problema é puramente de leitura/exibição no front.
+**Outros pontos do relatório**:
+- 282 erros lint em `whapi-analysis/` (cópia antiga do projeto)
+- `SUPABASE_PUBLISHABLE_KEY` hardcoded em `evolutionApi.ts`
+- `recover-stuck-otp` sem auth de cron
+- Chunks pesados (`xlsx` 424KB, `jspdf` 416KB) carregam no bundle inicial
 
-## Ganhos esperados
+## O que vamos fazer (5 commits, ordem segura)
 
-- **F5 nunca mostra 0**: cache local hidrata em <50ms, refetch em background
-- **Erro de rede transitório não esconde nada**: mantém última lista visível
-- **Race condition resolvida**: AbortController garante que só a request mais recente vence
-- **Usuário sabe quando algo está atualizando**: spinner pequeno + "Atualizando…" sem esconder os números
-- **Contagem nunca cai sem aviso**: se a sync trouxer menos clientes, toast explica o porquê
+### Commit 1 — FIX URGENTE do build (obrigatório, 1 arquivo)
+- Exportar `RATE_LIMIT_MAX` e `RATE_LIMIT_WINDOW_MS` do `_helpers.ts`
+- Importar no `index.ts` do webhook
+- Build volta a passar imediatamente
 
-## Ordem de implementação (4 commits seguros)
+### Commit 2 — Limpar lint e segurança (baixo risco)
+- Criar `.eslintignore` com: `whapi-analysis/`, `worker-portal/`, `screenshots/`, `dist/`, `supabase/.temp/`
+- Resultado: **282 erros de lint somem** sem deletar nada
+- `src/services/evolutionApi.ts`: trocar key hardcoded por `import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY` (já existe no `.env`)
+- `supabase/functions/recover-stuck-otp/index.ts`: validar `x-cron-secret` contra `Deno.env.get("CRON_SECRET")` antes de processar
 
-1. `useAnalytics` — staleTime + keepPreviousData + retry (zero risco, melhora Dashboard)
-2. `Admin.tsx` `fetchCustomers` — AbortController + cache + retry (resolve "F5 some")
-3. `NetworkPanel` `fetchMembers` — mesmo padrão (resolve "Rede some")
-4. Badge de conta compartilhada (cosmético, alerta o usuário)
+### Commit 3 — Modularizar `evolution-webhook/index.ts` (1.702 → ~400 linhas)
+Criar pasta `supabase/functions/evolution-webhook/handlers/` com:
+- `connection.ts` — handlers de QR, OPEN, CLOSE, conexão
+- `messages.ts` — `handleMessageUpsert`, dispatch por tipo
+- `media.ts` — download + upload MinIO de áudio/imagem/documento
+- `bot-flow.ts` — orquestração das fases do bot (saudação → conta → docs → perguntas)
+- `ocr-pipeline.ts` — chamada Gemini + parsing + fallback
 
-Cada passo é testável isoladamente. Se algo quebrar, só esse commit precisa ser revertido.
+`index.ts` fica só com: CORS, parse do body, dedup, dispatch para o handler certo. **Todos os imports preservados** — quem chama de fora não muda.
+
+### Commit 4 — Modularizar `useWhatsApp.ts` (854 → ~250 linhas)
+Quebrar em 4 hooks já existentes na pasta `src/hooks/whatsapp/`:
+- `useWhatsAppInstance.ts` — init, connect, disconnect (já existe parcialmente)
+- `useWhatsAppMessages.ts` — send, receive, history
+- `useWhatsAppQR.ts` — geração e refresh do QR
+- `useWhatsAppStatus.ts` — polling adaptativo de status
+
+`useWhatsApp.ts` vira um **barrel export** que combina os 4 — componentes que importam `useWhatsApp` continuam funcionando sem mudança.
+
+### Commit 5 — Lazy load de chunks pesados (performance)
+- `xlsx` (424KB) → `const XLSX = await import('xlsx')` dentro do handler de Exportar em `CustomerImportExport.tsx`
+- `jspdf` (416KB) → idem onde for usado para gerar PDF
+- Resultado: **bundle inicial cai ~840KB**, só baixa quando o usuário clica em Exportar/PDF
+
+### Commit 6 — Modularizar `TemplateManager.tsx` (830 → ~200 linhas) [opcional]
+Quebrar em:
+- `TemplateList.tsx` — listagem + filtros
+- `TemplateForm.tsx` — criar/editar template
+- `TemplateScheduler.tsx` — agendamento
+- `TemplateManager.tsx` — orquestrador + tabs
+
+## O que NÃO vamos fazer
+
+- **Mexer no `playwright-automation.mjs`** — está no Worker VPS, fora do build do Lovable, deploy manual
+- **Quebrar `sync-igreen-customers`** — funciona, escopo de outro PR
+- **Adicionar testes em massa** — escopo de outro PR (mencionado no relatório mas é trabalho separado)
+- **Remover `whapi-analysis/`** — só ignorar no lint/git; remoção física precisa `git rm -r --cached` na VPS
+
+## Tabela de risco
+
+| Commit | Arquivos | Risco | Reverte fácil? |
+|---|---|---|---|
+| 1 — Fix build | 2 | Zero | Sim |
+| 2 — Lint+segurança | 3 | Zero | Sim |
+| 3 — Webhook modular | ~6 novos + index | Médio (testar com lead simulado) | Sim, isolado |
+| 4 — useWhatsApp modular | 4 + barrel | Baixo (exports preservados) | Sim |
+| 5 — Lazy xlsx/jspdf | 2 | Zero | Sim |
+| 6 — TemplateManager modular | 4 novos + index | Baixo | Sim |
+
+## Resultado final esperado
+
+- Build verde (zero TS errors)
+- Lint limpo (de 282 erros para ~0)
+- Segurança: chave em env, cron com auth
+- **Maior arquivo do projeto cai de 1.702 para ~400 linhas**
+- Bundle inicial ~840KB menor (lazy chunks)
+- Cada hook/handler com responsabilidade única, fácil de achar bug
+
+Cada commit é testável isoladamente e independente — se o Commit 3 der problema, reverto só ele e o Commit 1 e 2 continuam.
 
