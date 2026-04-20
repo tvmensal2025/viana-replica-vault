@@ -1,117 +1,105 @@
 
 
-# Plano: Modularizar `useWhatsApp.ts` e `TemplateManager.tsx`
+# Plano: Organização hierárquica MinIO por consultor + cliente
 
-Continuação dos commits 4 e 6 do plano aprovado.
+## Estrutura atual (problema)
 
-## Commit 4 — Modularizar `useWhatsApp.ts` (854 → ~150 linhas)
+```
+igreen/
+└── documentos/
+    └── 124661/                                    ← só ID, sem nome
+        ├── joao_silva_19930720_conta.pdf          ← arquivos soltos
+        ├── joao_silva_19930720_doc_frente.jpg     ← misturados na raiz
+        ├── joao_silva_19930720_doc_verso.jpg
+        ├── maria_santos_19850315_conta.pdf
+        └── maria_santos_19850315_doc_frente.jpg
+```
 
-O arquivo já tem 2 helpers extraídos (`whatsappHelpers.ts`, `useWhatsAppInstanceDb.ts`). Vou criar mais 4 hooks especializados em `src/hooks/whatsapp/` e transformar o arquivo principal num orquestrador fino.
+## Estrutura nova (proposta)
 
-### Novos arquivos
+```
+igreen/
+└── documentos/
+    ├── 124661_joao_consultor/                     ← ID + nome do consultor
+    │   ├── joao_silva_19930720/                   ← pasta por cliente (nome + nascimento)
+    │   │   ├── conta.pdf                          ← tipo do doc como nome
+    │   │   ├── doc_frente.jpg
+    │   │   └── doc_verso.jpg
+    │   └── maria_santos_19850315/
+    │       ├── conta.pdf
+    │       └── doc_frente.jpg
+    └── 124662_pedro_consultor/
+        └── ana_costa_19880225/
+            ├── conta.pdf
+            └── doc_frente.jpg
+```
 
-**`useWhatsAppHealth.ts`** (~80 linhas)
-Toda a lógica de health/timeout/recovery counters:
-- `health` state + setters
-- `consecutiveTimeouts` + `incrementTimeoutCounter` / `resetTimeoutCounter`
-- `recoveryCyclesRef` + `resetRecoveryCounter`
-- `haltRecovery` (pausa polling após N ciclos sem sinal)
+**Ganhos**: navegar no MinIO fica intuitivo, vê o nome do consultor sem precisar consultar banco, e cada cliente tem uma pastinha própria fácil de baixar/zipar inteira.
 
-**`useWhatsAppStateChecks.ts`** (~120 linhas)
-Verificações de estado da Evolution API:
-- `checkState(name)` — parse de diagnostic, timeout, missing
-- `confirmConnectedState(name, attempts)` — confirma "open" com retries
-- `tryGetQr(name)` — recovery nível 1 (pega QR ou detecta já conectado)
-- `multiSignalCheck(name)` — recovery nível 2 (cross-check com connectInstance)
-- `markConnected(name, message)` — finaliza conexão + salva instância
+## Mudanças no código
 
-**`useWhatsAppPolling.ts`** (~150 linhas)
-Loop de polling com circuit breaker:
-- `startPolling(name)` / `stopPolling()`
-- Lógica de grace period, escalation para QR, schedulePendingRecovery
-- Recebe os checks/health/markConnected como dependências
+### 1. `supabase/functions/upload-documents-minio/index.ts`
 
-**`useWhatsAppActions.ts`** (~250 linhas)
-Ações públicas que o componente chama:
-- `createAndConnect()` — fluxo completo de criar+conectar
-- `refreshQr()` — renova QR
-- `disconnect()` — encerra sessão e limpa
-- `safeReset()` — reset nível 3 (logout → delete → recreate)
-- `reconnect()` — alias
+Trocar a montagem do caminho:
 
-### Arquivo final `useWhatsApp.ts` (~150 linhas)
+```ts
+// ANTES
+const baseFileName = `${firstNameNorm}_${lastNameNorm}_${dateFormatted}`;
+const folderPath = `documentos/${consultantId}`;
+const objectKey = `${folderPath}/${baseFileName}_conta.${ext}`;
+// → documentos/124661/joao_silva_19930720_conta.pdf
 
-Vira um composer:
-1. Declara state público (`connectionStatus`, `instanceName`, `qrCode`, `phoneNumber`, `isLoading`, `error`, `connectionLog`)
-2. Compõe os 4 hooks acima passando refs/setters compartilhados
-3. `useEffect` de mount (init: checa instance no DB e dispara polling se houver)
-4. Retorna o **mesmo `UseWhatsAppReturn`** — zero mudança na API pública
+// DEPOIS
+const consultantFolder = `${consultantId}_${normalizeFileName(consultantName)}`;
+const customerFolder = `${firstNameNorm}_${lastNameNorm}_${dateFormatted}`;
+const folderPath = `documentos/${consultantFolder}/${customerFolder}`;
+const objectKey = `${folderPath}/conta.${ext}`;
+// → documentos/124661_joao_consultor/joao_silva_19930720/conta.pdf
+```
 
-**Compatibilidade**: nenhum componente que usa `useWhatsApp(consultantId)` precisa mudar. `export type { OperationalHealth }` preservado.
+Mesmo padrão pros 3 uploads (conta, doc_frente, doc_verso).
 
-## Commit 6 — Modularizar `TemplateManager.tsx` (830 → ~200 linhas)
+### 2. `supabase/functions/_shared/minio-upload.ts`
 
-Componente único com state interno (criar, editar, gravar, upload). Vou separar em sub-componentes coesos no diretório `src/components/whatsapp/templates/`.
+Atualizar a interface `MinioUploadInput` pra aceitar `consultantName` e ajustar a montagem do `objectKey`:
 
-### Novos arquivos
+```ts
+export interface MinioUploadInput {
+  bytes: Uint8Array;
+  contentType: string;
+  consultantFolder: string;     // igreen_id ou uuid
+  consultantName?: string;       // NOVO: nome do consultor pra pasta
+  customerName: string;
+  customerBirth?: string | null;
+  kind: "conta" | "doc_frente" | "doc_verso";
+}
 
-**`templates/templateUtils.tsx`** (~50 linhas)
-Helpers visuais puros:
-- `MEDIA_TYPES` constante
-- `mediaIcon(type)` / `mediaBadge(type)`
-- `formatRecordingTime(seconds)`
+// montagem
+const consultantSlug = `${normalizeName(input.consultantFolder)}_${normalizeName(input.consultantName || "")}`.replace(/_+$/, "");
+const customerSlug = `${first}_${last}_${dateStr}`;
+const folder = `documentos/${consultantSlug}/${customerSlug}`;
+const objectKey = `${folder}/${input.kind}.${ext}`;
+```
 
-**`templates/useAudioRecorder.ts`** (~80 linhas)
-Hook de gravação de áudio (já existe `useAudioRecorder.ts` no projeto — vou reutilizar se compatível, senão crio versão específica):
-- `isRecording`, `recordingTime`
-- `startRecording()`, `stopRecording()`, `cancelRecording()`
-- Callback `onAudioReady(file)` para upload externo
+### 3. `supabase/functions/evolution-webhook/` (chamadores)
 
-**`templates/TemplateCreateForm.tsx`** (~200 linhas)
-Formulário de criação:
-- State local: name, content, mediaType, mediaUrl, imageUrl, isSaving
-- Upload de arquivo + upload de imagem combo (áudio+capa)
-- Gravação de áudio integrada
-- Recebe `onCreate` como prop
+Procurar onde `uploadBytesToMinio` é chamado e passar `consultantName` (já temos `nomeRepresentante` no `BotContext`). Pequeno ajuste em 2-3 chamadas.
 
-**`templates/TemplateListItem.tsx`** (~150 linhas)
-Item da lista com 2 modos (view e edit):
-- View: thumbnails, áudio player, link doc, botão preview/editar/deletar
-- Edit: form inline com upload + selector de tipo + save/cancel
-- Recebe `template`, `consultantId`, `onUpdate`, `onDelete`, `onPreview`
-- Sub-componente `AddImageToTemplate` movido pra dentro
+## Compatibilidade com arquivos antigos
 
-**`templates/TemplatePreviewDialog.tsx`** (~80 linhas)
-Modal de preview com player de áudio/imagem/doc.
+Arquivos já enviados no formato antigo (`documentos/124661/joao_silva_..._conta.pdf`) **continuam acessíveis** pelas URLs salvas no banco — nada quebra. A nova estrutura só vale pra uploads novos a partir do deploy.
 
-**`TemplateManager.tsx` final** (~200 linhas)
-Orquestrador:
-1. Recebe props (`templates`, `isLoading`, `consultantId`, callbacks)
-2. State de `previewTemplate`
-3. Renderiza header + `TemplateCreateForm` + lista de `TemplateListItem` + `TemplatePreviewDialog`
+Não vou migrar arquivos antigos automaticamente (risco alto, sem ganho funcional). Se quiser organizar o histórico depois, fazemos um script separado.
 
-**Props públicas inalteradas** — quem importa `<TemplateManager />` continua funcionando.
+## Resumo
 
-## Ordem de execução
-
-1. Commit 4 primeiro (hooks WhatsApp) — risco baixo, exports preservados
-2. Testar: abrir painel, ver se conecta/QR/polling funcionam
-3. Commit 6 (TemplateManager) — risco baixo, props preservadas
-4. Testar: criar template texto, áudio com imagem, editar, deletar
-
-## Tabela de risco
-
-| Commit | Arquivos novos | Arquivos editados | Risco | API externa muda? |
-|---|---|---|---|---|
-| 4 — useWhatsApp | 4 | 1 | Baixo (refs compartilhados via props) | Não |
-| 6 — TemplateManager | 5 | 1 | Baixo (props preservadas) | Não |
-
-## Resultado esperado
-
-| Arquivo | Antes | Depois |
+| Item | Antes | Depois |
 |---|---|---|
-| `useWhatsApp.ts` | 854 | ~150 |
-| `TemplateManager.tsx` | 830 | ~200 |
+| Pasta do consultor | `124661/` | `124661_joao_consultor/` |
+| Arquivos do cliente | soltos na raiz | dentro de `joao_silva_19930720/` |
+| Nome do arquivo | `joao_silva_19930720_conta.pdf` | `conta.pdf` |
+| Encontrar consultor sem banco | impossível | nome na pasta |
+| Baixar todos docs de 1 cliente | filtrar por prefixo | baixar pasta inteira |
 
-Maior arquivo do `src/` cai de 854 pra ~250 linhas. Cada hook/componente com responsabilidade única, fácil de testar isoladamente.
+**Risco**: baixo. Só muda nomenclatura, mesma API MinIO, mesmas credenciais, URLs antigas preservadas.
 
