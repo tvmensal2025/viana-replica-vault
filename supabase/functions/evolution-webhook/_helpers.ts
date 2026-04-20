@@ -24,8 +24,8 @@ export async function uploadMediaToMinio(opts: {
 
 // ── Per-phone rate limiter (anti-flood) ──────────────────────────────
 const rateLimitMap = new Map<string, number[]>();
-const RATE_LIMIT_WINDOW_MS = 5_000;
-const RATE_LIMIT_MAX = 4;
+export const RATE_LIMIT_WINDOW_MS = 5_000;
+export const RATE_LIMIT_MAX = 4;
 
 export function isRateLimited(phone: string): boolean {
   const now = Date.now();

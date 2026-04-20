@@ -11,6 +11,8 @@ import {
   isRateLimited,
   canReconnect,
   OCR_CONFIDENCE_THRESHOLD,
+  RATE_LIMIT_MAX,
+  RATE_LIMIT_WINDOW_MS,
 } from "./_helpers.ts";
 
 const corsHeaders = {
