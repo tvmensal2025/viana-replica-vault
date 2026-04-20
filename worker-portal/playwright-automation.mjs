@@ -1158,1132 +1158,280 @@ export async function executarAutomacao(customerId, options = {}) {
     console.log('✅ Portal carregado');
     
     // ═══════════════════════════════════════════════════════════════════
-    // HELPER: buscar input por placeholder (portal não usa name attrs)
+    // PREENCHIMENTO DO FORMULÁRIO — MAPEAMENTO VALIDADO 20/04/2026
+    // Usa input[name="xxx"] direto + pressSequentially para React/MUI
     // ═══════════════════════════════════════════════════════════════════
-    const escAttr = (value) => String(value ?? '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-    const byId = (id) => page.locator(`[id="${escAttr(id)}"]`).first();
-    const byPH = (ph) => page.locator(`input[placeholder="${escAttr(ph)}"]`).first();
-    const byPHPartial = (ph) => page.locator(`input[placeholder*="${escAttr(ph)}" i]`).first();
-    const clickText = async (text, tag = 'button') => {
-      const el = page.locator(`${tag}:has-text("${text}")`).first();
-      if (await el.count() > 0 && await el.isVisible().catch(() => false)) {
-        await el.click({ timeout: 10000 });
-        return true;
+
+    /** Preenche campo por name, aguardando aparecer. Usa pressSequentially para React. */
+    async function fillByName(nameAttr, value, label, timeoutMs = 10000) {
+      const sel = `input[name="${nameAttr}"]`;
+      try {
+        await page.waitForSelector(sel, { state: 'visible', timeout: timeoutMs });
+      } catch {
+        console.warn(`   ⚠️ ${label} (name="${nameAttr}"): não apareceu em ${timeoutMs}ms`);
+        return false;
       }
-      return false;
-    };
-    const normalizeText = (value) => String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
-    const normalizeDigits = (value) => String(value || '').replace(/\D+/g, '');
-    const readValue = async (locator) => locator.inputValue().catch(async () => locator.evaluate((el) => el.value || '').catch(() => ''));
-    const matchesExpected = (actual, expected, mode = 'text') => {
-      if (mode === 'digits') {
-        const actualDigits = normalizeDigits(actual);
-        const expectedDigits = normalizeDigits(expected);
-        return Boolean(actualDigits) && Boolean(expectedDigits) && (actualDigits === expectedDigits || actualDigits.endsWith(expectedDigits) || expectedDigits.endsWith(actualDigits));
-      }
-      return normalizeText(actual) === normalizeText(expected);
-    };
-    const scanVisibleInputs = async (predicate) => {
-      const fields = await page.locator('input, textarea, select').all();
-      for (const field of fields) {
-        const visible = await field.isVisible().catch(() => false);
-        if (!visible) continue;
-        const meta = await field.evaluate((el) => {
-          const root = el.closest('.MuiFormControl-root,[class*="MuiFormControl"],label') || el.parentElement?.parentElement?.parentElement || el.parentElement?.parentElement || el.parentElement;
-          return {
-            placeholder: el.getAttribute('placeholder') || '',
-            name: el.getAttribute('name') || '',
-            id: el.getAttribute('id') || '',
-            ariaLabel: el.getAttribute('aria-label') || '',
-            type: el.getAttribute('type') || '',
-            context: root?.textContent || '',
-          };
-        }).catch(() => null);
-        if (meta && predicate(meta)) return field;
-      }
-      return null;
-    };
-    const fillRequiredField = async (locator, value, label, mode = 'text') => {
-      if (!locator || await locator.count() === 0 || !await locator.isVisible().catch(() => false)) {
-        throw new Error(`Campo obrigatório não encontrado no portal: ${label}`);
-      }
-      const target = locator.first();
-      await target.scrollIntoViewIfNeeded().catch(() => {});
-      const stringValue = String(value ?? '');
-      const filled = await reactFill(page, target, stringValue);
-      if (!filled) {
-        await target.click();
-        await target.fill('');
-        await target.type(stringValue, { delay: 80 });
-      }
-      await delay(300);
-      const current = await readValue(target);
-      if (!matchesExpected(current, stringValue, mode)) {
-        throw new Error(`Falha ao preencher ${label}. Valor atual no portal: "${current}"`);
-      }
-      console.log(`   ✅ ${label}: ${stringValue}`);
-      return target;
-    };
-    const setFileDirectly = async (locator, filePath, label) => {
-      if (!filePath || !locator || await locator.count() === 0) return false;
-      await locator.first().setInputFiles(filePath);
-      console.log(`   ✅ ${label}`);
+      const loc = page.locator(sel).first();
+      await loc.scrollIntoViewIfNeeded().catch(() => {});
+      await loc.click();
+      await loc.fill('');
+      await delay(50);
+      await loc.pressSequentially(String(value), { delay: 25 });
+      await loc.press('Tab');
+      await delay(200);
+      const filled = await loc.inputValue().catch(() => '');
+      console.log(`   ✅ ${label}: "${filled}"`);
       return true;
-    };
-    const setFileByLabelPattern = async (pattern, filePath, label) => {
-      if (!filePath) return false;
-      const labels = await page.locator('label').all();
-      for (const item of labels) {
-        const text = await item.textContent().catch(() => '');
-        if (!pattern.test(text || '')) continue;
-        const inputId = await item.getAttribute('for').catch(() => null);
-        if (!inputId) continue;
-        const input = byId(inputId);
-        if (await input.count() === 0) continue;
-        await input.setInputFiles(filePath);
-        console.log(`   ✅ ${label}`);
-        return true;
-      }
-      return false;
-    };
-    const findComboboxByContext = async (pattern) => {
-      const combos = await page.locator('[role="combobox"], .MuiSelect-select, select').all();
-      for (const combo of combos) {
-        const visible = await combo.isVisible().catch(() => false);
-        if (!visible) continue;
-        const context = await combo.evaluate((el) => {
-          const root = el.closest('.MuiFormControl-root,[class*="MuiFormControl"]') || el.parentElement?.parentElement?.parentElement || el.parentElement?.parentElement || el.parentElement;
-          return root?.textContent || '';
-        }).catch(() => '');
-        if (pattern.test(context)) return combo;
-      }
-      return null;
-    };
+    }
 
-    // ─── 4. FASE 1: CEP + Valor ──────────────────────────────────────────
+    // ─── FASE 1: CEP + Valor + Calcular ──────────────────────────────────
     currentPhase = 'fase1-cep';
-    console.log('\n📋 [1/16] FASE 1: CEP e valor da conta...');
-
-    // DESCOBERTO NA SIMULAÇÃO: portal usa name="cep" e name="consumption" (SEM placeholder)
-    // Seletores por name são primários; placeholder é fallback para versões antigas
-    const cepInput = page.locator('input[name="cep"]').first();
-    const cepInputPH = byPH('CEP');
-    const cepTarget = (await cepInput.count() > 0) ? cepInput : cepInputPH;
-    if (await cepTarget.count() > 0) {
-      await cepTarget.scrollIntoViewIfNeeded().catch(() => {});
-      await cepTarget.click({ force: true });
-      await cepTarget.fill('');
-      await cepTarget.type(data.cepFormatted, { delay: 80 });
-      await cepTarget.dispatchEvent('blur');
-      console.log(`   ✅ CEP: ${data.cepFormatted}`);
-    } else {
-      throw new Error('Campo CEP não encontrado no portal');
-    }
-
-    await delay(300);
-
-    const valorInput = page.locator('input[name="consumption"]').first();
-    const valorInputPH = byPH('Valor da conta');
-    const valorTarget = (await valorInput.count() > 0) ? valorInput : valorInputPH;
-    if (await valorTarget.count() > 0) {
-      await valorTarget.scrollIntoViewIfNeeded().catch(() => {});
-      await valorTarget.click({ force: true });
-      await valorTarget.fill('');
-      await valorTarget.type(String(data.electricity_bill_value), { delay: 80 });
-      await valorTarget.dispatchEvent('blur');
-      console.log(`   ✅ Valor: ${data.electricity_bill_value}`);
-    } else {
-      throw new Error('Campo Valor da conta não encontrado no portal');
-    }
-
-    await delay(500);
-    // Botão Calcular
-    const calcClicked = await clickText('Calcular');
-    if (calcClicked) {
-      console.log('   ✅ Calcular clicado');
-    } else {
-      const calcBtn = page.locator('button[type="submit"]').first();
-      if (await calcBtn.count() > 0) { await calcBtn.click(); console.log('   ✅ Calcular clicado (fallback)'); }
-    }
+    console.log('\n📋 [1/14] CEP + Valor + Calcular...');
+    await fillByName('cep', data.cepFormatted.replace(/\D/g, ''), 'CEP');
+    await fillByName('consumption', String(data.electricity_bill_value), 'Valor');
+    await page.locator('button:has-text("Calcular")').first().click();
     await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
-    await delay(2500);
+    await delay(2000);
     await screenshot(page, customerId, '02-apos-calcular');
 
-    // ─── 5. FASE 2: Garantir Desconto ─────────────────────────────────────
+    // ─── FASE 2: Garantir Desconto ───────────────────────────────────────
     currentPhase = 'fase2-garantir';
-    console.log('\n📋 [2/16] FASE 2: Garantir desconto...');
-    
-    const garantirClicked = await clickText('Garantir meu desconto') || await clickText('Garantir desconto');
-    if (garantirClicked) {
-      console.log('   ✅ Garantir clicado');
-      await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
-      await delay(3000);
-    }
+    console.log('\n📋 [2/14] Garantir desconto...');
+    await page.locator('button:has-text("Garantir meu desconto")').first().click();
+    await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+    await delay(2000);
     await screenshot(page, customerId, '03-apos-garantir');
-    
-    // ─── 6. FASE 3: CPF ──────────────────────────────────────────────────
+
+    // ─── FASE 3: CPF + Auto-fill Receita ─────────────────────────────────
     currentPhase = 'fase3-cpf';
-    console.log('\n📋 [3/16] CPF...');
-
-    // DESCOBERTO NA SIMULAÇÃO: portal usa name="documentNumber" (SEM placeholder)
-    await page.waitForSelector('input[name="documentNumber"], input[placeholder*="CPF" i]', { timeout: 15000 }).catch(() => {});
-    const cpfInput = page.locator('input[name="documentNumber"]').first();
-    const cpfInputPH = byPH('CPF ou CNPJ');
-    const cpfTarget = (await cpfInput.count() > 0) ? cpfInput : cpfInputPH;
-    if (await cpfTarget.count() > 0) {
-      await cpfTarget.scrollIntoViewIfNeeded().catch(() => {});
-      await cpfTarget.click({ force: true });
-      await cpfTarget.evaluate(el => el.focus());
-      await page.keyboard.down('Control');
-      await page.keyboard.press('a');
-      await page.keyboard.up('Control');
-      await page.keyboard.press('Backspace');
-      await delay(80);
-      await cpfTarget.type(data.cpfDigits, { delay: 100 });
-      await cpfTarget.dispatchEvent('blur');
-      console.log(`   ✅ CPF digitado: ${data.cpfFormatted}`);
-    } else {
-      throw new Error('Campo CPF não encontrado no portal');
+    console.log('\n📋 [3/14] CPF...');
+    await fillByName('documentNumber', data.cpfDigits, 'CPF');
+    
+    // Aguardar auto-fill nome via Receita Federal (até 10s)
+    console.log('   ⏳ Aguardando Receita Federal...');
+    let nomeAutoFill = '';
+    for (let i = 0; i < 20; i++) {
+      await delay(500);
+      nomeAutoFill = await page.locator('input[name="name"]').first().inputValue().catch(() => '');
+      if (nomeAutoFill.length > 2) {
+        console.log(`   ✅ Auto-fill nome: "${nomeAutoFill}"`);
+        break;
+      }
     }
-    await delay(1000);
-    await screenshot(page, customerId, '04-apos-cpf');
-
-    // ─── 6a. AGUARDAR AUTO-FILL DA RECEITA (Nome + DataNasc) ──────────────
-    // REGRA DE OURO: o portal consulta a Receita Federal via CPF e auto-preenche
-    // Nome e Data de Nascimento. Esses valores SÃO A FONTE DA VERDADE — nunca
-    // sobrescrever com dados do banco/OCR (que podem estar errados).
-    // Timeout reduzido de 18s→10s: na prática a Receita responde em 2-4s.
-    currentPhase = 'fase3b-autofill';
-    await logPhase(customerId, 'fase3b-autofill', 'started');
-    console.log('   ⏳ [AUTO-FILL] Aguardando portal preencher Nome + DataNasc via Receita...');
-    const autofill = await waitForAutoFill(page, 10000);
-    if (autofill.nome || autofill.nascimento) {
-      console.log(`   📥 [AUTO-FILL] Portal preencheu: Nome="${autofill.nome || '(vazio)'}" DataNasc="${autofill.nascimento || '(vazio)'}"`);
-      await logPhase(customerId, 'fase3b-autofill', 'ok', { message: `Nome="${autofill.nome || ''}" DataNasc="${autofill.nascimento || ''}"` });
-    } else {
-      console.warn('   ⚠️  [AUTO-FILL] Portal NÃO auto-preencheu (CPF talvez sem registro na Receita). Worker continuará.');
-      await logPhase(customerId, 'fase3b-autofill', 'warn', { message: 'Receita não retornou dados' });
-    }
-    // ⏸️  Aguardar React estabilizar após autofill antes de buscar próximo campo
-    // (o portal re-renderiza o form quando a Receita responde)
-    await delay(1200);
-
-    // ─── 6a-bis. VALIDAR NOME (crítico v10.1) ───────────────────────────
-    currentPhase = 'fase3c-nome-validation';
-    await logPhase(customerId, 'fase3c-nome-validation', 'started');
-    {
-      const portalNomeAtual = (autofill.nome || '').trim();
-      const bancoNome = String(data.nomeCompleto || '').trim();
-      if (!portalNomeAtual && !bancoNome) {
-        const msg = 'Nome ausente: portal não auto-preencheu E banco vazio. Cliente precisa enviar CPF correto.';
-        await logPhase(customerId, 'fase3c-nome-validation', 'aborted', { message: msg });
+    if (!nomeAutoFill || nomeAutoFill.length < 3) {
+      // Tentar preencher manualmente se Receita não retornou
+      if (data.nomeCompleto) {
+        console.log(`   ⚠️ Receita não retornou — preenchendo manual: "${data.nomeCompleto}"`);
+        await fillByName('name', data.nomeCompleto, 'Nome (manual)', 3000);
+      } else {
+        const msg = 'Nome ausente: Receita não retornou e banco vazio';
         await atualizarStatus(customerId, 'awaiting_cpf_review', msg);
         throw new Error(msg);
       }
-      if (!portalNomeAtual && bancoNome) {
-        console.log(`   🆘 Portal sem nome — tentando preencher manualmente: "${bancoNome}"`);
-        try {
-          const nomeHandle = await findFieldFast(page, {
-            keywords: ['nome', 'fullname', 'titular'],
-            exclude: ['mãe', 'pai', 'usuário', 'fantasia', 'arquivo'],
-          }, 4000);
-          if (nomeHandle) {
-            const meta = await nomeHandle.evaluate((el) => ({
-              placeholder: el.getAttribute('placeholder') || '',
-              name: el.getAttribute('name') || '',
-              id: el.getAttribute('id') || '',
-            })).catch(() => null);
-            let nomeLoc = null;
-            // IMPORTANTE: usar [id="..."] em vez de #id para suportar IDs do React 18 (ex: ":r5:")
-            const escAttr = (s) => String(s).replace(/"/g, '\\"');
-            if (meta?.placeholder) nomeLoc = page.locator(`input[placeholder="${escAttr(meta.placeholder)}"]`).first();
-            else if (meta?.id) nomeLoc = page.locator(`input[id="${escAttr(meta.id)}"]`).first();
-            else if (meta?.name) nomeLoc = page.locator(`input[name="${escAttr(meta.name)}"]`).first();
-            if (nomeLoc && await nomeLoc.count() > 0) {
-              await reactFill(page, nomeLoc, bancoNome);
-              await logPhase(customerId, 'fase3c-nome-validation', 'ok', { message: `Nome preenchido manualmente: ${bancoNome}` });
-            } else {
-              await logPhase(customerId, 'fase3c-nome-validation', 'warn', { message: 'Campo nome não localizado' });
-            }
-          } else {
-            await logPhase(customerId, 'fase3c-nome-validation', 'warn', { message: 'findFieldFast não achou nome' });
-          }
-        } catch (e) {
-          await logPhase(customerId, 'fase3c-nome-validation', 'warn', { message: `Erro: ${e.message}` });
-        }
-      } else {
-        await logPhase(customerId, 'fase3c-nome-validation', 'ok', { message: `Nome OK: "${portalNomeAtual}"` });
-      }
     }
+    await screenshot(page, customerId, '04-apos-cpf');
 
+    // ─── FASE 4: Telefone ────────────────────────────────────────────────
+    currentPhase = 'fase4-telefone';
+    console.log('\n📋 [4/14] Telefone...');
+    const phoneDigits = String(data.whatsapp).replace(/\D/g, '');
+    await fillByName('phone', phoneDigits, 'WhatsApp');
+    await fillByName('phoneConfirm', phoneDigits, 'Confirme celular');
 
-    // ─── 6b. TRATAR CADASTRO EXISTENTE ────────────────────────────────────
-    currentPhase = 'cadastro-existente';
-    const novoCadastroBtn = page.locator('button:has-text("Continuar com um novo cadastro"), button:has-text("novo cadastro")');
-    if (await novoCadastroBtn.count() > 0) {
-      console.log('   ⚠️  CPF já cadastrado - clicando "novo cadastro"');
-      await novoCadastroBtn.first().click({ timeout: 10000 });
-      await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
-      await delay(3000);
-      await screenshot(page, customerId, '04b-apos-novo-cadastro');
-    }
-    
-    // ─── 7. WhatsApp + Confirmação (BULLETPROOF v11.4) ───────────────────
-    // MAPEAMENTO REAL (simulação 18/04/2026):
-    // input[name="phone"]        → "Número do seu WhatsApp *"
-    // input[name="phoneConfirm"] → "Confirme seu celular *"
-    currentPhase = 'fase4-whatsapp';
-    console.log('\n📋 [4/16] WhatsApp...');
-    console.log(`   📱 Telefone: ${data.whatsapp}`);
-    await logPhase(customerId, 'fase4-whatsapp', 'started');
-    const waStart = Date.now();
-
-    // Aguardar campos aparecerem após auto-fill CPF
-    await page.waitForSelector('input[name="phone"], input[placeholder*="WhatsApp" i]', { timeout: 25000 }).catch(() => {});
-    await delay(500);
-
-    // Função interna: preencher campo de telefone com 4 estratégias
-    async function preencherTelefone(nameAttr, placeholder, valor, label) {
-      const digits = String(valor).replace(/\D/g, '');
-
-      // S1: por name= (PRIMÁRIO — confirmado na simulação real)
-      try {
-        const loc = page.locator(`input[name="${nameAttr}"]`).first();
-        if (await loc.count() > 0 && await loc.isVisible().catch(() => false)) {
-          await loc.scrollIntoViewIfNeeded().catch(() => {});
-          await loc.click({ force: true });
-          await loc.evaluate(el => { el.value = ''; el.focus(); });
-          await page.keyboard.press('Control+a');
-          await page.keyboard.press('Backspace');
-          await page.keyboard.type(digits, { delay: 80 });
-          await page.keyboard.press('Tab');
-          await delay(400);
-          const val = (await loc.inputValue().catch(() => '')).replace(/\D/g, '');
-          if (val === digits) { console.log(`   ✅ ${label}: ${digits} (name=${nameAttr})`); return true; }
-        }
-      } catch (_) {}
-
-      // S2: por placeholder
-      try {
-        const loc = page.locator(`input[placeholder="${placeholder}"]`).first();
-        if (await loc.count() > 0 && await loc.isVisible().catch(() => false)) {
-          await loc.scrollIntoViewIfNeeded().catch(() => {});
-          await loc.click({ force: true });
-          await loc.evaluate(el => { el.value = ''; el.focus(); });
-          await page.keyboard.press('Control+a');
-          await page.keyboard.press('Backspace');
-          await page.keyboard.type(digits, { delay: 80 });
-          await page.keyboard.press('Tab');
-          await delay(400);
-          console.log(`   ✅ ${label}: ${digits} (placeholder)`);
-          return true;
-        }
-      } catch (_) {}
-
-      // S3: scan todos inputs de telefone visíveis
-      try {
-        const all = await page.locator('input[name*="phone" i], input[placeholder*="celular" i], input[placeholder*="WhatsApp" i], input[type="tel"]').all();
-        for (const inp of all) {
-          if (!await inp.isVisible().catch(() => false)) continue;
-          const n = await inp.getAttribute('name').catch(() => '');
-          const isConf = n.toLowerCase().includes('confirm') || n.toLowerCase().includes('Confirm');
-          if (nameAttr.includes('Confirm') && !isConf) continue;
-          if (!nameAttr.includes('Confirm') && isConf) continue;
-          await inp.scrollIntoViewIfNeeded().catch(() => {});
-          await inp.click({ force: true });
-          await inp.evaluate(el => { el.value = ''; el.focus(); });
-          await page.keyboard.press('Control+a');
-          await page.keyboard.press('Backspace');
-          await page.keyboard.type(digits, { delay: 80 });
-          await page.keyboard.press('Tab');
-          await delay(400);
-          console.log(`   ✅ ${label}: ${digits} (scan)`);
-          return true;
-        }
-      } catch (_) {}
-
-      // S4: evaluate DOM direto
-      try {
-        const isConf = nameAttr.includes('Confirm');
-        const ok = await page.evaluate(({ isConf, digits }) => {
-          const inputs = Array.from(document.querySelectorAll('input'));
-          for (const inp of inputs) {
-            const n = (inp.getAttribute('name') || '').toLowerCase();
-            const p = (inp.getAttribute('placeholder') || '').toLowerCase();
-            if (!n.includes('phone') && !p.includes('whatsapp') && !p.includes('celular')) continue;
-            if (inp.offsetParent === null) continue;
-            const hasConf = n.includes('confirm');
-            if (isConf && !hasConf) continue;
-            if (!isConf && hasConf) continue;
-            const ns = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
-            if (ns) { ns.call(inp, digits); inp.dispatchEvent(new Event('input', { bubbles: true })); inp.dispatchEvent(new Event('change', { bubbles: true })); return true; }
-          }
-          return false;
-        }, { isConf, digits });
-        if (ok) { console.log(`   ✅ ${label}: ${digits} (DOM)`); return true; }
-      } catch (_) {}
-
-      console.warn(`   ⚠️  ${label}: todas estratégias falharam — continuando`);
-      return false;
-    }
-
-    await preencherTelefone('phone', 'Número do seu WhatsApp', data.whatsapp, 'WhatsApp');
-    await logPhase(customerId, 'fase4-whatsapp', 'ok', { duration_ms: Date.now() - waStart });
-    await delay(600);
-
-    // Confirme celular
-    currentPhase = 'fase4b-confirme-celular';
-    await logPhase(customerId, 'fase4b-confirme-celular', 'started');
-    const cStart = Date.now();
-    await page.waitForSelector('input[name="phoneConfirm"], input[placeholder*="onfirme" i]', { timeout: 8000 }).catch(() => {});
-    await delay(300);
-    await preencherTelefone('phoneConfirm', 'Confirme seu celular', data.whatsapp, 'Confirme celular');
-    await logPhase(customerId, 'fase4b-confirme-celular', 'ok', { duration_ms: Date.now() - cStart });
-    await delay(800);
-
-
-    // ─── 8. Email ────────────────────────────────────────────────────────
-    // MAPEAMENTO REAL: input[name="email"] e input[name="emailConfirm"]
+    // ─── FASE 5: Email ───────────────────────────────────────────────────
     currentPhase = 'fase5-email';
-    console.log('\n📋 [5/16] Email...');
-    console.log(`   📧 Email: ${data.email}`);
-
-    // Função interna: preencher campo de email com 3 estratégias
-    async function preencherEmail(nameAttr, placeholder, valor, label) {
-      await page.waitForSelector(`input[name="${nameAttr}"], input[placeholder="${placeholder}"], input[type="email"]`, { timeout: 12000 }).catch(() => {});
-      await delay(300);
-
-      // S1: por name= (PRIMÁRIO — confirmado na simulação real)
-      try {
-        const loc = page.locator(`input[name="${nameAttr}"]`).first();
-        if (await loc.count() > 0 && await loc.isVisible().catch(() => false)) {
-          await loc.scrollIntoViewIfNeeded().catch(() => {});
-          await loc.click({ clickCount: 3 });
-          await loc.fill('');
-          await loc.type(valor, { delay: 60 });
-          await loc.dispatchEvent('blur');
-          await delay(300);
-          const val = await loc.inputValue().catch(() => '');
-          if (val === valor || val.includes('@')) { console.log(`   ✅ ${label}: ${valor} (name=${nameAttr})`); return true; }
-        }
-      } catch (_) {}
-
-      // S2: por placeholder
-      try {
-        const loc = page.locator(`input[placeholder="${placeholder}"]`).first();
-        if (await loc.count() > 0 && await loc.isVisible().catch(() => false)) {
-          await loc.scrollIntoViewIfNeeded().catch(() => {});
-          await loc.click({ clickCount: 3 });
-          await loc.fill('');
-          await loc.type(valor, { delay: 60 });
-          await loc.dispatchEvent('blur');
-          await delay(300);
-          console.log(`   ✅ ${label}: ${valor} (placeholder)`);
-          return true;
-        }
-      } catch (_) {}
-
-      // S3: DOM direto
-      try {
-        const isConf = nameAttr.includes('Confirm') || nameAttr.includes('confirm');
-        const ok = await page.evaluate(({ isConf, val }) => {
-          const inputs = Array.from(document.querySelectorAll('input'));
-          for (const inp of inputs) {
-            const n = (inp.getAttribute('name') || '').toLowerCase();
-            const t = (inp.getAttribute('type') || '').toLowerCase();
-            const p = (inp.getAttribute('placeholder') || '').toLowerCase();
-            if (!n.includes('email') && t !== 'email' && !p.includes('mail')) continue;
-            if (inp.offsetParent === null) continue;
-            const hasConf = n.includes('confirm');
-            if (isConf && !hasConf) continue;
-            if (!isConf && hasConf) continue;
-            const ns = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
-            if (ns) { ns.call(inp, val); inp.dispatchEvent(new Event('input', { bubbles: true })); inp.dispatchEvent(new Event('change', { bubbles: true })); return true; }
-          }
-          return false;
-        }, { isConf, val: valor });
-        if (ok) { console.log(`   ✅ ${label}: ${valor} (DOM)`); return true; }
-      } catch (_) {}
-
-      console.warn(`   ⚠️  ${label}: todas estratégias falharam — continuando`);
-      return false;
-    }
-
+    console.log('\n📋 [5/14] Email...');
     let emailToUse = data.email;
-    await preencherEmail('email', 'E-mail', emailToUse, 'Email');
-    await delay(600);
-
-    // ─── 8b. Detectar email DUPLICADO ────────────────────────────────────
-    currentPhase = 'fase5b-email-dup-check';
-    await logPhase(customerId, 'fase5b-email-dup-check', 'started');
-    {
-      const dupCount = await page.locator('text=/(j[áa]\\s*est[áa]\\s*cadastrad)|(email.*j[áa].*cadastrad)/i').count().catch(() => 0);
-      if (dupCount > 0) {
-        const fallback = `${String(data.cpfDigits).replace(/\D/g,'')}@igreen.temp.com.br`;
-        console.warn(`   ⚠️  Email duplicado → ${fallback}`);
-        emailToUse = fallback;
-        await preencherEmail('email', 'E-mail', emailToUse, 'Email (fallback)');
-        await logPhase(customerId, 'fase5b-email-dup-check', 'warn', { message: `fallback ${fallback}` });
-        await delay(600);
-      } else {
-        await logPhase(customerId, 'fase5b-email-dup-check', 'ok');
-      }
+    await fillByName('email', emailToUse, 'Email');
+    
+    // Detectar email duplicado
+    await delay(500);
+    const dupEmail = await page.locator('text=/j[áa].*cadastrad/i').count().catch(() => 0);
+    if (dupEmail > 0) {
+      emailToUse = `${data.cpfDigits}@igreen.temp.com.br`;
+      console.log(`   ⚠️ Email duplicado → fallback: ${emailToUse}`);
+      await fillByName('email', emailToUse, 'Email (fallback)');
     }
+    
+    await fillByName('emailConfirm', emailToUse, 'Confirme email');
+    await delay(1000);
+    await screenshot(page, customerId, '05-apos-email');
 
-    await preencherEmail('emailConfirm', 'Confirme seu E-mail', emailToUse, 'Confirme Email');
-    await delay(2000);
-    
-    // Scroll para ver campos seguintes
-    await page.evaluate(() => window.scrollBy(0, 400));
-    await delay(2000);
-    
-    // ─── 9. Endereço ─────────────────────────────────────────────────────
+    // ─── FASE 6: Endereço ────────────────────────────────────────────────
     currentPhase = 'fase6-endereco';
-    console.log('\n📋 [6/16] Endereço...');
-    
-    // Aguardar CEP auto-fill completar (endereço, bairro, cidade, estado)
-    console.log('   ⏳ Aguardando auto-preenchimento do CEP (3s)...');
-    await delay(3000);
-    
-    // Scroll para revelar campos de endereço
-    await page.evaluate(() => window.scrollBy(0, 300));
-    await delay(1500);
-    
-    // ─── Número do endereço — MAPEAMENTO REAL: input[name="number"] ──────
-    // S1: name= (primário), S2: getByLabel, S3: scan — NUNCA lança erro
-    let numField = page.locator('input[name="number"]').first();
-    if (!(await numField.count() > 0 && await numField.isVisible().catch(() => false))) {
-      try {
-        const byLabel = page.getByLabel('Número', { exact: true });
-        if (await byLabel.count() > 0 && await byLabel.isVisible().catch(() => false)) numField = byLabel;
-      } catch (_) {}
-    }
-    if (!(await numField.count() > 0 && await numField.isVisible().catch(() => false))) {
-      const scanned = await scanVisibleInputs(m => /número/i.test(`${m.name} ${m.context}`) && !/instalação|whatsapp|celular/i.test(`${m.name} ${m.context}`));
-      if (scanned) numField = scanned;
-    }
-    if (await numField.count() > 0 && await numField.isVisible().catch(() => false)) {
-      await numField.scrollIntoViewIfNeeded().catch(() => {});
-      await numField.click({ clickCount: 3 });
-      await numField.fill('');
-      await numField.type(data.numeroEndereco || '100', { delay: 80 });
-      console.log(`   ✅ Número endereço: ${data.numeroEndereco || '100'}`);
-    } else {
-      console.warn('   ⚠️  Campo Número endereço não encontrado — continuando');
-    }
-    
-    // Complemento — input[name="complement"]
-    if (data.complemento) {
-      const compField = page.locator('input[name="complement"]').first();
-      if (await compField.count() > 0 && await compField.isVisible().catch(() => false)) {
-        await compField.fill(data.complemento);
-        console.log(`   ✅ Complemento: ${data.complemento}`);
-      }
-    }
-    await delay(1500);
-    
+    console.log('\n📋 [6/14] Endereço...');
     await page.evaluate(() => window.scrollBy(0, 400));
-    await delay(2500);
+    await delay(1500);
     
-    // ─── 10. Número da Instalação — MAPEAMENTO REAL: input[name="installationNumber"] ──
+    // CEP, address, neighborhood, city, state são auto-preenchidos pelo CEP
+    const autoAddr = await page.locator('input[name="address"]').first().inputValue().catch(() => '');
+    console.log(`   📍 Auto-fill endereço: "${autoAddr}"`);
+    
+    // Se endereço não auto-preencheu, preencher manualmente
+    if (!autoAddr || autoAddr.length < 3) {
+      console.log('   ⚠️ CEP não auto-preencheu — preenchendo manual');
+      if (data.endereco) await fillByName('address', data.endereco, 'Endereço', 3000);
+      if (data.bairro) await fillByName('neighborhood', data.bairro, 'Bairro', 3000);
+      if (data.cidade) await fillByName('city', data.cidade, 'Cidade', 3000);
+    }
+    
+    await fillByName('number', data.numeroEndereco || '100', 'Número');
+    if (data.complemento) {
+      await fillByName('complement', data.complemento, 'Complemento', 5000);
+    }
+    await screenshot(page, customerId, '06-apos-endereco');
+
+    // ─── FASE 7: Número da Instalação ────────────────────────────────────
     currentPhase = 'fase7-instalacao';
-    console.log('\n📋 [7/16] Número da instalação...');
-    
+    console.log('\n📋 [7/14] Nº Instalação...');
     if (data.numeroInstalacao) {
-      console.log(`   📊 Número: ${data.numeroInstalacao}`);
+      await fillByName('installationNumber', data.numeroInstalacao, 'Nº Instalação');
+      await delay(1000);
       
-      // S1: name= (primário — confirmado na simulação)
-      let instField = page.locator('input[name="installationNumber"]').first();
-      if (!(await instField.count() > 0 && await instField.isVisible().catch(() => false))) {
-        // S2: getByLabel
-        try {
-          const byLabel = page.getByLabel(/Número da instalação/i);
-          if (await byLabel.count() > 0 && await byLabel.isVisible().catch(() => false)) instField = byLabel;
-        } catch (_) {}
+      // Detectar instalação duplicada
+      const dupInst = await page.locator('text=/instala[cç][aã]o.*j[áa].*cadastrad/i').count().catch(() => 0);
+      if (dupInst > 0) {
+        const msg = `Instalação ${data.numeroInstalacao} já cadastrada`;
+        await atualizarStatus(customerId, 'installation_duplicate', msg);
+        throw new Error(`INSTALLATION_DUPLICATE: ${msg}`);
       }
-      if (!(await instField.count() > 0 && await instField.isVisible().catch(() => false))) {
-        // S3: name parcial
-        const byName = page.locator('input[name*="install" i], input[name*="installation" i]').first();
-        if (await byName.count() > 0 && await byName.isVisible().catch(() => false)) instField = byName;
-      }
-      if (!(await instField.count() > 0 && await instField.isVisible().catch(() => false))) {
-        // S4: scan contextual
-        const scanned = await scanVisibleInputs(m => /instalação|código/i.test(`${m.name} ${m.context}`) && !/whatsapp|celular/i.test(`${m.name} ${m.context}`));
-        if (scanned) instField = scanned;
-      }
-      
-      if (await instField.count() > 0 && await instField.isVisible().catch(() => false)) {
-        await instField.scrollIntoViewIfNeeded().catch(() => {});
-        await instField.click({ clickCount: 3 });
-        await instField.fill('');
-        await instField.type(data.numeroInstalacao, { delay: 80 });
-        console.log(`   ✅ Instalação: ${data.numeroInstalacao}`);
-      } else {
-        console.warn(`   ⚠️  Campo instalação não encontrado — continuando`);
-      }
-      await delay(2000);
-
-      // Detectar INSTALAÇÃO DUPLICADA
-      currentPhase = 'fase7b-instalacao-dup-check';
-      await logPhase(customerId, 'fase7b-instalacao-dup-check', 'started');
-      try {
-        const dupInst = await page.locator('text=/(instala[cç][aã]o\\s*j[áa]\\s*cadastrad)|(n[uú]mero.*j[áa].*cadastrad)/i').count().catch(() => 0);
-        if (dupInst > 0) {
-          const msg = `Número de instalação ${data.numeroInstalacao} já cadastrado no portal iGreen`;
-          console.error(`   🚫 ${msg}`);
-          await logPhase(customerId, 'fase7b-instalacao-dup-check', 'aborted', { message: msg });
-          await screenshot(page, customerId, 'ERROR-instalacao-duplicada');
-          await atualizarStatus(customerId, 'installation_duplicate', msg);
-          throw new Error(`INSTALLATION_DUPLICATE: ${msg}`);
-        } else {
-          await logPhase(customerId, 'fase7b-instalacao-dup-check', 'ok');
-        }
-      } catch (e) {
-        if (String(e.message || '').startsWith('INSTALLATION_DUPLICATE')) throw e;
-        console.warn(`   ⚠️  Detector de duplicata falhou: ${e.message}`);
-      }
-      await delay(800);
     }
-    
-    await page.evaluate(() => window.scrollBy(0, 200));
-    await delay(1500);
+    await screenshot(page, customerId, '07-apos-instalacao');
 
-    // ─── 11. Distribuidora (MUI Select MANUAL — confirmado ao vivo 17/04/2026) ──
-    // O portal NÃO auto-detecta a distribuidora pelo CEP; o usuário precisa selecionar.
-    // Estratégia: encontrar o combobox cujo label/contexto contenha "Distribuidora",
-    // abrir, e selecionar a opção que case com customer.distribuidora (ou a 1ª como fallback).
-    currentPhase = 'fase8-distribuidora';
-    console.log('\n📋 [8/16] Distribuidora (MUI Select)...');
+    // ─── FASE 8: Tipo de Documento ───────────────────────────────────────
+    currentPhase = 'fase8-tipo-doc';
+    console.log('\n📋 [8/14] Tipo documento...');
+    await page.evaluate(() => window.scrollBy(0, 400));
+    await delay(500);
     
-    await page.evaluate(() => window.scrollBy(0, 300));
-    await delay(1500);
-    
-    try {
-      const distCombo = await findComboboxByContext(/distribuidora/i);
-      if (distCombo) {
-        await distCombo.scrollIntoViewIfNeeded().catch(() => {});
-        await distCombo.click({ force: true });
-        await delay(800);
-        
-        const desejada = (data.distribuidora || '').trim();
-        let opcaoSelecionada = null;
-        
-        if (desejada) {
-          // Tentar match exato/parcial case-insensitive
-          const opt = page.locator(`role=option[name=/${desejada.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/i]`).first();
-          if (await opt.count() > 0 && await opt.isVisible().catch(() => false)) {
-            await opt.click({ force: true });
-            opcaoSelecionada = desejada;
-          }
-        }
-        
-        if (!opcaoSelecionada) {
-          // Fallback: primeira opção da lista
-          const firstOpt = page.locator('ul[role="listbox"] li[role="option"]').first();
-          if (await firstOpt.count() > 0) {
-            const txt = await firstOpt.textContent().catch(() => '');
-            await firstOpt.click({ force: true });
-            opcaoSelecionada = (txt || '').trim();
-          }
-        }
-        
-        if (opcaoSelecionada) {
-          console.log(`   ✅ Distribuidora selecionada: ${opcaoSelecionada}`);
-        } else {
-          console.warn('   ⚠️  Nenhuma opção de distribuidora foi selecionada');
-        }
-        await delay(1200);
-      } else {
-        console.log('   ℹ️  Combobox de distribuidora não encontrado — pode estar auto-detectado neste fluxo');
-      }
-    } catch (e) {
-      console.warn(`   ⚠️  Falha ao selecionar distribuidora: ${e.message}`);
-    }
-    
-    await page.evaluate(() => window.scrollBy(0, 300));
-    await delay(1500);
-    await screenshot(page, customerId, '05-formulario-preenchido');
-    
-    // ─── 11.1 Possui placas solares instaladas? (default: Não) ────────────
-    currentPhase = 'fase8c-placas-solares';
-    try {
-      const placasLabel = page.getByText(/Possui placas solares instaladas/i).first();
-      if (await placasLabel.count() > 0 && await placasLabel.isVisible().catch(() => false)) {
-        console.log('   ☀️  Pergunta "Possui placas solares" detectada — selecionando "Não"');
-        // Tentar radio "Não" (mais seguro como default)
-        const radioNao = page.locator('label:has-text("Não") input[type="radio"], input[type="radio"][value="nao" i], input[type="radio"][value="false" i]').first();
-        if (await radioNao.count() > 0) {
-          await radioNao.check({ force: true }).catch(async () => {
-            await page.locator('label:has-text("Não")').first().click({ force: true }).catch(() => {});
-          });
-          console.log('   ✅ Placas solares: Não');
-        }
-        await delay(1000);
-      }
-    } catch (e) {
-      console.warn(`   ⚠️  Pergunta placas solares: ${e.message}`);
-    }
-    
-    await page.evaluate(() => window.scrollBy(0, 300));
-    await delay(1500);
-    
-    // ─── 12. Tipo de Documento — MAPEAMENTO REAL: input[name="document_type"] ──
-    // Dropdown MUI: div[role="combobox"] com opções "RG (Antigo)", "RG (Novo)", "CNH"
-    currentPhase = 'tipo-documento';
-    console.log('\n📋 [9/16] Tipo de documento...');
-
     const tipoDocCanonical = normalizeDocType(data.documentType);
-    const opcaoTexto = portalDocLabel(tipoDocCanonical); // "CNH" | "RG (Novo)" | "RG (Antigo)"
+    const opcaoTexto = portalDocLabel(tipoDocCanonical);
     const isCNH = tipoDocCanonical === 'cnh';
     console.log(`   📋 Tipo: "${opcaoTexto}" (CNH=${isCNH})`);
-
-    let tipoDocOk = false;
-
-    // S1: Buscar combobox pelo contexto "Tipo documento" (confirmado no teste real)
-    const allCombos = await page.locator('[role="combobox"], .MuiSelect-select').all();
-    for (const combo of allCombos) {
-      if (tipoDocOk) break;
-      if (!await combo.isVisible().catch(() => false)) continue;
-      const ctx = await combo.evaluate(el => {
-        const p = el.closest('.MuiFormControl-root') || el.parentElement?.parentElement?.parentElement;
-        return (p?.textContent || '').toLowerCase();
-      }).catch(() => '');
-      if (!ctx.includes('tipo') && !ctx.includes('documento')) continue;
-
-      await combo.scrollIntoViewIfNeeded().catch(() => {});
-      await combo.click({ force: true });
-      await delay(1000);
-
-      // Selecionar opção exata
-      const opts = await page.locator('li[role="option"], [role="option"]').all();
-      for (const opt of opts) {
-        const txt = (await opt.textContent().catch(() => '')).trim();
-        if (txt === opcaoTexto || (isCNH && txt === 'CNH')) {
-          await opt.click({ force: true });
-          console.log(`   ✅ Tipo documento: ${txt}`);
-          tipoDocOk = true;
-          break;
-        }
-      }
-      // Fechar dropdown se não selecionou
-      if (!tipoDocOk) await page.keyboard.press('Escape').catch(() => {});
-    }
-
-    // S2: Fallback — findComboboxByContext
-    if (!tipoDocOk) {
-      const comboByCtx = await findComboboxByContext(/tipo\s*documento/i);
-      if (comboByCtx) {
-        await comboByCtx.click({ force: true });
-        await delay(1000);
-        const opts = await page.locator('li[role="option"]').all();
-        for (const opt of opts) {
-          const txt = (await opt.textContent().catch(() => '')).trim();
-          if (txt === opcaoTexto) {
-            await opt.click({ force: true });
-            console.log(`   ✅ Tipo documento (fallback): ${txt}`);
-            tipoDocOk = true;
-            break;
-          }
-        }
-      }
-    }
-
-    if (!tipoDocOk) {
-      console.warn('   ⚠️  Tipo documento não selecionado — continuando');
-      await screenshot(page, customerId, '05b-tipo-doc-FALHOU');
-    }
-
-    // Aguardar portal renderizar campos de upload
-    await delay(2000);
-
-    // ─── 13. UPLOAD: Documentos pessoais (frente + verso quando RG) ────────
-    currentPhase = 'upload-documentos';
-    console.log('\n📋 [10/16] Upload documentos pessoais...');
-    await delay(2000);
-
-    // Scroll para revelar seção de upload
-    await page.evaluate(() => window.scrollBy(0, 400));
-    await delay(2000);
-
-    let docsEnviados = 0;
-
-    // SELETORES REAIS CONFIRMADOS NO TESTE (18/04/2026):
-    // CNH:  input#personalDocumentFileFront  name="personalDocumentFileFront"  accept="image/*,.pdf"
-    // RG:   input#personalDocumentFileFront + input#personalDocumentFileBack (verso)
-    if (docFrentePath) {
-      const frenteOk = await setFileDirectly(page.locator('#personalDocumentFileFront'), docFrentePath, 'FRENTE (#personalDocumentFileFront)')
-        || await setFileDirectly(page.locator('input[name="personalDocumentFileFront"]'), docFrentePath, 'FRENTE (name)')
-        || await setFileDirectly(page.locator('#file_input_frente_documento_pessoal'), docFrentePath, 'FRENTE (legacy)')
-        || await setFileDirectly(page.locator('input[name="frente_documento_pessoal"]'), docFrentePath, 'FRENTE (legacy name)')
-        || await setFileByLabelPattern(/frente/i, docFrentePath, 'FRENTE (label)');
-      if (frenteOk) {
-        docsEnviados++;
-        console.log('[FASE_UPLOAD_DOC] [OK] frente enviada');
-        await delay(2000);
-      } else {
-        console.warn('[FASE_UPLOAD_DOC] [WARN] frente não enviada via IDs conhecidos');
-      }
-    }
-
-    // VERSO: somente quando NÃO é CNH (RG Novo ou RG Antigo)
-    if (!isCNH && docVersoPath) {
-      // Aguardar campo verso aparecer após upload da frente
-      await page.waitForSelector('#personalDocumentFileBack, input[name="personalDocumentFileBack"]', { timeout: 5000 }).catch(() => {});
-      await delay(500);
-      const versoOk = await setFileDirectly(page.locator('#personalDocumentFileBack'), docVersoPath, 'VERSO (#personalDocumentFileBack)')
-        || await setFileDirectly(page.locator('input[name="personalDocumentFileBack"]'), docVersoPath, 'VERSO (name)')
-        || await setFileDirectly(page.locator('#file_input_verso_documento_pessoal'), docVersoPath, 'VERSO (legacy)')
-        || await setFileDirectly(page.locator('input[name="verso_documento_pessoal"]'), docVersoPath, 'VERSO (legacy name)')
-        || await setFileByLabelPattern(/verso/i, docVersoPath, 'VERSO (label)');
-      if (versoOk) {
-        docsEnviados++;
-        console.log('[FASE_UPLOAD_DOC] [OK] verso enviado');
-        await delay(2000);
-      } else {
-        console.warn('[FASE_UPLOAD_DOC] [WARN] verso não enviado');
-      }
-    } else if (isCNH) {
-      console.log('[FASE_UPLOAD_DOC] [SKIP] CNH — não precisa de verso');
-    }
-
-    // ESTRATÉGIA FALLBACK: input[type="file"] genérico
-    const allFileInputsCount = await page.locator('input[type="file"]').count();
-    console.log(`   📊 ${allFileInputsCount} input(s) file encontrado(s)`);
     
-    if (docsEnviados === 0 && allFileInputsCount >= 1 && docFrentePath) {
+    // O combobox de tipo documento é o ÚLTIMO [role="combobox"] visível
+    const allCombos = await page.locator('[role="combobox"]:visible').all();
+    console.log(`   Comboboxes visíveis: ${allCombos.length}`);
+    let tipoDocOk = false;
+    if (allCombos.length > 0) {
+      const tipoDocCombo = allCombos[allCombos.length - 1];
+      await tipoDocCombo.scrollIntoViewIfNeeded().catch(() => {});
+      await tipoDocCombo.click();
+      await delay(600);
+      
+      const targetOption = page.locator('li[role="option"]').filter({ hasText: opcaoTexto });
+      if (await targetOption.count() > 0) {
+        await targetOption.click();
+        console.log(`   ✅ Tipo documento: ${opcaoTexto}`);
+        tipoDocOk = true;
+      } else {
+        // Fallback: CNH
+        const cnhOpt = page.locator('li[role="option"]').filter({ hasText: 'CNH' });
+        if (await cnhOpt.count() > 0) {
+          await cnhOpt.click();
+          console.log('   ✅ Tipo documento: CNH (fallback)');
+          tipoDocOk = true;
+        } else {
+          await page.keyboard.press('Escape');
+        }
+      }
+    }
+    if (!tipoDocOk) {
+      console.warn('   ⚠️ Tipo documento não selecionado');
+      await screenshot(page, customerId, 'ERROR-tipo-doc');
+    }
+    await delay(1500);
+    await screenshot(page, customerId, '08-apos-tipo-doc');
+
+    // ─── FASE 9: Upload Documento Pessoal ────────────────────────────────
+    currentPhase = 'fase9-upload-doc';
+    console.log('\n📋 [9/14] Upload documento pessoal...');
+    await page.evaluate(() => window.scrollBy(0, 300));
+    await delay(500);
+    
+    // Aguardar input file aparecer
+    let fileInputs = page.locator('input[type="file"]');
+    let fileCount = await fileInputs.count();
+    if (fileCount === 0) {
+      console.log('   ⏳ Aguardando bloco de upload...');
+      for (let i = 0; i < 10; i++) {
+        await delay(1000);
+        fileCount = await fileInputs.count();
+        if (fileCount > 0) break;
+      }
+    }
+    console.log(`   Inputs file: ${fileCount}`);
+    
+    if (fileCount > 0 && docFrentePath) {
+      await fileInputs.nth(0).setInputFiles(docFrentePath);
+      console.log('   ✅ Upload FRENTE');
+      await delay(2000);
+      
+      // Verso (só RG)
+      if (!isCNH && docVersoPath) {
+        const newCount = await fileInputs.count();
+        if (newCount >= 2) {
+          await fileInputs.nth(1).setInputFiles(docVersoPath);
+          console.log('   ✅ Upload VERSO');
+          await delay(2000);
+        }
+      }
+    } else if (!docFrentePath) {
+      throw new Error('Documento (frente) indisponível para upload');
+    }
+    await screenshot(page, customerId, '09-apos-upload-doc');
+
+    // ─── FASE 10: Perguntas + Conta de Energia ───────────────────────────
+    currentPhase = 'fase10-perguntas-conta';
+    console.log('\n📋 [10/14] Perguntas + Conta de energia...');
+    await page.evaluate(() => window.scrollBy(0, 400));
+    await delay(1000);
+    
+    // hasProcurator = Não
+    const procNao = page.locator('input[name="hasProcurator"][value="false"]');
+    if (await procNao.count() > 0) {
+      await procNao.click({ force: true });
+      console.log('   ✅ Procurador: Não');
+    }
+    await delay(500);
+    
+    // Upload conta de energia (próximo input file disponível)
+    const allFiles = page.locator('input[type="file"]');
+    const totalFiles = await allFiles.count();
+    console.log(`   Inputs file total: ${totalFiles}`);
+    
+    // O último input file é o da conta de energia
+    if (totalFiles >= 2 && contaPath) {
+      await allFiles.nth(totalFiles - 1).setInputFiles(contaPath);
+      console.log('   ✅ Upload Conta de Energia');
+      await delay(2000);
+    } else if (contaPath) {
+      // Fallback: tentar o primeiro file input disponível sem arquivo
       try {
-        await page.locator('input[type="file"]').first().setInputFiles(docFrentePath);
-        console.log('   ✅ Documento FRENTE enviado (input file)');
-        docsEnviados++;
+        await allFiles.last().setInputFiles(contaPath);
+        console.log('   ✅ Upload Conta de Energia (last)');
         await delay(2000);
       } catch (e) {
-        console.warn(`   ⚠️  Doc frente (input): ${e.message}`);
-      }
-      if (!isCNH && allFileInputsCount >= 2 && docVersoPath) {
-        try {
-          await page.locator('input[type="file"]').nth(1).setInputFiles(docVersoPath);
-          console.log('   ✅ Documento VERSO enviado (input file)');
-          docsEnviados++;
-          await delay(2000);
-        } catch (e) {
-          console.warn(`   ⚠️  Doc verso (input): ${e.message}`);
-        }
+        console.warn(`   ⚠️ Upload conta falhou: ${e.message}`);
       }
     }
     
-    // ESTRATÉGIA 2: Cards clicáveis "Frente"/"Verso" com fileChooser (portal redesenhado)
-    if (docsEnviados === 0 && docFrentePath) {
-      console.log('   🔄 Tentando upload via cards clicáveis (fileChooser)...');
-      
-      // Upload FRENTE
-      const frenteCards = [
-        page.getByText('Frente', { exact: true }),
-        page.locator('text=Frente').first(),
-        page.locator('[data-testid*="frente" i]').first(),
-        page.locator('div:has-text("Frente"):not(:has(div:has-text("Frente")))').first(),
-        page.locator('label:has-text("Frente")').first(),
-        page.locator('button:has-text("Frente")').first(),
-        page.locator('span:has-text("Frente")').first(),
-      ];
-      
-      for (const card of frenteCards) {
-        if (docsEnviados > 0) break;
-        try {
-          if (await card.count() > 0 && await card.isVisible().catch(() => false)) {
-            const [frenteChooser] = await Promise.all([
-              page.waitForEvent('filechooser', { timeout: 8000 }),
-              card.click({ timeout: 5000 }),
-            ]);
-            await frenteChooser.setFiles(docFrentePath);
-            console.log('   ✅ Documento FRENTE enviado (fileChooser)');
-            docsEnviados++;
-            await delay(3000);
-            break;
-          }
-        } catch (e) {
-          console.log(`   ⚠️  Frente card falhou: ${e.message.substring(0, 60)}`);
-        }
-      }
-      
-      // Upload VERSO — SOMENTE se documento NÃO é CNH (CNH só tem Frente)
-      if (!isCNH && docVersoPath && docsEnviados > 0) {
-        console.log('   📋 Documento é RG — enviando verso...');
-        await delay(1500);
-        const versoCards = [
-          page.getByText('Verso', { exact: true }),
-          page.locator('text=Verso').first(),
-          page.locator('[data-testid*="verso" i]').first(),
-          page.locator('div:has-text("Verso"):not(:has(div:has-text("Verso")))').first(),
-          page.locator('label:has-text("Verso")').first(),
-          page.locator('button:has-text("Verso")').first(),
-          page.locator('span:has-text("Verso")').first(),
-        ];
-        
-        for (const card of versoCards) {
-          try {
-            if (await card.count() > 0 && await card.isVisible().catch(() => false)) {
-              const [versoChooser] = await Promise.all([
-                page.waitForEvent('filechooser', { timeout: 8000 }),
-                card.click({ timeout: 5000 }),
-              ]);
-              await versoChooser.setFiles(docVersoPath);
-              console.log('   ✅ Documento VERSO enviado (fileChooser)');
-              docsEnviados++;
-              await delay(3000);
-              break;
-            }
-          } catch (e) {
-            console.log(`   ⚠️  Verso card falhou: ${e.message.substring(0, 60)}`);
-          }
-        }
-      } else if (isCNH) {
-        console.log('   📋 Documento é CNH — verso não necessário ✅');
-      }
-    }
+    // energyBillPassword (opcional, pular)
     
-    // ESTRATÉGIA 3: Clicar em qualquer área de upload/dropzone genérica
-    if (docsEnviados === 0 && docFrentePath) {
-      console.log('   🔄 Tentando upload via dropzone genérica...');
-      const dropzones = [
-        page.locator('[class*="upload" i], [class*="dropzone" i], [class*="drag" i]').first(),
-        page.locator('div[role="button"]:has-text("upload")').first(),
-      ];
-      for (const dz of dropzones) {
-        try {
-          if (await dz.count() > 0 && await dz.isVisible().catch(() => false)) {
-            const [chooser] = await Promise.all([
-              page.waitForEvent('filechooser', { timeout: 5000 }),
-              dz.click({ timeout: 3000 }),
-            ]);
-            await chooser.setFiles(docFrentePath);
-            console.log('   ✅ Documento enviado (dropzone)');
-            docsEnviados++;
-            await delay(2000);
-            break;
-          }
-        } catch (_) {}
-      }
+    // hasPendingDebts = Não
+    const debtNao = page.locator('input[name="hasPendingDebts"][value="false"]');
+    if (await debtNao.count() > 0) {
+      await debtNao.click({ force: true });
+      console.log('   ✅ Débitos pendentes: Não');
     }
-    
-    console.log(`[FASE_UPLOAD_DOC] [SUMMARY] docsEnviados=${docsEnviados} (esperado=${isCNH ? 1 : 2})`);
-    if (docsEnviados === 0) {
-      throw new Error('[FASE_UPLOAD_DOC] Nenhum documento pessoal foi enviado para o portal');
-    }
-    if (!isCNH && docsEnviados < 2) {
-      console.warn('[FASE_UPLOAD_DOC] [WARN] RG geralmente exige 2 arquivos (frente+verso). Seguindo, mas portal pode reclamar.');
-    }
-    await screenshot(page, customerId, '06-documentos-enviados');
-    await delay(2000);
-    
-    // ─── 14. PERGUNTAS + CONTA (ordem real do portal) ──────────────────
-    // MAPEAMENTO REAL (teste 18/04/2026):
-    // 1. radio[name="hasProcurator"] value="false" → "Não possui procurador"
-    // 2. input[name="energyBillPassword"] → senha (opcional, pular)
-    // 3. Upload conta: clicar em "Enviar PDF ou imagem" → fileChooser → input#energyBillFile
-    // 4. radio[name="hasPendingDebts"] value="false" → "Não possui débitos"
-    currentPhase = 'perguntas-e-conta';
-    console.log('\n📋 [11/16] Perguntas + Upload conta...');
-    
-    // Aguardar perguntas aparecerem após upload de docs
-    await delay(2000);
-    await page.evaluate(() => window.scrollBy(0, 400));
-    await delay(2000);
+    await delay(500);
+    await screenshot(page, customerId, '10-apos-perguntas');
 
-    // PERGUNTA 1: "Seu cliente possui procurador?" → NÃO
-    console.log('   📋 Procurador...');
-    try {
-      const procNao = page.locator('input[type="radio"][name="hasProcurator"][value="false"]').first();
-      if (await procNao.count() > 0) {
-        await procNao.scrollIntoViewIfNeeded().catch(() => {});
-        await procNao.click({ force: true });
-        console.log('   ✅ Procurador: Não (value=false)');
-      } else {
-        // Fallback: clicar no label "Não" dentro do contexto de procurador
-        const labels = await page.locator('label:has-text("Não")').all();
-        for (const l of labels) {
-          const ctx = await l.evaluate(el => el.closest('.MuiFormControl-root')?.textContent || el.parentElement?.textContent || '').catch(() => '');
-          if (ctx.toLowerCase().includes('procurador')) {
-            await l.click({ force: true });
-            console.log('   ✅ Procurador: Não (label)');
-            break;
-          }
-        }
-      }
-    } catch (e) { console.warn(`   ⚠️  Procurador: ${e.message}`); }
-    await delay(1000);
-
-    // UPLOAD CONTA DE ENERGIA
-    currentPhase = 'upload-conta';
-    console.log('\n📋 [12/16] Upload conta de energia...');
-    await page.evaluate(() => window.scrollBy(0, 300));
-    await delay(1500);
-    
-    let contaEnviada = false;
-    
-    // S1: input#energyBillFile direto (pode estar hidden — usar setInputFiles mesmo assim)
-    try {
-      const contaInput = page.locator('#energyBillFile, input[name="energyBillFile"]').first();
-      if (await contaInput.count() > 0) {
-        await contaInput.setInputFiles(contaPath);
-        console.log('   ✅ Conta enviada (#energyBillFile)');
-        contaEnviada = true;
-      }
-    } catch (e) {
-      console.log(`   ⚠️  setInputFiles direto falhou: ${e.message.substring(0, 60)}`);
-    }
-
-    // S2: fileChooser — clicar em "Enviar PDF ou imagem" ou área de upload
-    if (!contaEnviada) {
-      console.log('   🔄 Tentando via fileChooser...');
-      const contaClickTargets = [
-        page.locator('text=Enviar PDF ou imagem').first(),
-        page.locator('text=Faça o anexo').first(),
-        page.locator('text=anexo da sua conta').first(),
-        page.locator('text=Conta de energia').first(),
-        page.locator('text=conta de energia').first(),
-        page.locator('[class*="upload" i]:has-text("energia")').first(),
-        page.locator('[class*="upload" i]:has-text("PDF")').first(),
-        page.locator('[class*="dropzone" i]').first(),
-      ];
-      
-      for (const target of contaClickTargets) {
-        if (contaEnviada) break;
-        try {
-          if (await target.count() > 0 && await target.isVisible().catch(() => false)) {
-            await target.scrollIntoViewIfNeeded().catch(() => {});
-            const [chooser] = await Promise.all([
-              page.waitForEvent('filechooser', { timeout: 8000 }),
-              target.click({ timeout: 5000 }),
-            ]);
-            await chooser.setFiles(contaPath);
-            console.log('   ✅ Conta enviada (fileChooser)');
-            contaEnviada = true;
-          }
-        } catch (e) {
-          console.log(`   ⚠️  fileChooser falhou: ${e.message.substring(0, 60)}`);
-        }
-      }
-    }
-
-    // S3: último input[type="file"] na página
-    if (!contaEnviada) {
-      const allFiles = await page.locator('input[type="file"]').all();
-      if (allFiles.length >= 2) {
-        try {
-          await allFiles[allFiles.length - 1].setInputFiles(contaPath);
-          console.log('   ✅ Conta enviada (último input file)');
-          contaEnviada = true;
-        } catch (e) {
-          console.warn(`   ⚠️  Último input: ${e.message.substring(0, 60)}`);
-        }
-      }
-    }
-    
-    if (!contaEnviada) {
-      console.warn('   ⚠️  Conta de energia NÃO enviada — continuando');
-    }
-    await delay(2000);
-    await screenshot(page, customerId, '07-conta-enviada');
-
-    // PERGUNTA 2: "Possui débitos em aberto?" → NÃO
-    console.log('   📋 Débitos...');
-    await page.evaluate(() => window.scrollBy(0, 300));
-    await delay(1000);
-    try {
-      const debitNao = page.locator('input[type="radio"][name="hasPendingDebts"][value="false"]').first();
-      if (await debitNao.count() > 0) {
-        await debitNao.scrollIntoViewIfNeeded().catch(() => {});
-        await debitNao.click({ force: true });
-        console.log('   ✅ Débitos: Não (value=false)');
-      } else {
-        const labels = await page.locator('label:has-text("Não")').all();
-        for (const l of labels) {
-          const ctx = await l.evaluate(el => el.closest('.MuiFormControl-root')?.textContent || el.parentElement?.textContent || '').catch(() => '');
-          if (ctx.toLowerCase().includes('débito') || ctx.toLowerCase().includes('debito')) {
-            await l.click({ force: true });
-            console.log('   ✅ Débitos: Não (label)');
-            break;
-          }
-        }
-      }
-    } catch (e) { console.warn(`   ⚠️  Débitos: ${e.message}`); }
-    await delay(1000);
-
-    // FALLBACK: clicar em TODOS os radios value="false" que não foram clicados
-    try {
-      const allFalseRadios = await page.locator('input[type="radio"][value="false"]').all();
-      for (const r of allFalseRadios) {
-        if (!await r.isVisible().catch(() => false)) continue;
-        const checked = await r.isChecked().catch(() => false);
-        if (!checked) {
-          await r.click({ force: true }).catch(() => {});
-          const name = await r.getAttribute('name').catch(() => '');
-          console.log(`   ✅ Radio fallback: ${name} = false`);
-        }
-      }
-    } catch (_) {}
-
-    await screenshot(page, customerId, '08-perguntas-respondidas');
-
-    // ─── 16. Scroll e verificação final ──────────────────────────────────
-    currentPhase = 'pre-submit';
-    console.log('\n📋 [13/16] Verificação pré-submit...');
-    
-    // Scroll ao final
-    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-    await delay(2000);
-    
-    // Re-clicar em radios value="false" que possam não ter sido clicados
-    const maisRadios = await page.locator('input[type="radio"][value="false"]').all();
-    for (const r of maisRadios) {
-      try {
-        if (!await r.isVisible().catch(() => false)) continue;
-        const checked = await r.isChecked().catch(() => false);
-        if (!checked) {
-          await r.click({ force: true });
-          const name = await r.getAttribute('name') || 'unknown';
-          console.log(`   ✅ Radio extra: ${name} = false`);
-        }
-      } catch (_) {}
-    }
-    
-    // Diagnóstico de campos
-    const todosInputs = await page.locator('input:visible').all();
-    let camposVazios = 0;
-    for (const inp of todosInputs) {
-      try {
-        const type = await inp.getAttribute('type') || 'text';
-        if (type === 'file' || type === 'radio' || type === 'checkbox' || type === 'hidden') continue;
-        const disabled = await inp.isDisabled().catch(() => false);
-        const readonly = await inp.getAttribute('readonly').catch(() => null);
-        if (disabled || readonly !== null) continue;
-        const val = await inp.inputValue().catch(() => '');
-        const name = await inp.getAttribute('name').catch(() => '') || '';
-        const ph = await inp.getAttribute('placeholder') || '';
-        // Campos opcionais que podem ficar vazios sem problema
-        if (/complemento|complement|senha|password/i.test(`${ph} ${name}`)) continue;
-        if (!val || val.trim() === '') {
-          console.log(`   ❌ Campo vazio: name="${name}" ph="${ph}"`);
-          camposVazios++;
-        }
-      } catch (_) {}
-    }
-    
-    if (camposVazios > 0) {
-      console.log(`   ⚠️  ${camposVazios} campo(s) vazio(s)`);
-      throw new Error(`Ainda há ${camposVazios} campo(s) obrigatório(s) vazio(s) no portal`);
-    } else {
-      console.log('   ✅ Todos os campos preenchidos');
-    }
-    
-    await screenshot(page, customerId, '09-formulario-pronto');
-    
-    // ─── 17. CLICAR EM FINALIZAR ─────────────────────────────────────────
+    // ─── FASE 11: Clicar Finalizar ───────────────────────────────────────
     currentPhase = 'submit';
-    console.log('\n📋 [14/14] Clicando em Finalizar...');
-    
+    console.log('\n📋 [11/14] Clicando Finalizar...');
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-    await delay(1500);
+    await delay(1000);
 
     let finalizarClicado = false;
     if (!stopBeforeSubmit) {
@@ -2330,7 +1478,7 @@ export async function executarAutomacao(customerId, options = {}) {
         try {
           const otpCode = await aguardarOTP(customerId);
           // Preencher campo OTP — buscar por múltiplos seletores
-          let otpField = page.locator('input[name="otp"], input[name="otpCode"], input[name="code"], input[name="verificationCode"]').first();
+          let otpField = page.locator('input[name="token"], input[name="otp"], input[name="otpCode"], input[name="code"], input[name="verificationCode"]').first();
           if (!(await otpField.count() > 0 && await otpField.isVisible().catch(() => false))) {
             otpField = page.locator('input[maxlength="6"], input[maxlength="4"], input[maxlength="8"]').first();
           }

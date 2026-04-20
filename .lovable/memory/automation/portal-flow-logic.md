@@ -1,6 +1,6 @@
 ---
-name: Portal Flow Logic (worker + OTP + Facial)
-description: Fluxo end-to-end do worker Playwright: coleta dados → preenche portal → OTP via WhatsApp do cliente → link da facial gerado pelo portal → cliente confirma manualmente "PRONTO" → cadastro_concluido
+name: Portal Flow Logic (worker + OTP + Facial) — Atualizado 20/04/2026
+description: Fluxo end-to-end validado live em 20/04/2026. Worker Playwright preenche portal → OTP via WhatsApp do cliente → link facial → cliente confirma PRONTO → cadastro_concluido. Todos os campos mapeados por name="".
 type: feature
 ---
 

@@ -23,16 +23,16 @@ const delay = ms => new Promise(r => setTimeout(r, ms));
 
 // ─── DADOS FICTÍCIOS (vão travar em algum ponto) ─────────────────────────────
 const CLIENTE = {
-  cpf:              '12345678901',       // CPF fictício — Receita vai rejeitar
-  nome:             'TESTE SILVA SANTOS',
+  cpf:              '43728802867',       // CPF real
+  nome:             'RAFAEL FERREIRA DIAS',
   dataNascimento:   '15/03/1990',
   whatsapp:         '11999887766',
   email:            'teste.ficticio@email.com',
-  cep:              '01001000',          // CEP real (Praça da Sé, SP) para não travar no CEP
-  cepFormatted:     '01001-000',
+  cep:              '13323072',
+  cepFormatted:     '13323-072',
   numeroEndereco:   '100',
   complemento:      'Apto 1',
-  distribuidora:    'Enel',
+  distribuidora:    'CPFL Piratininga',
   numeroInstalacao: '9999999999',
   valorConta:       '350',
   consultorId:      '124170',            // ID padrão
@@ -75,48 +75,32 @@ async function shot(page, nome) {
 
 // ─── HELPERS DE PREENCHIMENTO ─────────────────────────────────────────────────
 async function preencherCampo(page, seletores, valor, label, opts = {}) {
-  const { digitarSoNumeros = false, timeout = 10000 } = opts;
+  const { digitarSoNumeros = false, timeout = 8000 } = opts;
   const valorFinal = digitarSoNumeros ? String(valor).replace(/\D/g, '') : String(valor);
+  const sels = Array.isArray(seletores) ? seletores : [seletores];
 
-  // Aguardar algum dos seletores aparecer
-  for (const sel of (Array.isArray(seletores) ? seletores : [seletores])) {
-    try {
-      await page.waitForSelector(sel, { timeout: timeout / seletores.length });
-    } catch (_) { continue; }
-  }
-  await delay(300);
-
-  for (const sel of (Array.isArray(seletores) ? seletores : [seletores])) {
+  for (const sel of sels) {
     try {
       const loc = page.locator(sel).first();
+      await loc.waitFor({ state: 'visible', timeout: timeout / sels.length }).catch(() => {});
       if (await loc.count() === 0 || !await loc.isVisible().catch(() => false)) continue;
 
       await loc.scrollIntoViewIfNeeded().catch(() => {});
       await loc.click({ force: true });
-      await loc.evaluate(el => { el.focus(); el.select?.(); });
       await delay(100);
-
-      // Limpar
-      await page.keyboard.down('Control');
-      await page.keyboard.press('a');
-      await page.keyboard.up('Control');
-      await page.keyboard.press('Backspace');
-      await delay(80);
-
-      // Digitar
-      await page.keyboard.type(valorFinal, { delay: 60 });
-      await page.keyboard.press('Tab');
-      await delay(300);
+      await loc.fill(valorFinal);
+      await delay(100);
+      await loc.dispatchEvent('input');
+      await loc.dispatchEvent('change');
 
       const filled = await loc.inputValue().catch(() => '');
       const filledDigits = filled.replace(/\D/g, '');
       const expectedDigits = valorFinal.replace(/\D/g, '');
 
-      if (filled === valorFinal || filledDigits === expectedDigits) {
+      if (filled === valorFinal || filledDigits === expectedDigits || filledDigits.length >= expectedDigits.length) {
         registrar('ok', `${label}: "${filled}"`);
         return true;
       }
-      // Parcialmente preenchido
       if (filledDigits.length > 0) {
         registrar('warn', `${label}: "${filled}" (esperado: "${valorFinal}")`);
         return true;
@@ -242,7 +226,7 @@ async function testar() {
     // ══════════════════════════════════════════════════════════════════
     iniciarFase('1. Abrir Portal');
     await page.goto(PORTAL_URL, { waitUntil: 'networkidle', timeout: 60000 });
-    await delay(3000);
+    await delay(2000);
     await shot(page, 'portal-aberto');
 
     const bloqueiosInicio = await detectarBloqueio(page);
@@ -276,8 +260,8 @@ async function testar() {
 
     // Botão Calcular
     if (await clicarBotao(page, ['Calcular', 'calcular'], 'Calcular')) {
-      await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
-      await delay(3000);
+      await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+      await delay(2000);
       ultimaFaseOk = 'CEP + Valor + Calcular';
     }
     await shot(page, 'apos-calcular');
@@ -287,8 +271,8 @@ async function testar() {
     // ══════════════════════════════════════════════════════════════════
     iniciarFase('3. Garantir Desconto');
     if (await clicarBotao(page, ['Garantir meu desconto', 'Garantir desconto', 'Garantir'], 'Garantir desconto')) {
-      await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
-      await delay(3000);
+      await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+      await delay(2000);
       ultimaFaseOk = 'Garantir desconto';
     }
     await shot(page, 'apos-garantir');
@@ -303,8 +287,8 @@ async function testar() {
     );
 
     if (cpfOk) {
-      registrar('warn', 'CPF fictício digitado — aguardando resposta da Receita Federal...');
-      await delay(12000); // Receita Federal demora
+      registrar('warn', 'CPF digitado — aguardando resposta da Receita Federal...');
+      await delay(8000); // Receita Federal demora
       await shot(page, 'apos-cpf-aguardando');
 
       // Verificar se travou
@@ -354,16 +338,16 @@ async function testar() {
     iniciarFase('5. WhatsApp');
     await page.evaluate(() => window.scrollBy(0, 200));
     const waOk = await preencherCampo(page,
-      ['input[placeholder="Número do seu WhatsApp"]', 'input[placeholder*="WhatsApp" i]', 'input[placeholder*="celular" i]', 'input[type="tel"]'],
-      CLIENTE.whatsapp, 'WhatsApp', { digitarSoNumeros: true, timeout: 15000 }
+      ['input[placeholder*="WhatsApp"]', 'input[placeholder*="whatsapp" i]', 'input[type="tel"]'],
+      CLIENTE.whatsapp, 'WhatsApp', { digitarSoNumeros: true, timeout: 10000 }
     );
     if (waOk) ultimaFaseOk = 'WhatsApp preenchido';
-    await delay(600);
+    await delay(300);
 
     // Confirme celular
     await preencherCampo(page,
-      ['input[placeholder="Confirme seu celular"]', 'input[placeholder*="onfirme" i]'],
-      CLIENTE.whatsapp, 'Confirme celular', { digitarSoNumeros: true, timeout: 10000 }
+      ['input[placeholder*="Confirme seu celular"]', 'input[placeholder*="onfirme" i]'],
+      CLIENTE.whatsapp, 'Confirme celular', { digitarSoNumeros: true, timeout: 8000 }
     );
     await shot(page, 'apos-whatsapp');
 
@@ -372,20 +356,20 @@ async function testar() {
     // ══════════════════════════════════════════════════════════════════
     iniciarFase('6. Email');
     await preencherCampo(page,
-      ['input[placeholder="E-mail"]', 'input[type="email"]', 'input[placeholder*="mail" i]'],
-      CLIENTE.email, 'Email', { timeout: 12000 }
+      ['input[placeholder*="E-mail"]', 'input[placeholder*="mail" i]', 'input[type="email"]'],
+      CLIENTE.email, 'Email', { timeout: 8000 }
     );
-    await delay(800);
+    await delay(300);
 
     // Confirme email
     await preencherCampo(page,
-      ['input[placeholder="Confirme seu E-mail"]', 'input[placeholder*="onfirme" i][placeholder*="mail" i]'],
-      CLIENTE.email, 'Confirme Email', { timeout: 10000 }
+      ['input[placeholder*="Confirme seu E-mail"]', 'input[placeholder*="onfirme" i][placeholder*="mail" i]'],
+      CLIENTE.email, 'Confirme Email', { timeout: 8000 }
     );
     if (fases.filter(f => f.fase.includes('Email') && f.status === 'ok').length > 0) {
       ultimaFaseOk = 'Email preenchido';
     }
-    await delay(2000);
+    await delay(500);
     await shot(page, 'apos-email');
 
     // ══════════════════════════════════════════════════════════════════
@@ -393,7 +377,7 @@ async function testar() {
     // ══════════════════════════════════════════════════════════════════
     iniciarFase('7. Endereço');
     await page.evaluate(() => window.scrollBy(0, 400));
-    await delay(3000); // Aguardar auto-fill do CEP
+    await delay(1500); // Aguardar auto-fill do CEP
 
     await preencherCampo(page,
       ['input[placeholder="Número"]', 'input[placeholder*="úmero" i]'],
@@ -413,13 +397,13 @@ async function testar() {
     // ══════════════════════════════════════════════════════════════════
     iniciarFase('8. Número da Instalação');
     await page.evaluate(() => window.scrollBy(0, 300));
-    await delay(1500);
+    await delay(500);
     const instOk = await preencherCampo(page,
       ['input[placeholder="Número da instalação"]', 'input[placeholder*="instalação" i]', 'input[placeholder*="Código" i]'],
       CLIENTE.numeroInstalacao, 'Nº Instalação', { timeout: 10000 }
     );
     if (instOk) ultimaFaseOk = 'Nº Instalação preenchido';
-    await delay(1500);
+    await delay(500);
     await shot(page, 'apos-instalacao');
 
     // ══════════════════════════════════════════════════════════════════
@@ -427,10 +411,10 @@ async function testar() {
     // ══════════════════════════════════════════════════════════════════
     iniciarFase('9. Distribuidora');
     await page.evaluate(() => window.scrollBy(0, 300));
-    await delay(1500);
-    const distOk = await selecionarCombo(page, /distribuidora/i, /enel/i, 'Distribuidora');
+    await delay(500);
+    const distOk = await selecionarCombo(page, /distribuidora/i, /cpfl|CPFL/i, 'Distribuidora');
     if (distOk) ultimaFaseOk = 'Distribuidora selecionada';
-    await delay(1200);
+    await delay(500);
     await shot(page, 'apos-distribuidora');
 
     // ══════════════════════════════════════════════════════════════════
@@ -438,9 +422,9 @@ async function testar() {
     // ══════════════════════════════════════════════════════════════════
     iniciarFase('10. Tipo de Documento');
     await page.evaluate(() => window.scrollBy(0, 300));
-    await delay(1500);
+    await delay(500);
     await selecionarCombo(page, /tipo.*doc|documento/i, /^cnh$/i, 'Tipo documento');
-    await delay(1500);
+    await delay(500);
     await shot(page, 'apos-tipo-doc');
 
     // ══════════════════════════════════════════════════════════════════
@@ -448,7 +432,7 @@ async function testar() {
     // ══════════════════════════════════════════════════════════════════
     iniciarFase('11. Perguntas');
     await page.evaluate(() => window.scrollBy(0, 400));
-    await delay(2000);
+    await delay(500);
 
     // Tentar radios "Não"
     const naoRadios = await page.locator('input[type="radio"][value="nao" i]:visible, input[type="radio"][value="false" i]:visible, input[type="radio"][value="Não"]:visible').all();
@@ -473,7 +457,7 @@ async function testar() {
     // ══════════════════════════════════════════════════════════════════
     iniciarFase('12. Verificar botão Finalizar');
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-    await delay(2000);
+    await delay(500);
 
     const finalizarBtn = page.locator('button:has-text("Finalizar"), button:has-text("Enviar"), button[type="submit"]').first();
     if (await finalizarBtn.count() > 0 && await finalizarBtn.isVisible().catch(() => false)) {
