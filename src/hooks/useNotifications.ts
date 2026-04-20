@@ -53,59 +53,44 @@ export function useNotifications(consultantId: string | null) {
     setUnreadCount((prev) => prev + 1);
   }, []);
 
-  // Listen for new CRM deals
+  // Single multiplexed Realtime channel — combines 4 listeners into 1 WS connection
   useEffect(() => {
     if (!consultantId) return;
-    const channel = supabase.channel("notif-new-deals").on("postgres_changes", { event: "INSERT", schema: "public", table: "crm_deals", filter: `consultant_id=eq.${consultantId}` }, (payload) => {
-      const deal = payload.new as any;
-      const phone = deal.remote_jid?.split("@")[0] || "Desconhecido";
-      addNotification({ type: "new_lead", title: "🟢 Novo lead no CRM", description: `Lead ${phone} adicionado na etapa "${deal.stage}"`, meta: { dealId: deal.id, phone } });
-    }).subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [consultantId, addNotification]);
+    const channel = supabase
+      .channel(`notif-${consultantId}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "crm_deals", filter: `consultant_id=eq.${consultantId}` }, (payload) => {
+        const deal = payload.new as any;
+        const phone = deal.remote_jid?.split("@")[0] || "Desconhecido";
+        addNotification({ type: "new_lead", title: "🟢 Novo lead no CRM", description: `Lead ${phone} adicionado na etapa "${deal.stage}"`, meta: { dealId: deal.id, phone } });
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "crm_deals", filter: `consultant_id=eq.${consultantId}` }, (payload) => {
+        const oldDeal = payload.old as any;
+        const newDeal = payload.new as any;
+        if (oldDeal.stage === newDeal.stage) return;
+        const phone = newDeal.remote_jid?.split("@")[0] || "Lead";
+        addNotification({ type: "deal_moved", title: "📋 Deal movido", description: `${phone}: ${oldDeal.stage} → ${newDeal.stage}`, meta: { dealId: newDeal.id, from: oldDeal.stage, to: newDeal.stage } });
+      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "customers", filter: `consultant_id=eq.${consultantId}` }, (payload) => {
+        const customer = payload.new as any;
+        const name = customer.name || customer.phone_whatsapp || "Novo cliente";
+        prevCustomersRef.current.set(customer.id, customer.status);
+        addNotification({ type: "new_customer", title: "👤 Novo cliente cadastrado", description: `${name} foi adicionado à sua base`, meta: { customerId: customer.id } });
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "customers", filter: `consultant_id=eq.${consultantId}` }, (payload) => {
+        if (!initialLoadDone.current) return;
+        const customer = payload.new as any;
+        const oldStatus = prevCustomersRef.current.get(customer.id);
+        const newStatus = customer.status;
+        if (oldStatus === newStatus) return;
+        prevCustomersRef.current.set(customer.id, newStatus);
+        const name = customer.name || customer.phone_whatsapp || "Cliente";
 
-  // Listen for customer status changes
-  useEffect(() => {
-    if (!consultantId) return;
-    const channel = supabase.channel("notif-customer-changes").on("postgres_changes", { event: "UPDATE", schema: "public", table: "customers", filter: `consultant_id=eq.${consultantId}` }, (payload) => {
-      if (!initialLoadDone.current) return;
-      const customer = payload.new as any;
-      const oldStatus = prevCustomersRef.current.get(customer.id);
-      const newStatus = customer.status;
-      if (oldStatus === newStatus) return;
-      prevCustomersRef.current.set(customer.id, newStatus);
-      const name = customer.name || customer.phone_whatsapp || "Cliente";
-
-      if (newStatus === "approved") addNotification({ type: "status_change", title: "✅ Cliente aprovado", description: `${name} foi aprovado pela iGreen`, meta: { customerId: customer.id, status: "approved" } });
-      else if (newStatus === "rejected") addNotification({ type: "status_change", title: "❌ Cliente reprovado", description: `${name} foi reprovado`, meta: { customerId: customer.id, status: "rejected" } });
-      else if (newStatus === "devolutiva") addNotification({ type: "devolutiva", title: "⚠️ Devolutiva recebida", description: `${name} — ${customer.devolutiva || "Verificar pendência"}`, meta: { customerId: customer.id, status: "devolutiva" } });
-      else if (newStatus === "awaiting_signature") addNotification({ type: "status_change", title: "✍️ Falta assinatura", description: `${name} precisa assinar o contrato`, meta: { customerId: customer.id, status: "awaiting_signature" } });
-    }).subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [consultantId, addNotification]);
-
-  // Listen for new customers
-  useEffect(() => {
-    if (!consultantId) return;
-    const channel = supabase.channel("notif-new-customers").on("postgres_changes", { event: "INSERT", schema: "public", table: "customers", filter: `consultant_id=eq.${consultantId}` }, (payload) => {
-      const customer = payload.new as any;
-      const name = customer.name || customer.phone_whatsapp || "Novo cliente";
-      prevCustomersRef.current.set(customer.id, customer.status);
-      addNotification({ type: "new_customer", title: "👤 Novo cliente cadastrado", description: `${name} foi adicionado à sua base`, meta: { customerId: customer.id } });
-    }).subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [consultantId, addNotification]);
-
-  // Listen for deal stage changes
-  useEffect(() => {
-    if (!consultantId) return;
-    const channel = supabase.channel("notif-deal-moves").on("postgres_changes", { event: "UPDATE", schema: "public", table: "crm_deals", filter: `consultant_id=eq.${consultantId}` }, (payload) => {
-      const oldDeal = payload.old as any;
-      const newDeal = payload.new as any;
-      if (oldDeal.stage === newDeal.stage) return;
-      const phone = newDeal.remote_jid?.split("@")[0] || "Lead";
-      addNotification({ type: "deal_moved", title: "📋 Deal movido", description: `${phone}: ${oldDeal.stage} → ${newDeal.stage}`, meta: { dealId: newDeal.id, from: oldDeal.stage, to: newDeal.stage } });
-    }).subscribe();
+        if (newStatus === "approved") addNotification({ type: "status_change", title: "✅ Cliente aprovado", description: `${name} foi aprovado pela iGreen`, meta: { customerId: customer.id, status: "approved" } });
+        else if (newStatus === "rejected") addNotification({ type: "status_change", title: "❌ Cliente reprovado", description: `${name} foi reprovado`, meta: { customerId: customer.id, status: "rejected" } });
+        else if (newStatus === "devolutiva") addNotification({ type: "devolutiva", title: "⚠️ Devolutiva recebida", description: `${name} — ${customer.devolutiva || "Verificar pendência"}`, meta: { customerId: customer.id, status: "devolutiva" } });
+        else if (newStatus === "awaiting_signature") addNotification({ type: "status_change", title: "✍️ Falta assinatura", description: `${name} precisa assinar o contrato`, meta: { customerId: customer.id, status: "awaiting_signature" } });
+      })
+      .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [consultantId, addNotification]);
 

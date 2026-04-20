@@ -169,7 +169,7 @@ export function useMessages(
 
     const startPolling = () => {
       if (intervalRef.current) return;
-      intervalRef.current = setInterval(fetchMessages, 15000);
+      intervalRef.current = setInterval(fetchMessages, 20000);
     };
     const stopPolling = () => {
       if (intervalRef.current) {

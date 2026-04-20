@@ -293,7 +293,7 @@ export function useChats(instanceName: string | null) {
 
     const startPolling = () => {
       if (intervalRef.current) return;
-      intervalRef.current = setInterval(fetchChats, 30000);
+      intervalRef.current = setInterval(fetchChats, 45000);
     };
     const stopPolling = () => {
       if (intervalRef.current) {
