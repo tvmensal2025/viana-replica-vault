@@ -42,28 +42,59 @@ const AdminContent = () => {
   const [periodDays, setPeriodDays] = useState(30);
 
   const { instanceName } = useWhatsApp(userId || "");
-  const [customers, setCustomers] = useState<Record<string, unknown>[]>([]);
+  // Hidrata a partir do sessionStorage para nunca mostrar 0 ao abrir/F5.
+  // O refetch acontece em background logo a seguir.
+  const [customers, setCustomers] = useState<Record<string, unknown>[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const cached = sessionStorage.getItem(`customers_cache_${userId || "anon"}`);
+      return cached ? (JSON.parse(cached) as Record<string, unknown>[]) : [];
+    } catch { return []; }
+  });
+  const fetchAbortRef = React.useRef<AbortController | null>(null);
   const { notifications, unreadCount, markAllRead, markRead, clearAll } = useNotifications(userId);
 
   const fetchCustomers = React.useCallback(async () => {
     if (!userId) return;
+    // Cancela qualquer fetch em voo (evita race entre trocas de aba).
+    fetchAbortRef.current?.abort();
+    const controller = new AbortController();
+    fetchAbortRef.current = controller;
+
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const MAX_ATTEMPTS = 3;
+
     try {
       const selectFields = "id, name, phone_whatsapp, electricity_bill_value, email, cpf, address_city, address_state, address_street, address_neighborhood, address_complement, address_number, cep, numero_instalacao, data_nascimento, status, created_at, distribuidora, registered_by_name, registered_by_igreen_id, media_consumo, desconto_cliente, andamento_igreen, devolutiva, observacao, igreen_code, data_cadastro, data_ativo, data_validado, status_financeiro, cashback, nivel_licenciado, assinatura_cliente, assinatura_igreen, link_assinatura, customer_referred_by_name, customer_referred_by_phone, tipo_produto";
       const allRows: Record<string, unknown>[] = [];
       const pageSize = 1000;
       let page = 0;
       while (true) {
-        const { data, error } = await supabase
-          .from("customers")
-          .select(selectFields)
-          .eq("consultant_id", userId)
-          .range(page * pageSize, (page + 1) * pageSize - 1);
-        if (error) throw error;
-        if (data) allRows.push(...data);
-        if (!data || data.length < pageSize) break;
+        if (controller.signal.aborted) return;
+        // Retry com backoff por página (rede pode falhar transientemente).
+        let attempt = 0;
+        let pageData: Record<string, unknown>[] | null = null;
+        let lastError: unknown = null;
+        while (attempt < MAX_ATTEMPTS) {
+          const { data, error } = await supabase
+            .from("customers")
+            .select(selectFields)
+            .eq("consultant_id", userId)
+            .range(page * pageSize, (page + 1) * pageSize - 1);
+          if (controller.signal.aborted) return;
+          if (!error) { pageData = (data as Record<string, unknown>[]) || []; break; }
+          lastError = error;
+          attempt++;
+          if (attempt < MAX_ATTEMPTS) await sleep(1000 * 2 ** (attempt - 1));
+        }
+        if (pageData === null) throw lastError ?? new Error("fetchCustomers failed");
+        allRows.push(...pageData);
+        if (pageData.length < pageSize) break;
         page++;
       }
-      setCustomers(allRows.map((c) => ({
+
+      // Sucesso real: só agora substituímos a lista exibida.
+      const mapped = allRows.map((c) => ({
         id: c.id, name: (c.name as string) || "Sem nome", phone_whatsapp: c.phone_whatsapp,
         electricity_bill_value: c.electricity_bill_value ?? undefined,
         email: c.email, cpf: c.cpf, address_city: c.address_city, address_state: c.address_state,
@@ -79,18 +110,27 @@ const AdminContent = () => {
         cashback: c.cashback, nivel_licenciado: c.nivel_licenciado,
         assinatura_cliente: c.assinatura_cliente, assinatura_igreen: c.assinatura_igreen,
         link_assinatura: c.link_assinatura,
-      })));
-    } catch { /* silently handle */ }
+      }));
+      setCustomers(mapped);
+      try { sessionStorage.setItem(`customers_cache_${userId}`, JSON.stringify(mapped)); } catch { /* quota */ }
+    } catch (err) {
+      // NÃO zeramos a lista em erro — mantemos a última carga visível.
+      console.error("[fetchCustomers] falhou após retries — mantendo cache atual", err);
+    }
   }, [userId]);
 
   React.useEffect(() => { fetchCustomers(); }, [fetchCustomers]);
 
-  // Re-fetch customers when switching to clientes tab to ensure fresh data
+  // Re-fetch ao trocar para clientes/dashboard. AbortController dentro
+  // de fetchCustomers já cancela qualquer chamada anterior em voo.
   React.useEffect(() => {
     if (activeTab === "clientes" || activeTab === "dashboard") {
       fetchCustomers();
     }
   }, [activeTab, fetchCustomers]);
+
+  // Cleanup: cancela fetch pendente ao desmontar.
+  React.useEffect(() => () => { fetchAbortRef.current?.abort(); }, []);
 
   const handleOpenChatFromCustomer = React.useCallback((phone: string, suggestedMessage?: string) => {
     setPendingChatPhone(phone);
