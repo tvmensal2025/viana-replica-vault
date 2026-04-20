@@ -7,32 +7,12 @@ import { createEvolutionSender, parseEvolutionMessage, extractMediaUrl } from ".
 import { checkAndMarkProcessed, logStepTransition, jsonLog, generateCorrelationId } from "../_shared/audit.ts";
 import { uploadMediaUnified } from "../_shared/media-storage.ts";
 import { normalizeDocumentType, isCNH, friendlyLabel } from "../_shared/document-type.ts";
-
-/**
- * Sobe uma mídia com fallback automático: tenta MinIO (8s timeout) e, se falhar,
- * usa Supabase Storage (bucket whatsapp-media). NUNCA mais salva data URL no banco.
- * Retorna null SOMENTE em caso de falha catastrófica em ambos os storages.
- */
-async function uploadMediaToMinio(opts: {
-  fileBase64: string;
-  mimeType: string;
-  consultantFolder: string;
-  customerName: string;
-  customerBirth?: string | null;
-  kind: "conta" | "doc_frente" | "doc_verso";
-}): Promise<string | null> {
-  try {
-    const result = await uploadMediaUnified(opts);
-    return result.url;
-  } catch (err: any) {
-    console.error(`📦❌ Upload TOTALMENTE falhou [${opts.kind}]:`, err?.message || err);
-    return null;
-  }
-}
-
-// Threshold mínimo de confiança para aceitar dados extraídos pelo OCR.
-// Abaixo disso, pedimos reenvio da imagem.
-const OCR_CONFIDENCE_THRESHOLD = 70;
+import {
+  uploadMediaToMinio,
+  isRateLimited,
+  canReconnect,
+  OCR_CONFIDENCE_THRESHOLD,
+} from "./_helpers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -67,24 +47,7 @@ async function autoResolveCepIfNeeded(merged: any, updates: any): Promise<string
 }
 
 // ─── Rate limiter por telefone (anti-flood) ──────────────────────────
-const rateLimitMap = new Map<string, number[]>();
-const RATE_LIMIT_WINDOW_MS = 5_000; // 5 segundos
-const RATE_LIMIT_MAX = 4; // máximo 4 msgs por janela
-
-function isRateLimited(phone: string): boolean {
-  const now = Date.now();
-  const timestamps = rateLimitMap.get(phone) || [];
-  const recent = timestamps.filter(t => now - t < RATE_LIMIT_WINDOW_MS);
-  recent.push(now);
-  rateLimitMap.set(phone, recent);
-  // Limpar phones antigos periodicamente (a cada 100 entries)
-  if (rateLimitMap.size > 100) {
-    for (const [key, ts] of rateLimitMap) {
-      if (ts.every(t => now - t > 60_000)) rateLimitMap.delete(key);
-    }
-  }
-  return recent.length > RATE_LIMIT_MAX;
-}
+// (extraído para ./_helpers.ts — isRateLimited)
 
 // ─── Deduplicação de mensagens (PERSISTENTE via tabela webhook_message_dedup) ──
 // Substituiu o Map em memória anterior, que não funcionava em ambiente
@@ -92,16 +55,7 @@ function isRateLimited(phone: string): boolean {
 // Agora a dedup é atômica via INSERT com ON CONFLICT.
 
 // ─── Cooldown de reconexão (evitar loop infinito) ────────────────────
-const reconnectCooldowns = new Map<string, number>();
-const RECONNECT_COOLDOWN_MS = 120_000; // 2 minutos entre tentativas
-
-function canReconnect(instance: string): boolean {
-  const now = Date.now();
-  const last = reconnectCooldowns.get(instance) || 0;
-  if (now - last < RECONNECT_COOLDOWN_MS) return false;
-  reconnectCooldowns.set(instance, now);
-  return true;
-}
+// (extraído para ./_helpers.ts — canReconnect)
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
