@@ -9,6 +9,7 @@ export async function uploadMediaToMinio(opts: {
   fileBase64: string;
   mimeType: string;
   consultantFolder: string;
+  consultantName?: string;
   customerName: string;
   customerBirth?: string | null;
   kind: "conta" | "doc_frente" | "doc_verso";
