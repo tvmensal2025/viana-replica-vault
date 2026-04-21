@@ -89,7 +89,13 @@ Deno.serve(async (req) => {
       });
     }
 
-    const apiKey = Deno.env.get("GOOGLE_AI_API_KEY");
+    // Prioriza Lovable AI Gateway (mais estável, sem limites de free-tier do Google)
+    // Fallback para Google AI direto se Lovable AI não estiver disponível
+    const lovableKey = Deno.env.get("LOVABLE_API_KEY");
+    const googleKey = Deno.env.get("GOOGLE_AI_API_KEY");
+    const apiKey = lovableKey || googleKey;
+    const useLovable = !!lovableKey;
+
     if (!apiKey) {
       return new Response(
         JSON.stringify({ reply: "Desculpe, o assistente está temporariamente indisponível. Entre em contato pelo WhatsApp do consultor. 💚" }),
@@ -101,39 +107,129 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
     const fullKnowledge = await loadKnowledge(supabaseUrl, supabaseKey);
 
-    const contents = [];
+    // Formato Gemini (nativo)
+    const geminiContents: any[] = [];
     if (history && Array.isArray(history)) {
       for (const msg of history.slice(-14)) {
-        contents.push({
+        geminiContents.push({
           role: msg.role === "user" ? "user" : "model",
           parts: [{ text: msg.text }],
         });
       }
     }
-    contents.push({ role: "user", parts: [{ text: message }] });
+    geminiContents.push({ role: "user", parts: [{ text: message }] });
+
+    // Formato OpenAI-compat (Lovable AI Gateway)
+    const openaiMessages: any[] = [
+      { role: "system", content: fullKnowledge },
+    ];
+    if (history && Array.isArray(history)) {
+      for (const msg of history.slice(-14)) {
+        openaiMessages.push({
+          role: msg.role === "user" ? "user" : "assistant",
+          content: msg.text,
+        });
+      }
+    }
+    openaiMessages.push({ role: "user", content: message });
 
     // Streaming mode
     if (stream) {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse&key=${apiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            system_instruction: { parts: [{ text: fullKnowledge }] },
-            contents,
-            generationConfig: { temperature: 0.4, maxOutputTokens: 1500, topP: 0.85 },
-          }),
-        }
-      );
+      const res = useLovable
+        ? await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+              model: "google/gemini-2.5-flash",
+              messages: openaiMessages,
+              stream: true,
+              temperature: 0.4,
+              max_tokens: 1500,
+            }),
+          })
+        : await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse&key=${apiKey}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                system_instruction: { parts: [{ text: fullKnowledge }] },
+                contents: geminiContents,
+                generationConfig: { temperature: 0.4, maxOutputTokens: 1500, topP: 0.85 },
+              }),
+            }
+          );
 
       if (!res.ok) {
         const errorBody = await res.text();
-        console.error("Gemini streaming error:", res.status, errorBody);
+        console.error(`AI streaming error (${useLovable ? "Lovable" : "Google"}):`, res.status, errorBody);
+        if (res.status === 429) {
+          return new Response(
+            JSON.stringify({ reply: "Estou recebendo muitas perguntas no momento 🥵 Tente novamente em alguns segundos. 💚" }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        if (res.status === 402) {
+          return new Response(
+            JSON.stringify({ reply: "O assistente precisa de créditos para continuar. Avise o administrador. 💚" }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
         return new Response(
           JSON.stringify({ reply: "Desculpe, não consegui processar sua pergunta agora. Tente novamente em instantes. 💚" }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
+      }
+
+      // Se for Lovable AI, converte SSE OpenAI -> formato Gemini que o frontend já entende
+      if (useLovable && res.body) {
+        const { readable, writable } = new TransformStream();
+        const writer = writable.getWriter();
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        const encoder = new TextEncoder();
+
+        (async () => {
+          let buffer = "";
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream: true });
+              let idx: number;
+              while ((idx = buffer.indexOf("\n")) !== -1) {
+                let line = buffer.slice(0, idx);
+                buffer = buffer.slice(idx + 1);
+                if (line.endsWith("\r")) line = line.slice(0, -1);
+                if (!line.startsWith("data: ")) continue;
+                const payload = line.slice(6).trim();
+                if (payload === "[DONE]") {
+                  await writer.write(encoder.encode("data: [DONE]\n\n"));
+                  continue;
+                }
+                try {
+                  const j = JSON.parse(payload);
+                  const delta = j?.choices?.[0]?.delta?.content;
+                  if (delta) {
+                    const geminiShaped = {
+                      candidates: [{ content: { parts: [{ text: delta }] } }],
+                    };
+                    await writer.write(encoder.encode(`data: ${JSON.stringify(geminiShaped)}\n\n`));
+                  }
+                } catch { /* skip partial */ }
+              }
+            }
+          } finally {
+            await writer.close();
+          }
+        })();
+
+        return new Response(readable, {
+          headers: { ...corsHeaders, "Content-Type": "text/event-stream", "Cache-Control": "no-cache" },
+        });
       }
 
       return new Response(res.body, {
@@ -142,22 +238,48 @@ Deno.serve(async (req) => {
     }
 
     // Non-streaming mode (fallback)
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: fullKnowledge }] },
-          contents,
-          generationConfig: { temperature: 0.4, maxOutputTokens: 1500, topP: 0.85 },
-        }),
-      }
-    );
+    const res = useLovable
+      ? await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: "google/gemini-2.5-flash",
+            messages: openaiMessages,
+            temperature: 0.4,
+            max_tokens: 1500,
+          }),
+        })
+      : await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              system_instruction: { parts: [{ text: fullKnowledge }] },
+              contents: geminiContents,
+              generationConfig: { temperature: 0.4, maxOutputTokens: 1500, topP: 0.85 },
+            }),
+          }
+        );
 
     if (!res.ok) {
       const errorBody = await res.text();
-      console.error("Gemini API error:", res.status, errorBody);
+      console.error(`AI error (${useLovable ? "Lovable" : "Google"}):`, res.status, errorBody);
+      if (res.status === 429) {
+        return new Response(
+          JSON.stringify({ reply: "Estou recebendo muitas perguntas no momento 🥵 Tente novamente em alguns segundos. 💚" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      if (res.status === 402) {
+        return new Response(
+          JSON.stringify({ reply: "O assistente precisa de créditos para continuar. Avise o administrador. 💚" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
       return new Response(
         JSON.stringify({ reply: "Desculpe, não consegui processar sua pergunta agora. Tente novamente em instantes. 💚" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -165,7 +287,9 @@ Deno.serve(async (req) => {
     }
 
     const data = await res.json();
-    const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || "Desculpe, não entendi. Pode reformular? 😊";
+    const reply = useLovable
+      ? (data?.choices?.[0]?.message?.content || "Desculpe, não entendi. Pode reformular? 😊")
+      : (data?.candidates?.[0]?.content?.parts?.[0]?.text || "Desculpe, não entendi. Pode reformular? 😊");
 
     return new Response(JSON.stringify({ reply }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
