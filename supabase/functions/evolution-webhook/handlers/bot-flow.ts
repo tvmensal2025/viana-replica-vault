@@ -48,6 +48,19 @@ async function autoResolveCepIfNeeded(merged: any, updates: any): Promise<string
   return step;
 }
 
+// ── Quick HEAD check to confirm a media URL is reachable before sending ──
+async function urlExists(url: string): Promise<boolean> {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 3000);
+    const r = await fetch(url, { method: "HEAD", signal: ctrl.signal });
+    clearTimeout(timer);
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
   const {
     supabase,
