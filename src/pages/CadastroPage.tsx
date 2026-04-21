@@ -107,9 +107,9 @@ const CadastroPage = () => {
         <div
           style={{
             position: 'absolute',
-            right: '6%',
-            top: '34%',
-            width: '26%',
+            left: '5%',
+            top: '42%',
+            width: '24%',
             aspectRatio: '1 / 1',
             background: 'white',
             borderRadius: '12px',
