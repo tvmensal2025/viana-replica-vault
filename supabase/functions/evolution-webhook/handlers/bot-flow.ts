@@ -48,6 +48,19 @@ async function autoResolveCepIfNeeded(merged: any, updates: any): Promise<string
   return step;
 }
 
+// ── Quick HEAD check to confirm a media URL is reachable before sending ──
+async function urlExists(url: string): Promise<boolean> {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 3000);
+    const r = await fetch(url, { method: "HEAD", signal: ctrl.signal });
+    clearTimeout(timer);
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
   const {
     supabase,
@@ -97,11 +110,15 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
     case "menu_inicial": {
       const resp = isButton ? buttonId : messageText.toLowerCase().trim();
       if (resp === "entender_desconto" || resp === "1" || resp?.includes("funciona") || resp?.includes("entender") || resp?.includes("desconto")) {
-        const videoUrl = "https://zlzasfhcxcznaprrragl.supabase.co/storage/v1/object/public/video%20igreen/WhatsApp%20Video%202025-05-29%20at%2021.37.39.mp4";
+        const videoUrl = "https://zlzasfhcxcznaprrragl.supabase.co/storage/v1/object/public/video%20igreen/Green_Energy.mp4";
         await sendText(remoteJid, "🎬 Assista este vídeo rápido e entenda como funciona o desconto na sua conta de luz:");
-        const sent = await sendMedia(remoteJid, videoUrl, "☀️ Conexão Green — Energia limpa com até 20% de desconto!", "video");
-        if (!sent) {
-          await sendText(remoteJid, "⚠️ Tive um problema momentâneo ao enviar o vídeo. Mas vamos seguir com seu cadastro normalmente!");
+        if (await urlExists(videoUrl)) {
+          const sent = await sendMedia(remoteJid, videoUrl, "☀️ Conexão Green — Energia limpa com até 20% de desconto!", "video");
+          if (!sent) {
+            console.warn("[bot-flow] sendMedia retornou false para Green_Energy.mp4 — seguindo sem mensagem de erro ao cliente.");
+          }
+        } else {
+          console.warn("[bot-flow] vídeo Green_Energy.mp4 indisponível (HEAD != 200) — pulando envio.");
         }
         await new Promise((r) => setTimeout(r, 1500));
         const posVideoMsg = "📺 Assistiu o vídeo? Agora escolha como deseja prosseguir:";
