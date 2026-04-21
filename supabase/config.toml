@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.recover-stuck-otp]
 verify_jwt = false
+
+[functions.qr-redirect]
+verify_jwt = false
