@@ -492,6 +492,53 @@ async function atualizarStatus(customerId, status, errorMsg = null) {
   await getSupabase().from('customers').update(updates).eq('id', customerId);
 }
 
+// ─── Notificar cliente para digitar o OTP no chat ────────────────────────────
+async function notificarClienteOTP(customerId) {
+  const supabase = getSupabase();
+  if (!supabase) return;
+  try {
+    const { data: customer } = await supabase
+      .from('customers').select('phone_whatsapp, consultant_id, name')
+      .eq('id', customerId).single();
+    if (!customer?.phone_whatsapp) return;
+
+    let instanceName = null;
+    if (customer.consultant_id) {
+      const { data: inst } = await supabase
+        .from('whatsapp_instances').select('instance_name')
+        .eq('consultant_id', customer.consultant_id).limit(1).single();
+      instanceName = inst?.instance_name;
+    }
+
+    const evolutionUrl = (process.env.EVOLUTION_API_URL || '').replace(/\/$/, '');
+    const evolutionKey = process.env.EVOLUTION_API_KEY || '';
+    if (!evolutionUrl || !evolutionKey || !instanceName) {
+      console.warn('   ⚠️  notificarClienteOTP: Evolution API não configurada');
+      return;
+    }
+
+    let phone = String(customer.phone_whatsapp).replace(/\D/g, '');
+    if (!phone.startsWith('55')) phone = '55' + phone;
+    const remoteJid = `${phone}@s.whatsapp.net`;
+
+    const nome = customer.name?.split(' ')[0] || '';
+    const message = `📱 *Código de Verificação*\n\nOlá${nome ? ' ' + nome : ''}! Você vai receber um *código numérico* no WhatsApp enviado pela iGreen/CPFL.\n\n👉 *Quando receber, digite o código aqui neste chat* para eu finalizar seu cadastro!\n\n⏳ Aguardando o código...`;
+
+    const res = await fetch(`${evolutionUrl}/message/sendText/${instanceName}`, {
+      method: 'POST',
+      headers: { apikey: evolutionKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ number: remoteJid, text: message }),
+    });
+    if (res.ok) {
+      console.log(`   ✅ Mensagem OTP enviada ao cliente ${phone}`);
+    } else {
+      console.warn(`   ⚠️  Falha ao notificar cliente sobre OTP: ${res.status}`);
+    }
+  } catch (e) {
+    console.error(`   ❌ notificarClienteOTP erro: ${e.message}`);
+  }
+}
+
 // ─── Enviar link de reconhecimento facial ao cliente via WhatsApp ─────────────
 async function sendFacialLinkToCustomer(customerId, facialLink) {
   const supabase = getSupabase();
@@ -1474,6 +1521,9 @@ export async function executarAutomacao(customerId, options = {}) {
       if (/código|OTP|verificação|whatsapp|token/i.test(pageText)) {
         console.log('   📱 OTP detectado - aguardando código...');
         await atualizarStatus(customerId, 'awaiting_otp');
+        
+        // Enviar mensagem pedindo o OTP ao cliente via WhatsApp
+        await notificarClienteOTP(customerId);
         
         try {
           const otpCode = await aguardarOTP(customerId);
