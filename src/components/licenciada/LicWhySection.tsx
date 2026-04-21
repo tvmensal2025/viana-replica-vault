@@ -1,3 +1,5 @@
+import LazyVideo from "@/components/ui/LazyVideo";
+
 const LicWhySection = () => (
   <section className="section-gradient relative overflow-hidden">
     <div className="absolute inset-0 pointer-events-none opacity-[0.03]" style={{ background: 'radial-gradient(circle at 80% 50%, hsl(130, 100%, 36%), transparent 60%)' }} />
@@ -9,9 +11,7 @@ const LicWhySection = () => (
       </p>
       <div className="max-w-4xl mx-auto rounded-2xl overflow-hidden relative" style={{ boxShadow: 'var(--shadow-green-lg)' }}>
         <div className="absolute inset-0 rounded-2xl border border-primary/20 z-10 pointer-events-none" />
-        <video controls playsInline preload="none" className="w-full aspect-video relative z-0">
-          <source src="https://zlzasfhcxcznaprrragl.supabase.co/storage/v1/object/public/video%20igreen/Licenciadao-1.mp4" type="video/mp4" />
-        </video>
+        <LazyVideo src="https://zlzasfhcxcznaprrragl.supabase.co/storage/v1/object/public/video%20igreen/Licenciadao-1.mp4" />
       </div>
     </div>
   </section>
