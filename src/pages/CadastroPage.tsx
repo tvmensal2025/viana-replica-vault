@@ -108,7 +108,7 @@ const CadastroPage = () => {
           style={{
             position: 'absolute',
             left: '5%',
-            bottom: '12%',
+            bottom: '20%',
             width: '24%',
             aspectRatio: '1 / 1',
             background: 'white',
@@ -145,7 +145,7 @@ const CadastroPage = () => {
             position: 'absolute',
             left: '5%',
             right: '5%',
-            top: '63%',
+            bottom: '17%',
             background: 'rgba(0, 40, 18, 0.95)',
             padding: '8px 16px',
             borderRadius: '8px',
