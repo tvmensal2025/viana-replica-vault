@@ -60,6 +60,10 @@ const CadastroPage = () => {
 
   const whatsappBotUrl = `https://api.whatsapp.com/send?phone=${phoneNumber}&text=${botMessage}`;
 
+  // URL de redirect eterno para o QR impresso — sempre aponta para o WhatsApp atual
+  // da instância do consultor. Se trocar de número, basta atualizar no admin: os panfletos continuam valendo.
+  const printQrUrl = `https://zlzasfhcxcznaprrragl.supabase.co/functions/v1/qr-redirect?l=${encodeURIComponent(licenca || "")}`;
+
   // Print view - A4 page for printing (Mutirão Lei 14.300 com QR dinâmico do consultor)
   if (showPrintView) {
     const consultantPhoneFormatted = (() => {
@@ -123,7 +127,7 @@ const CadastroPage = () => {
           }}
         >
           <QRCodeSVG
-            value={whatsappBotUrl}
+            value={printQrUrl}
             size={500}
             level="H"
             includeMargin={false}
