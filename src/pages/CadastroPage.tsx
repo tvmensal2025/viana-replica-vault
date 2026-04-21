@@ -127,7 +127,7 @@ const CadastroPage = () => {
           }}
         >
           <QRCodeSVG
-            value={whatsappBotUrl}
+            value={printQrUrl}
             size={500}
             level="H"
             includeMargin={false}
