@@ -97,24 +97,26 @@ const CadastroPage = () => {
 
         {/* Background: Mutirão Lei 14.300 banner em A4 */}
         <img
-          src="/images/mutirao-lei-14300.png"
+          src="/images/mutirao-lei-14300.jpg"
           alt=""
           onError={(e) => console.error('[Print] Falha ao carregar banner:', e)}
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: 0 }}
         />
 
-        {/* QR Code real do consultor — cobre o QR fake da arte (canto inf. esquerdo) */}
+        {/* QR Code real do consultor — posicionado no espaço livre à direita, sem cobrir a Aliança */}
         <div
           style={{
             position: 'absolute',
-            left: '6%',
-            bottom: '13%',
-            width: '23%',
+            right: '6%',
+            top: '40%',
+            width: '26%',
             aspectRatio: '1 / 1',
             background: 'white',
-            borderRadius: '8px',
-            padding: '10px',
-            boxShadow: '0 6px 20px rgba(0,0,0,0.35)',
+            borderRadius: '12px',
+            padding: '12px',
+            boxShadow: '0 8px 28px rgba(0,0,0,0.45)',
+            border: '3px solid #FFD700',
+            zIndex: 2,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -137,24 +139,26 @@ const CadastroPage = () => {
           />
         </div>
 
-        {/* Faixa do licenciado — cobre o "LICENCIADO: ..." da arte original */}
+        {/* Faixa do licenciado — posicionada acima da Aliança, sem cobri-la */}
         <div
           style={{
             position: 'absolute',
-            left: '4%',
-            right: '4%',
-            bottom: '5.8%',
-            background: 'rgba(0, 56, 26, 0.92)',
-            padding: '10px 18px',
-            borderRadius: '6px',
+            left: '5%',
+            right: '5%',
+            top: '69%',
+            background: 'rgba(0, 40, 18, 0.95)',
+            padding: '8px 16px',
+            borderRadius: '8px',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
             color: 'white',
             fontFamily: 'Arial Black, Arial, sans-serif',
-            fontSize: '13px',
+            fontSize: '12px',
             letterSpacing: '0.5px',
-            boxShadow: '0 2px 12px rgba(0,0,0,0.25)',
+            boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
+            zIndex: 2,
+            border: '1px solid rgba(255,215,0,0.4)',
           }}
         >
           <span style={{ fontWeight: 900 }}>
