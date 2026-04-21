@@ -145,7 +145,7 @@ const CadastroPage = () => {
             position: 'absolute',
             left: '5%',
             right: '5%',
-            bottom: '17%',
+            bottom: '13%',
             background: 'rgba(0, 40, 18, 0.95)',
             padding: '8px 16px',
             borderRadius: '8px',
