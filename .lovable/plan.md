@@ -1,93 +1,60 @@
 
 
-# Plano: QR de redirecionamento eterno (à prova de falha)
+# Plano: trocar vídeo do bot para `Green_Energy.mp4`
 
-## O problema atual
+## Mudança
 
-Hoje o QR aponta direto pra `https://api.whatsapp.com/send?phone=5511990092401&...`. Se você trocar de número, perde os 1000 panfletos.
+Atualizar `supabase/functions/evolution-webhook/handlers/bot-flow.ts` para usar o vídeo correto que existe no bucket:
 
-## A solução
+```ts
+// ANTES (arquivo inexistente → erro 500)
+const videoUrl = "https://...supabase.co/storage/v1/object/public/video%20igreen/WhatsApp%20Video%202025-05-29%20at%2021.37.39.mp4";
 
-O QR vai apontar pra um **link curto da nossa plataforma** que **redireciona dinamicamente** pro WhatsApp atual da sua instância. Assim:
-
-```
-QR impresso (FIXO pra sempre):
-https://igreen.institutodossonhos.com.br/r/SUALICENCA
-                                              │
-                                              ▼ (redirect 302 em tempo real)
-                                    consulta whatsapp_instances
-                                    (busca connected_phone atual)
-                                              │
-                                              ▼
-                       https://api.whatsapp.com/send?phone={NÚMERO_ATUAL}&text=...
+// DEPOIS
+const videoUrl = "https://zlzasfhcxcznaprrragl.supabase.co/storage/v1/object/public/video%20igreen/Green_Energy.mp4";
 ```
 
-**Resultado:**
-- Trocou de celular → continua valendo ✅
-- Trocou de número → atualiza no admin → continua valendo ✅
-- Instância caiu → reconectou → continua valendo ✅
-- Apagou e criou nova instância → continua valendo ✅
-- **Os 1000 panfletos NUNCA quebram**
+## Camada extra de proteção
 
-## Camadas de proteção (defesa em profundidade)
+Adicionar um HEAD check rápido (timeout 3s) antes de chamar `sendMedia`. Se o arquivo não responder 200, o bot pula o envio do vídeo e vai direto pra mensagem com botões — sem mostrar a falsa mensagem `"⚠️ Tive um problema momentâneo ao enviar o vídeo"`.
 
-1. **Fallback automático**: se a instância não tiver `connected_phone`, usa o telefone do perfil do consultor (`consultants.phone`)
-2. **Fallback final**: se nem isso existir, usa o WhatsApp oficial da iGreen `+55 11 98900-0650`
-3. **Cache curto**: o redirect tem cache de 60s pra não sobrecarregar o banco
-4. **Tracking**: cada scan registra um evento em `page_events` (panfleto rastreável)
+```ts
+async function urlExists(url: string): Promise<boolean> {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 3000);
+    const r = await fetch(url, { method: "HEAD", signal: ctrl.signal });
+    clearTimeout(timer);
+    return r.ok;
+  } catch { return false; }
+}
 
-## Implementação
-
-### 1. Edge Function nova: `qr-redirect`
-- Path: `supabase/functions/qr-redirect/index.ts`
-- Pública (sem JWT), recebe `?l={licenca}` ou `/r/{licenca}` via path
-- Lógica:
-  1. Busca `consultants` por `license = ?`
-  2. Busca `whatsapp_instances.connected_phone` por `consultant_id`
-  3. Fallback para `consultants.phone` se não houver instância
-  4. Fallback final pro WhatsApp da iGreen
-  5. Retorna `302 Redirect` para `https://api.whatsapp.com/send?phone={phone}&text=...`
-  6. Registra evento em `page_events` (tipo `qr_scan`, target `panfleto`)
-
-### 2. URL pública amigável
-A URL final do QR ficará:
-```
-https://zlzasfhcxcznaprrragl.supabase.co/functions/v1/qr-redirect?l=SUALICENCA
+if (await urlExists(videoUrl)) {
+  await sendMedia(ctx, { url: videoUrl, mediatype: "video", caption: "..." });
+} else {
+  console.warn("[bot-flow] vídeo indisponível, pulando para mensagem com botões");
+}
 ```
 
-Curta o suficiente pro QR caber bem. Se quiser ainda mais limpo, podemos usar Supabase Edge com domínio custom depois.
+## Como o WhatsApp vai exibir
 
-### 3. Atualizar `CadastroPage.tsx` (modo print)
-Trocar a linha que monta `whatsappBotUrl` pra usar o link de redirect:
+Quando o `sendMedia` da Evolution recebe URL válida + `mediatype: "video"`, o WhatsApp renderiza **automaticamente como player nativo** (thumbnail + botão play), não como link. Isso já está correto no código — o problema era só o arquivo não existir.
 
-```tsx
-// Hoje:
-const whatsappBotUrl = `https://api.whatsapp.com/send?phone=${phoneNumber}&text=${botMessage}`;
+## Validação após deploy
 
-// Vai virar (só no print view):
-const printQrUrl = `${SUPABASE_URL}/functions/v1/qr-redirect?l=${consultant.license}`;
-<QRCodeSVG value={printQrUrl} ... />
-```
-
-A tela web do `/cadastro/{licenca}` continua usando o link direto (mais rápido, sem redirect intermediário). **Só o QR impresso usa o redirect**, que é onde precisa ser à prova de falha.
-
-## Validação antes de imprimir
-
-Após implementar, faço um checklist com você:
-1. ✅ Escaneia o QR e abre o WhatsApp certo
-2. ✅ Simula troca de número (atualiza `connected_phone` no banco) → escaneia de novo → cai no novo número
-3. ✅ Apaga a instância → escaneia → cai no fallback do `consultants.phone`
-4. ✅ Tudo confirmado → libera pra imprimir os 1000
+1. Cliente manda mensagem no bot
+2. Clica no botão "1" (Como funciona o desconto)
+3. Vídeo `Green_Energy.mp4` chega com player nativo do WhatsApp
+4. Em seguida chegam os botões de próxima ação
+5. Não aparece nenhuma mensagem de erro
 
 ## Arquivos afetados
 
 | Arquivo | Mudança |
 |---|---|
-| `supabase/functions/qr-redirect/index.ts` | **Novo** edge function público |
-| `supabase/config.toml` | Adicionar `[functions.qr-redirect] verify_jwt = false` |
-| `src/pages/CadastroPage.tsx` | Trocar `whatsappBotUrl` por `printQrUrl` no bloco `showPrintView` (1 linha) |
+| `supabase/functions/evolution-webhook/handlers/bot-flow.ts` | Trocar `videoUrl` + adicionar `urlExists()` antes de `sendMedia` |
 
 ## Risco
 
-**Zero pros panfletos.** A função é simples, isolada, e tem 3 níveis de fallback. Mesmo que o banco caia, o WhatsApp da iGreen oficial sempre responde.
+Mínimo. URL já validada como pública e acessível. O HEAD check garante que mesmo se o arquivo for removido no futuro, o cliente não recebe mensagem de erro confusa.
 
