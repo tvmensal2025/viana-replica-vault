@@ -1281,6 +1281,11 @@ export async function executarAutomacao(customerId, options = {}) {
     // ─── FASE 4: Telefone ────────────────────────────────────────────────
     currentPhase = 'fase4-telefone';
     console.log('\n📋 [4/14] Telefone...');
+    // Fechar qualquer Modal/dialog MUI que possa estar interceptando pointer events
+    // (causa recorrente de "automation_failed" antes de clicar em Finalizar).
+    await page.keyboard.press('Escape').catch(() => {});
+    await page.locator('.MuiBackdrop-root').click({ force: true, timeout: 2000 }).catch(() => {});
+    await delay(300);
     const phoneDigits = String(data.whatsapp).replace(/\D/g, '');
     await fillByName('phone', phoneDigits, 'WhatsApp');
     await fillByName('phoneConfirm', phoneDigits, 'Confirme celular');
@@ -1526,7 +1531,8 @@ export async function executarAutomacao(customerId, options = {}) {
         await notificarClienteOTP(customerId);
         
         try {
-          const otpCode = await aguardarOTP(customerId);
+          // Timeout 5 min — cliente leva tempo até olhar o WhatsApp.
+          const otpCode = await aguardarOTP(customerId, 300000);
           // Preencher campo OTP — buscar por múltiplos seletores
           let otpField = page.locator('input[name="token"], input[name="otp"], input[name="otpCode"], input[name="code"], input[name="verificationCode"]').first();
           if (!(await otpField.count() > 0 && await otpField.isVisible().catch(() => false))) {

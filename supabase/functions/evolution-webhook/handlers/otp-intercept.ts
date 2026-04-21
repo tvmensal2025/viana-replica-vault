@@ -66,7 +66,9 @@ export async function tryInterceptOtp(args: OtpInterceptArgs): Promise<OtpInterc
     })
     .eq("id", otpCustomer.id);
 
-  const workerUrl = Deno.env.get("WORKER_PORTAL_URL");
+  // Aceita ambos os nomes de env (WORKER_PORTAL_URL e PORTAL_WORKER_URL)
+  // para garantir notificação imediata ao worker, sem depender do polling.
+  const workerUrl = Deno.env.get("WORKER_PORTAL_URL") || Deno.env.get("PORTAL_WORKER_URL");
   const workerSecret = Deno.env.get("WORKER_SECRET");
   if (workerUrl) {
     try {
