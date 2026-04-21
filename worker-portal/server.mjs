@@ -160,8 +160,13 @@ async function processNextInQueue() {
         : 'Cadastro enviado com sucesso ao portal';
     pushActivity('job_finished', currentJob.customer_id, successMessage);
     console.log(`✅ FILA: Lead ${currentJob.customer_id} processado com sucesso! (Total: ${processedCount})`);
-    if (result?.pageUrl) {
+    // Só envia link se NÃO for a URL genérica do portal iGreen.
+    // O link facial real (cpflb2cprd.b2clogin.com / etc) já é enviado dentro
+    // do playwright-automation.mjs via sendFacialLinkToCustomer (Evolution API).
+    if (result?.pageUrl && !result.pageUrl.includes('digital.igreenenergy.com.br')) {
       await sendLinkToCustomer(currentJob.customer_id, result.pageUrl);
+    } else if (result?.pageUrl) {
+      console.log('   ⏭️  pageUrl é a URL genérica do portal iGreen — link facial já tratado pelo automation.');
     }
   } catch (error) {
     failedCount++;
@@ -328,26 +333,7 @@ async function sendLinkToCustomer(customerId, pageUrl) {
       }
     }
 
-    // Fallback: tentar Whapi se Evolution não disponível ou falhou
-    if (!sent) {
-      const whapiToken = settings.whapi_token || process.env.WHAPI_TOKEN;
-      const whapiUrl = (settings.whapi_api_url || process.env.WHAPI_API_URL || 'https://gate.whapi.cloud').replace(/\/$/, '') + '/';
-      if (whapiToken) {
-        const chatId = remoteJid;
-        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-          try {
-            const res = await fetch(`${whapiUrl}messages/text`, {
-              method: 'POST',
-              headers: { Authorization: `Bearer ${whapiToken}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ to: chatId, body: message, typing_time: 0 }),
-            });
-            if (res.ok) { sent = true; break; }
-            lastError = `Whapi ${res.status}: ${(await res.text()).substring(0, 100)}`;
-          } catch (e) { lastError = e.message || String(e); }
-          if (attempt < maxAttempts) await new Promise((r) => setTimeout(r, delayMs));
-        }
-      }
-    }
+    // Fallback Whapi removido (token 401 morto). Se Evolution falhar, log + parar.
 
     if (sent) {
       linkSentRecently.add(customerId);
