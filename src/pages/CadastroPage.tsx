@@ -29,10 +29,23 @@ const CadastroPage = () => {
 
   const handlePrint = useCallback(() => {
     setShowPrintView(true);
-    setTimeout(() => {
-      window.print();
-      setTimeout(() => setShowPrintView(false), 500);
-    }, 300);
+    // Pré-carrega a imagem de fundo antes de abrir o diálogo de impressão.
+    // Sem isso, no primeiro clique a imagem ainda não está decodificada e o PDF sai em branco.
+    const preload = new Image();
+    preload.src = "/images/mutirao-lei-14300.jpg";
+    const triggerPrint = () => {
+      // Pequeno delay extra para garantir que o React renderizou o print-page
+      setTimeout(() => {
+        window.print();
+        setTimeout(() => setShowPrintView(false), 500);
+      }, 150);
+    };
+    if (preload.complete && preload.naturalWidth > 0) {
+      triggerPrint();
+    } else {
+      preload.onload = triggerPrint;
+      preload.onerror = triggerPrint; // não trava se falhar
+    }
   }, []);
 
   if (isLoading) return <LoadingScreen />;
