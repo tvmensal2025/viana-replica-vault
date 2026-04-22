@@ -93,13 +93,13 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
     // ─── 1. BOAS-VINDAS ────────────────────
     case "welcome": {
       const welcomeMsg =
-        `👋 Olá! Eu sou o assistente digital da *${nomeRepresentante}* em parceria com a *iGreen Energy*! ☀️\n\n` +
-        `💡 Você sabia que pode *economizar até 20% na sua conta de luz* sem precisar instalar nada?\n\n` +
-        `🌱 A iGreen Energy oferece energia limpa e renovável, direto da fonte para a sua casa!\n\n` +
-        `Como posso te ajudar?`;
+        `Oi! 👋 Aqui é a assistente digital da *${nomeRepresentante}*.\n\n` +
+        `Já pensou em pagar menos na sua conta de luz todo mês? 💚\n` +
+        `Com a *iGreen Energy* dá pra economizar de *8% a 20%*, de forma simples e sem complicação. ☀️\n\n` +
+        `Posso te explicar rapidinho como funciona?`;
       await sendButtons(remoteJid, welcomeMsg, [
-        { id: "entender_desconto", title: "💡 Como funciona?" },
-        { id: "cadastrar_agora", title: "📋 Cadastrar" },
+        { id: "entender_desconto", title: "💡 Quero saber mais" },
+        { id: "cadastrar_agora", title: "📋 Já quero participar" },
         { id: "falar_humano", title: "🧑 Falar com humano" },
       ]);
       updates.conversation_step = "menu_inicial";
@@ -135,10 +135,10 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
         reply = `🧑 Entendido! Um consultor da equipe *${nomeRepresentante}* entrará em contato com você em breve.\n\n⏰ Nosso horário de atendimento é de segunda a sexta, das 8h às 18h.\n\nEnquanto isso, se mudar de ideia, é só digitar *cadastrar* para iniciar!`;
         updates.conversation_step = "aguardando_humano";
       } else {
-        const retryMsg = "🤔 Não entendi sua resposta. Por favor, escolha uma das opções:";
+        const retryMsg = "Sem problemas 😊 Me conta: como prefere seguir?";
         await sendButtons(remoteJid, retryMsg, [
-          { id: "entender_desconto", title: "💡 Como funciona?" },
-          { id: "cadastrar_agora", title: "📋 Cadastrar" },
+          { id: "entender_desconto", title: "💡 Quero saber mais" },
+          { id: "cadastrar_agora", title: "📋 Já quero participar" },
           { id: "falar_humano", title: "🧑 Falar com humano" },
         ]);
         reply = "";
