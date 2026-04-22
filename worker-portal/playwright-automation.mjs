@@ -1538,8 +1538,26 @@ export async function executarAutomacao(customerId, options = {}) {
       await delay(3000);
       await screenshot(page, customerId, '10-apos-finalizar');
       
-      // Verificar se apareceu OTP
+      // ─── DIAGNÓSTICO PÓS-FINALIZAR ─────────────────────────────────
       const pageText = await page.textContent('body').catch(() => '');
+      const postClickUrl = page.url();
+      console.log(`\n   🔍 DIAGNÓSTICO PÓS-FINALIZAR:`);
+      console.log(`   📎 URL atual: ${postClickUrl}`);
+      console.log(`   📄 Texto da página (primeiros 500 chars): ${(pageText || '').substring(0, 500).replace(/\s+/g, ' ')}`);
+      
+      // Detectar erros do portal
+      const erroPortal = await page.locator('.MuiAlert-root, .error, [role="alert"], .toast-error, .Toastify__toast--error').first().textContent().catch(() => null);
+      if (erroPortal) {
+        console.error(`   🚨 ERRO DO PORTAL DETECTADO: "${erroPortal.trim()}"`);
+      }
+      
+      // Detectar mensagens de validação
+      const validationErrors = await page.locator('.MuiFormHelperText-root.Mui-error, .field-error, .validation-error, [class*="error"]').allTextContents().catch(() => []);
+      if (validationErrors.length > 0) {
+        console.error(`   🚨 ERROS DE VALIDAÇÃO: ${validationErrors.filter(e => e.trim()).join(' | ')}`);
+      }
+      
+      // Verificar se apareceu OTP
       if (/código|OTP|verificação|whatsapp|token/i.test(pageText)) {
         console.log('   📱 OTP detectado - aguardando código...');
         await atualizarStatus(customerId, 'awaiting_otp');
@@ -1679,7 +1697,15 @@ export async function executarAutomacao(customerId, options = {}) {
         console.log('   🎉 Cadastro finalizado com sucesso (sem link facial detectado)');
         await atualizarStatus(customerId, 'portal_submitted');
       } else {
-        throw new Error('Portal não confirmou envio do formulário após clicar em Finalizar');
+        // Salvar HTML completo para diagnóstico
+        await screenshot(page, customerId, '13-FALHOU-sem-confirmacao');
+        const htmlDump = await page.content().catch(() => 'N/A');
+        const dumpPath = join(SCREENSHOTS_DIR, `${customerId}-FALHOU-dump-${Date.now()}.html`);
+        try { writeFileSync(dumpPath, htmlDump); console.log(`   📄 HTML dump salvo: ${dumpPath}`); } catch (_) {}
+        console.error(`   ❌ FALHA: Portal não confirmou envio.`);
+        console.error(`   📎 URL: ${page.url()}`);
+        console.error(`   📄 Texto (500 chars): ${(finalPageText || '').substring(0, 500).replace(/\s+/g, ' ')}`);
+        throw new Error(`Portal não confirmou envio após Finalizar. URL: ${page.url()} | Texto: ${(finalPageText || '').substring(0, 200).replace(/\s+/g, ' ')}`);
       }
       
       const pageUrl = page.url();
@@ -1715,11 +1741,28 @@ export async function executarAutomacao(customerId, options = {}) {
     throw new Error('Fluxo terminou sem submit real do portal');
 
   } catch (error) {
-    console.error(`\n❌ ERRO na automação (fase: ${currentPhase}):`, error.message);
+    console.error(`\n${'='.repeat(70)}`);
+    console.error(`❌ ERRO NA AUTOMAÇÃO`);
+    console.error(`   Fase: ${currentPhase}`);
+    console.error(`   Erro: ${error.message}`);
+    console.error(`   Customer: ${customerId}`);
+    console.error(`   Tempo: ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
+    console.error('='.repeat(70));
     
     try {
       if (typeof page !== 'undefined' && page) {
         await screenshot(page, customerId, `ERROR-${currentPhase}`);
+        // Capturar contexto extra para diagnóstico
+        const errUrl = page.url();
+        const errText = await page.textContent('body').catch(() => '');
+        console.error(`   📎 URL no momento do erro: ${errUrl}`);
+        console.error(`   📄 Texto da página (200 chars): ${(errText || '').substring(0, 200).replace(/\s+/g, ' ')}`);
+        // Salvar HTML dump do erro
+        const htmlDump = await page.content().catch(() => null);
+        if (htmlDump) {
+          const dumpPath = join(SCREENSHOTS_DIR, `${customerId}-ERROR-${currentPhase}-${Date.now()}.html`);
+          try { writeFileSync(dumpPath, htmlDump); console.error(`   📄 HTML dump: ${dumpPath}`); } catch (_) {}
+        }
       }
     } catch (_) {}
     
