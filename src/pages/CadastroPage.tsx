@@ -68,7 +68,7 @@ const CadastroPage = () => {
   const phoneNumber = instancePhone || normalizedFallback;
 
   const botMessage = encodeURIComponent(
-    "Olá! Gostaria de fazer meu cadastro na iGreen Energy e enviar meus documentos."
+    "Oi! 👋 Vi sobre a iGreen Energy e quero saber como economizar na minha conta de luz."
   );
 
   const whatsappBotUrl = `https://api.whatsapp.com/send?phone=${phoneNumber}&text=${botMessage}`;
