@@ -3,7 +3,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const FALLBACK_PHONE = "5511989000650"; // WhatsApp oficial iGreen
-const DEFAULT_MESSAGE = "Olá! Gostaria de fazer meu cadastro na iGreen Energy e enviar meus documentos.";
+const DEFAULT_MESSAGE = "Oi! 👋 Vi sobre a iGreen Energy e quero saber como economizar na minha conta de luz.";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
