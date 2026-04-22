@@ -93,7 +93,7 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
     // ─── 1. BOAS-VINDAS ────────────────────
     case "welcome": {
       const welcomeMsg =
-        `Oi! 👋 Aqui é a assistente digital da *${nomeRepresentante}*.\n\n` +
+        `Oi! 👋 Aqui é o assistente digital de *${nomeRepresentante}*.\n\n` +
         `Já pensou em pagar menos na sua conta de luz todo mês? 💚\n` +
         `Com a *iGreen Energy* dá pra economizar de *8% a 20%*, de forma simples e sem complicação. ☀️\n\n` +
         `Posso te explicar rapidinho como funciona?`;
