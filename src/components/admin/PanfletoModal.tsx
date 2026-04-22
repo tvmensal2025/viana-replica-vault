@@ -28,9 +28,7 @@ const H = BG_H * SCALE;
 // Posições (em coords da imagem original 853x1280) dos overlays.
 // A imagem base agora não tem QR nem faixa de licenciado — desenhamos tudo
 // sobre a área do painel solar (canto inferior esquerdo, fundo escuro).
-const QR_BOX = { x: 32, y: 880, size: 170 };
-// Card branco do QR comporta o nome do consultor + telefone abaixo do código.
-const CARD_EXTRA_BOTTOM = 70; // espaço extra reservado pro texto do consultor
+const QR_BOX = { x: 32, y: 855, size: 170 };
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -77,7 +75,7 @@ async function renderPanfleto(
   const qrBoxX = (QR_BOX.x - qrPad) * SCALE;
   const qrBoxY = (QR_BOX.y - qrPad) * SCALE;
   const qrBoxW = (QR_BOX.size + qrPad * 2) * SCALE;
-  const qrBoxH = (QR_BOX.size + qrPad * 2 + CARD_EXTRA_BOTTOM) * SCALE;
+  const qrBoxH = (QR_BOX.size + qrPad * 2) * SCALE;
 
   ctx.save();
   ctx.shadowColor = "rgba(0,0,0,0.35)";
@@ -107,48 +105,37 @@ async function renderPanfleto(
   const qrY = QR_BOX.y * SCALE;
   ctx.drawImage(qrImg, qrX, qrY, qrPx, qrPx);
 
-  // 4) Texto do consultor DENTRO do card branco, abaixo do QR
-  const textBlockY = (QR_BOX.y + QR_BOX.size + 14) * SCALE;
-  const textBlockX = (QR_BOX.x + QR_BOX.size / 2) * SCALE;
+  // 4) Faixa verde escura LOGO ACIMA do CTA "QUER SABER COMO?"
+  //    com LICENCIADO + ID + WHATSAPP
+  const STRIPE_Y = 1040;
+  const STRIPE_H = 38;
+  const stripeY = STRIPE_Y * SCALE;
+  const stripeH = STRIPE_H * SCALE;
+
+  // Faixa principal verde escura
+  ctx.fillStyle = "#0d3b1f";
+  ctx.fillRect(0, stripeY, W, stripeH);
+  // Linha dourada de acento no topo e base
+  ctx.fillStyle = "#d4a017";
+  ctx.fillRect(0, stripeY, W, 2 * SCALE);
+  ctx.fillRect(0, stripeY + stripeH - 2 * SCALE, W, 2 * SCALE);
 
   const nomeUpper = (nomeConsultor || "CONSULTOR IGREEN").toUpperCase();
   const idLabel = igreenId ? ` • ID ${igreenId}` : "";
-  const phoneFmt = formatBrPhone(telefoneConsultor);
+  const phoneFmt = formatBrPhone(telefoneConsultor) || "FALE COMIGO";
 
-  ctx.textAlign = "center";
-  ctx.textBaseline = "top";
+  ctx.textBaseline = "middle";
+  const stripeMidY = stripeY + stripeH / 2;
 
-  // Linha 1: nome + ID em verde escuro
-  ctx.fillStyle = "#0d3b1f";
-  ctx.font = `900 ${11 * SCALE}px Montserrat, "Arial Black", sans-serif`;
-  ctx.fillText(`${nomeUpper}${idLabel}`, textBlockX, textBlockY);
+  // Esquerda: LICENCIADO em dourado
+  ctx.fillStyle = "#ffd700";
+  ctx.font = `900 ${15 * SCALE}px Montserrat, "Arial Black", sans-serif`;
+  ctx.textAlign = "left";
+  ctx.fillText(`LICENCIADO: ${nomeUpper}${idLabel}`, 28 * SCALE, stripeMidY);
 
-  // Linha 2: WhatsApp em dourado, dentro de pílula verde
-  if (phoneFmt) {
-    const pillY = textBlockY + 22 * SCALE;
-    const pillH = 26 * SCALE;
-    const pillW = (QR_BOX.size - 8) * SCALE;
-    const pillX = textBlockX - pillW / 2;
-    ctx.fillStyle = "#0d3b1f";
-    ctx.beginPath();
-    const r = 13 * SCALE;
-    ctx.moveTo(pillX + r, pillY);
-    ctx.lineTo(pillX + pillW - r, pillY);
-    ctx.quadraticCurveTo(pillX + pillW, pillY, pillX + pillW, pillY + r);
-    ctx.lineTo(pillX + pillW, pillY + pillH - r);
-    ctx.quadraticCurveTo(pillX + pillW, pillY + pillH, pillX + pillW - r, pillY + pillH);
-    ctx.lineTo(pillX + r, pillY + pillH);
-    ctx.quadraticCurveTo(pillX, pillY + pillH, pillX, pillY + pillH - r);
-    ctx.lineTo(pillX, pillY + r);
-    ctx.quadraticCurveTo(pillX, pillY, pillX + r, pillY);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.fillStyle = "#ffd700";
-    ctx.font = `900 ${12 * SCALE}px Montserrat, "Arial Black", sans-serif`;
-    ctx.textBaseline = "middle";
-    ctx.fillText(`📱 +55 ${phoneFmt}`, textBlockX, pillY + pillH / 2);
-  }
+  // Direita: WHATSAPP em dourado
+  ctx.textAlign = "right";
+  ctx.fillText(`WHATSAPP: +55 ${phoneFmt}`, W - 28 * SCALE, stripeMidY);
 }
 
 export function PanfletoModal({
