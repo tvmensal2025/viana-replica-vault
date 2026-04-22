@@ -1654,56 +1654,121 @@ export async function executarAutomacao(customerId, options = {}) {
       const currentUrl = page.url();
       let facialLink = null;
 
-      // Estratégia 1: Buscar links na página (certisign, assinatura, sign, facial, biometria)
-      const linkSelectors = [
-        'a[href*="certisign"]', 'a[href*="assinatura"]', 'a[href*="sign"]',
-        'a[href*="facial"]', 'a[href*="biometria"]', 'a[href*="validacao"]',
-        'a[href*="reconhecimento"]', 'a[href*="selfie"]',
-      ];
-      for (const sel of linkSelectors) {
-        const links = await page.locator(sel).all();
-        for (const link of links) {
+      // Blacklist: telas de login de distribuidoras (CPFL, etc) — NUNCA são link facial
+      const BLACKLIST = /cpflb2cprd|b2clogin\.com|microsoftonline|oauth2\/v2\.0\/authorize/i;
+      // Whitelist: padrões válidos para link de validação/assinatura
+      const VALID_FACIAL = /(digital\.igreenenergy\.com\.br\/validacao-codigo|certisign|\/facial|\/biometria|\/selfie|\/assinatura|\/validacao-codigo)/i;
+      const isValidFacial = (url) => !!url && url.startsWith('http') && !BLACKLIST.test(url) && VALID_FACIAL.test(url);
+
+      // Estratégia 1 (PRIORIDADE MÁXIMA): Buscar padrão canônico iGreen
+      // digital.igreenenergy.com.br/validacao-codigo/{codigo}?id={consultor}&sendcontract=true
+      try {
+        const igreenLinks = await page.locator('a[href*="digital.igreenenergy.com.br/validacao-codigo"]').all();
+        for (const link of igreenLinks) {
           const href = await link.getAttribute('href').catch(() => null);
-          if (href && href.startsWith('http')) {
+          if (isValidFacial(href)) {
             facialLink = href;
-            console.log(`   🔗 Link facial encontrado (seletor ${sel}): ${facialLink}`);
+            console.log(`   🔗 [Estratégia 1 - canônico iGreen] Link facial: ${facialLink}`);
             break;
           }
         }
-        if (facialLink) break;
-      }
+        if (!facialLink && currentUrl && /digital\.igreenenergy\.com\.br\/validacao-codigo/i.test(currentUrl)) {
+          facialLink = currentUrl;
+          console.log(`   🔗 [Estratégia 1 - URL atual canônica] Link facial: ${facialLink}`);
+        }
+        if (!facialLink) {
+          const iframesIgreen = await page.locator('iframe[src*="digital.igreenenergy.com.br/validacao-codigo"]').all();
+          for (const ifr of iframesIgreen) {
+            const src = await ifr.getAttribute('src').catch(() => null);
+            if (isValidFacial(src)) {
+              facialLink = src;
+              console.log(`   🔗 [Estratégia 1 - iframe canônico] Link facial: ${facialLink}`);
+              break;
+            }
+          }
+        }
+      } catch (e1) { console.warn(`   ⚠️ Estratégia 1 falhou: ${e1.message}`); }
 
-      // Estratégia 2: Buscar qualquer link externo visível na página pós-OTP
+      // Estratégia 2 (refinada): Seletores específicos — sem `*="sign"` solto (matchava CPFL signin)
       if (!facialLink) {
-        const allLinks = await page.locator('a[href^="http"]').all();
-        for (const link of allLinks) {
-          const href = await link.getAttribute('href').catch(() => null);
-          const text = await link.textContent().catch(() => '');
-          if (href && /facial|assinatura|sign|biometria|validar|reconhecimento|selfie|contrato/i.test(text + ' ' + href)) {
-            facialLink = href;
-            console.log(`   🔗 Link facial encontrado (texto): ${facialLink}`);
-            break;
+        const linkSelectors = [
+          'a[href*="certisign.com"]',
+          'a[href*="/assinatura"]', 'a[href*="/sign/"]', 'a[href*="/signature"]',
+          'a[href*="/facial"]', 'a[href*="/biometria"]', 'a[href*="/validacao-codigo"]',
+          'a[href*="/reconhecimento"]', 'a[href*="/selfie"]',
+        ];
+        for (const sel of linkSelectors) {
+          const links = await page.locator(sel).all();
+          for (const link of links) {
+            const href = await link.getAttribute('href').catch(() => null);
+            if (!href || !href.startsWith('http')) continue;
+            if (BLACKLIST.test(href)) {
+              console.log(`   🚫 Descartado (blacklist CPFL/B2C): ${href}`);
+              continue;
+            }
+            if (isValidFacial(href)) {
+              facialLink = href;
+              console.log(`   🔗 [Estratégia 2 - seletor ${sel}] Link facial: ${facialLink}`);
+              break;
+            }
           }
+          if (facialLink) break;
         }
       }
 
-      // Estratégia 3: Se a URL atual mudou para uma página de assinatura/facial
-      if (!facialLink && currentUrl && /facial|assinatura|sign|biometria|certisign/i.test(currentUrl)) {
+      // Estratégia 3: URL atual mudou para página válida de assinatura/facial (sem CPFL)
+      if (!facialLink && currentUrl && !BLACKLIST.test(currentUrl) && /facial|biometria|certisign|\/assinatura|\/selfie|\/validacao-codigo/i.test(currentUrl)) {
         facialLink = currentUrl;
-        console.log(`   🔗 URL atual é o link facial: ${facialLink}`);
+        console.log(`   🔗 [Estratégia 3 - URL atual] Link facial: ${facialLink}`);
       }
 
-      // Estratégia 4: Buscar em iframes
+      // Estratégia 4: iframes (filtrando blacklist)
       if (!facialLink) {
-        const iframes = await page.locator('iframe[src*="certisign"], iframe[src*="sign"], iframe[src*="facial"]').all();
+        const iframes = await page.locator('iframe[src*="certisign"], iframe[src*="/facial"], iframe[src*="/assinatura"], iframe[src*="/biometria"]').all();
         for (const iframe of iframes) {
           const src = await iframe.getAttribute('src').catch(() => null);
-          if (src && src.startsWith('http')) {
+          if (isValidFacial(src)) {
             facialLink = src;
-            console.log(`   🔗 Link facial encontrado (iframe): ${facialLink}`);
+            console.log(`   🔗 [Estratégia 4 - iframe] Link facial: ${facialLink}`);
             break;
           }
         }
+      }
+
+      // Estratégia 5 (FALLBACK CONSTRUTIVO): se portal mostra sucesso mas nenhum link foi achado,
+      // construir URL canônica a partir de igreen_code do customer + igreen_id do consultor.
+      if (!facialLink && /código validado|codigo validado|cadastro concluíd|cadastro concluid|cadastro realizado|cadastro finalizado|sucesso/i.test(finalPageText)) {
+        try {
+          const supabase = getSupabase();
+          if (supabase) {
+            const { data: cust } = await supabase
+              .from('customers')
+              .select('igreen_code, consultant_id')
+              .eq('id', customerId)
+              .single();
+            let igreenId = null;
+            if (cust?.consultant_id) {
+              const { data: cons } = await supabase
+                .from('consultants')
+                .select('igreen_id')
+                .eq('id', cust.consultant_id)
+                .single();
+              igreenId = cons?.igreen_id || null;
+            }
+            if (cust?.igreen_code && igreenId) {
+              facialLink = `https://digital.igreenenergy.com.br/validacao-codigo/${cust.igreen_code}?id=${igreenId}&sendcontract=true`;
+              console.log(`   🔗 [Estratégia 5 - fallback construtivo] Link facial: ${facialLink}`);
+            } else {
+              console.warn(`   ⚠️ Fallback impossível: igreen_code=${cust?.igreen_code} igreen_id=${igreenId}`);
+            }
+          }
+        } catch (e5) { console.warn(`   ⚠️ Estratégia 5 falhou: ${e5.message}`); }
+      }
+
+      // Validação final: se algo passou mas é inválido (ex: CPFL escapou), descartar
+      if (facialLink && !isValidFacial(facialLink)) {
+        console.error(`   ❌ Link facial inválido capturado, descartando: ${facialLink}`);
+        facialLink = null;
       }
 
       await screenshot(page, customerId, '12-pos-otp-facial');
