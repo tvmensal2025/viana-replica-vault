@@ -11,12 +11,41 @@ import express from 'express';
 import { createClient } from '@supabase/supabase-js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { writeFileSync, existsSync, readFileSync, unlinkSync } from 'fs';
 import dotenv from 'dotenv';
 // SOLUÇÃO 2: Import ESTÁTICO garante UMA ÚNICA instância do módulo (e do activeBrowser)
 import { executarAutomacao } from './playwright-automation.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SINGLETON LOCK — Impede múltiplas instâncias do worker na mesma máquina
+// ═══════════════════════════════════════════════════════════════════════════════
+const LOCK_FILE = join(__dirname, '.worker.lock');
+function acquireLock() {
+  const myPid = process.pid;
+  if (existsSync(LOCK_FILE)) {
+    try {
+      const oldPid = parseInt(readFileSync(LOCK_FILE, 'utf-8').trim(), 10);
+      // Verificar se o processo antigo ainda está vivo
+      try { process.kill(oldPid, 0); /* processo existe */ 
+        console.error(`\n🚫 OUTRA INSTÂNCIA JÁ ESTÁ RODANDO (PID ${oldPid}). Encerrando esta.`);
+        console.error(`   Se isso é um erro, delete o arquivo: ${LOCK_FILE}`);
+        process.exit(1);
+      } catch (_) {
+        // Processo morto — lock file órfão, podemos tomar
+        console.warn(`⚠️  Lock file órfão encontrado (PID ${oldPid} morto). Assumindo controle.`);
+      }
+    } catch (_) {}
+  }
+  writeFileSync(LOCK_FILE, String(myPid));
+  console.log(`🔒 Lock adquirido (PID ${myPid})`);
+}
+function releaseLock() {
+  try { unlinkSync(LOCK_FILE); } catch (_) {}
+}
+acquireLock();
 
 // Carregar variáveis de ambiente (.env.local da raiz do projeto)
 dotenv.config({ path: join(__dirname, '..', '.env.local') });
@@ -1013,13 +1042,31 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('\n⏸️  SIGTERM recebido. Encerrando servidor...');
+// Graceful shutdown — espera job atual terminar antes de encerrar
+let isShuttingDown = false;
+async function gracefulShutdown(signal) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  console.log(`\n⏸️  ${signal} recebido.`);
+  
+  if (currentJob) {
+    console.log(`   ⏳ Aguardando job atual terminar (${currentJob.customer_id})...`);
+    // Esperar até 120s pelo job atual
+    const maxWait = 120000;
+    const start = Date.now();
+    while (currentJob && (Date.now() - start) < maxWait) {
+      await new Promise(r => setTimeout(r, 1000));
+    }
+    if (currentJob) {
+      console.warn(`   ⚠️  Timeout esperando job. Encerrando forçado.`);
+    } else {
+      console.log(`   ✅ Job finalizado. Encerrando limpo.`);
+    }
+  }
+  
+  releaseLock();
   process.exit(0);
-});
+}
 
-process.on('SIGINT', () => {
-  console.log('\n⏸️  SIGINT recebido. Encerrando servidor...');
-  process.exit(0);
-});
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));

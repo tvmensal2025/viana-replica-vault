@@ -1186,7 +1186,21 @@ export async function executarAutomacao(customerId, options = {}) {
     browser = await chromium.launch({
       headless: isHeadless,
       slowMo: isHeadless ? 50 : 100,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--start-maximized'],
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--disable-extensions',
+        '--disable-background-networking',
+        '--disable-default-apps',
+        '--disable-sync',
+        '--disable-translate',
+        '--no-first-run',
+        '--single-process',
+        '--js-flags=--max-old-space-size=256',
+        '--start-maximized',
+      ],
     });
     activeBrowser = browser; // Registrar como browser ativo
     
@@ -1251,8 +1265,30 @@ export async function executarAutomacao(customerId, options = {}) {
     // ─── FASE 1: CEP + Valor + Calcular ──────────────────────────────────
     currentPhase = 'fase1-cep';
     console.log('\n📋 [1/14] CEP + Valor + Calcular...');
-    await fillByName('cep', data.cepFormatted.replace(/\D/g, ''), 'CEP');
-    await fillByName('consumption', String(data.electricity_bill_value), 'Valor');
+    
+    // Retry interno: se campos não aparecem, recarrega a página (até 2x)
+    let fase1Ok = false;
+    for (let fase1Try = 1; fase1Try <= 3; fase1Try++) {
+      const cepOk = await fillByName('cep', data.cepFormatted.replace(/\D/g, ''), 'CEP');
+      const valOk = await fillByName('consumption', String(data.electricity_bill_value), 'Valor');
+      
+      if (cepOk && valOk) {
+        fase1Ok = true;
+        break;
+      }
+      
+      if (fase1Try < 3) {
+        console.warn(`   ⚠️ Campos não apareceram (tentativa ${fase1Try}/3) — recarregando portal...`);
+        await page.reload({ waitUntil: 'networkidle', timeout: 60000 });
+        await delay(3000);
+        await page.waitForSelector('input[name="cep"], button:has-text("Calcular")', { state: 'visible', timeout: 30000 }).catch(() => {});
+      }
+    }
+    
+    if (!fase1Ok) {
+      throw new Error('Campos CEP/Consumo não apareceram após 3 tentativas de reload');
+    }
+    
     await page.locator('button:has-text("Calcular")').first().click();
     await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
     await delay(2000);
