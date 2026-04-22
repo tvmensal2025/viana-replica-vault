@@ -25,12 +25,15 @@ const GREEN_DARK = "#15803d";
 const TEXT = "#0F172A";
 const MUTED = "#64748b";
 
-function loadImage(src: string): Promise<HTMLImageElement> {
+function loadImage(src: string, useCors = false): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.crossOrigin = "anonymous";
+    if (useCors) img.crossOrigin = "anonymous";
     img.onload = () => resolve(img);
-    img.onerror = reject;
+    img.onerror = (e) => {
+      console.error("[panfleto] image load failed:", src, e);
+      reject(new Error(`Failed to load ${src}`));
+    };
     img.src = src;
   });
 }
