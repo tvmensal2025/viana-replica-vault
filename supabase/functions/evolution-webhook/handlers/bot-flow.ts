@@ -922,7 +922,7 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
         reply = "❌ Opção inválida. Digite novamente:";
       } else {
         updates.conversation_step = "aguardando_conta";
-        reply = `👋 Olá! Eu sou o assistente da *${nomeRepresentante}* em parceria com a *iGreen Energy*!\n\n📸 *Envie uma FOTO ou PDF da sua conta de energia* para começarmos!\n\nFormatos aceitos: JPG, PNG ou PDF`;
+        reply = `👋 Olá! Eu sou o assistente de *${nomeRepresentante}* em parceria com a *iGreen Energy*!\n\n📸 *Envie uma FOTO ou PDF da sua conta de energia* para começarmos!\n\nFormatos aceitos: JPG, PNG ou PDF`;
       }
       break;
     }
