@@ -1,4 +1,4 @@
-import { Copy, Globe, QrCode } from "lucide-react";
+import { Copy, Globe, QrCode, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LinkCard } from "./LinkCard";
 import { LinkIcon } from "lucide-react";
@@ -8,9 +8,10 @@ interface LinksTabProps {
   baseUrl: string;
   onCopy: (url: string) => void;
   onQrOpen: (url: string, label: string) => void;
+  onPanfletoOpen?: () => void;
 }
 
-export function LinksTab({ slug, baseUrl, onCopy, onQrOpen }: LinksTabProps) {
+export function LinksTab({ slug, baseUrl, onCopy, onQrOpen, onPanfletoOpen }: LinksTabProps) {
   return (
     <div className="space-y-6">
       {/* Main Links */}
@@ -21,6 +22,23 @@ export function LinksTab({ slug, baseUrl, onCopy, onQrOpen }: LinksTabProps) {
         <LinkCard emoji="🏠" title="Landing Page — Cliente" description="Para captar clientes que querem desconto na conta de luz" url={`https://${baseUrl}/${slug}`} onCopy={onCopy} previewUrl={`/${slug}`} />
         <LinkCard emoji="💼" title="Landing Page — Licenciado" description="Para recrutar novos licenciados para sua equipe" url={`https://${baseUrl}/licenciado/${slug}`} onCopy={onCopy} previewUrl={`/licenciado/${slug}`} />
         <LinkCard emoji="📱" title="Página de Cadastro" description="Cadastro rápido em 3 minutos via WhatsApp com QR Code" url={`https://${baseUrl}/cadastro/${slug}`} onCopy={onCopy} previewUrl={`/cadastro/${slug}`} />
+
+        {onPanfletoOpen && (
+          <div className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-xl border-2 border-primary/30 p-5 flex items-center gap-4">
+            <div className="w-14 h-14 rounded-xl bg-primary/20 flex items-center justify-center text-2xl shrink-0">
+              📄
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-foreground">Panfleto pronto pra gráfica</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                A5 com QR único da sua licença + G verde no centro. Imprima quantos quiser — sempre vai pro seu WhatsApp atual.
+              </p>
+            </div>
+            <Button onClick={onPanfletoOpen} className="gap-2 shrink-0">
+              <FileText className="w-4 h-4" /> Gerar panfleto
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Tracking Links */}

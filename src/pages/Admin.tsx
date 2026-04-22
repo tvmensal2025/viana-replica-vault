@@ -26,6 +26,7 @@ const CustomerManager = lazy(() => import("@/components/whatsapp/CustomerManager
 const AutoMessageLog = lazy(() => import("@/components/whatsapp/AutoMessageLog").then(m => ({ default: m.AutoMessageLog })));
 const MaterialsTab = lazy(() => import("@/components/admin/MaterialsTab").then(m => ({ default: m.MaterialsTab })));
 const NetworkPanel = lazy(() => import("@/components/admin/NetworkPanel").then(m => ({ default: m.NetworkPanel })));
+const PanfletoModal = lazy(() => import("@/components/admin/PanfletoModal").then(m => ({ default: m.PanfletoModal })));
 
 const AdminContent = () => {
   const { privacyMode, togglePrivacy } = usePrivacyMode();
@@ -38,6 +39,7 @@ const AdminContent = () => {
   const [pendingChatPhone, setPendingChatPhone] = useState<string | null>(null);
   const [pendingChatMessage, setPendingChatMessage] = useState<string | undefined>(undefined);
   const [qrModal, setQrModal] = useState<{ url: string; label: string } | null>(null);
+  const [panfletoOpen, setPanfletoOpen] = useState(false);
   const [aiChatOpen, setAiChatOpen] = useState(false);
   const [periodDays, setPeriodDays] = useState(30);
 
@@ -275,7 +277,13 @@ const AdminContent = () => {
           )}
 
           {activeTab === "links" && (
-            <LinksTab slug={slug} baseUrl={baseUrl} onCopy={copyLink} onQrOpen={(url, label) => setQrModal({ url, label })} />
+            <LinksTab
+              slug={slug}
+              baseUrl={baseUrl}
+              onCopy={copyLink}
+              onQrOpen={(url, label) => setQrModal({ url, label })}
+              onPanfletoOpen={() => setPanfletoOpen(true)}
+            />
           )}
 
           {activeTab === "materiais" && (
@@ -372,6 +380,18 @@ const AdminContent = () => {
       {aiChatOpen && (
         <Suspense fallback={null}>
           <AIChatPanel open={aiChatOpen} onClose={() => setAiChatOpen(false)} />
+        </Suspense>
+      )}
+
+      {/* Panfleto Modal */}
+      {panfletoOpen && (
+        <Suspense fallback={null}>
+          <PanfletoModal
+            open={panfletoOpen}
+            onClose={() => setPanfletoOpen(false)}
+            licenca={slug}
+            nomeConsultor={form.name || ""}
+          />
         </Suspense>
       )}
     </div>

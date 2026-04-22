@@ -2,7 +2,7 @@
 // Público (sem JWT). Recebe ?l={licenca}. Sempre retorna um redirect — nunca quebra os panfletos.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
-const FALLBACK_PHONE = "5511989000650"; // WhatsApp oficial iGreen
+const SITE_URL = "https://igreen.institutodossonhos.com.br";
 const DEFAULT_MESSAGE = "Oi! 👋 Vi sobre a iGreen Energy e quero saber como economizar na minha conta de luz.";
 
 const corsHeaders = {
@@ -46,8 +46,8 @@ Deno.serve(async (req) => {
     const message = url.searchParams.get("msg") || DEFAULT_MESSAGE;
 
     if (!licenca) {
-      // Sem licença → fallback iGreen (panfleto NUNCA quebra)
-      return redirectTo(buildWhatsappUrl(FALLBACK_PHONE, message));
+      // Sem licença → site institucional (panfleto NUNCA quebra, sem expor número pessoal)
+      return redirectTo(SITE_URL);
     }
 
     const supabase = createClient(
@@ -90,12 +90,14 @@ Deno.serve(async (req) => {
       }).then(() => {});
     }
 
-    // 4) Fallback final: WhatsApp oficial iGreen
-    if (!phone) phone = FALLBACK_PHONE;
+    // 4) Fallback final: landing page do consultor (sem expor número pessoal)
+    if (!phone) {
+      return redirectTo(`${SITE_URL}/${licenca}`);
+    }
 
     return redirectTo(buildWhatsappUrl(phone, message));
   } catch (e) {
     console.error("[qr-redirect] error:", e);
-    return redirectTo(buildWhatsappUrl(FALLBACK_PHONE, DEFAULT_MESSAGE));
+    return redirectTo(SITE_URL);
   }
 });
