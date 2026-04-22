@@ -1,10 +1,10 @@
 # Dockerfile para Worker VPS - Portal iGreen
-# VERSÃO 11.2 - 2026-04-18 (BULLETPROOF: telefone NUNCA falha — re-lookup + page.keyboard + 5 retries)
+# VERSÃO 11.3 - 2026-04-21 (CORRIGIDO: copia todos os arquivos + npm ci)
 
 FROM node:20-bookworm-slim
 
-LABEL version="v11.3-2026.04.18"
-LABEL changelog="fallback-email-tvmensal11,fallback-phone-11971254913,waitForSelector-email-phone,confirmacao-aguarda-campo"
+LABEL version="v11.3-2026.04.21"
+LABEL changelog="fix-dockerfile-copy-all,npm-ci,package-lock"
 
 # Instalar dependências do sistema para Playwright + VNC + noVNC
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -19,17 +19,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 RUN mkdir -p /tmp screenshots fixtures
 
-# Copiar package.json e instalar dependências
-COPY package.json ./
-RUN npm install
+# Copiar package.json + package-lock.json e instalar dependências
+COPY package.json package-lock.json ./
+RUN npm ci --only=production
 
 # Instalar Playwright e Chromium
 RUN npx playwright install chromium
+RUN npx playwright install-deps chromium
 
-# Copiar código
-COPY server.mjs ./
-COPY playwright-automation.mjs ./
-COPY phase-logger.mjs ./
+# Copiar TODOS os arquivos de código (.mjs, .html, .sh)
+COPY *.mjs ./
+COPY *.html ./
 COPY start.sh ./
 RUN chmod +x start.sh
 
@@ -38,7 +38,7 @@ ENV NODE_ENV=production
 ENV PORT=3100
 ENV HEADLESS=1
 ENV DISPLAY=:99
-ENV WORKER_VERSION=v11.0-2026.04.18
+ENV WORKER_VERSION=v11.3-2026.04.21
 ENV FALLBACK_EMAIL=tvmensal11@gmail.com
 ENV FALLBACK_PHONE=11971254913
 
