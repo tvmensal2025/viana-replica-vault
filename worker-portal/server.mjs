@@ -189,13 +189,31 @@ async function processNextInQueue() {
         : 'Cadastro enviado com sucesso ao portal';
     pushActivity('job_finished', currentJob.customer_id, successMessage);
     console.log(`✅ FILA: Lead ${currentJob.customer_id} processado com sucesso! (Total: ${processedCount})`);
-    // Só envia link se NÃO for a URL genérica do portal iGreen.
-    // O link facial real (cpflb2cprd.b2clogin.com / etc) já é enviado dentro
-    // do playwright-automation.mjs via sendFacialLinkToCustomer (Evolution API).
-    if (result?.pageUrl && !result.pageUrl.includes('digital.igreenenergy.com.br')) {
-      await sendLinkToCustomer(currentJob.customer_id, result.pageUrl);
-    } else if (result?.pageUrl) {
-      console.log('   ⏭️  pageUrl é a URL genérica do portal iGreen — link facial já tratado pelo automation.');
+    // Link facial já é enviado dentro do playwright-automation.mjs via
+    // sendFacialLinkToCustomer (e gravado em customers.link_facial). Aqui só
+    // disparamos sendLinkToCustomer como rede de segurança caso o automation
+    // tenha terminado SEM gravar link_facial no banco (ex: cadastro_concluido
+    // direto sem fase facial). Evita envio duplicado.
+    if (result?.pageUrl) {
+      try {
+        const supabase = getSupabase();
+        let alreadySent = false;
+        if (supabase) {
+          const { data: c } = await supabase
+            .from('customers')
+            .select('link_facial')
+            .eq('id', currentJob.customer_id)
+            .single();
+          alreadySent = !!c?.link_facial;
+        }
+        if (!alreadySent) {
+          await sendLinkToCustomer(currentJob.customer_id, result.pageUrl);
+        } else {
+          console.log('   ⏭️  link_facial já gravado pelo automation — pulando envio duplicado');
+        }
+      } catch (linkErr) {
+        console.warn(`   ⚠️ Falha ao decidir envio de link: ${linkErr.message}`);
+      }
     }
   } catch (error) {
     failedCount++;
