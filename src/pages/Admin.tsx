@@ -391,6 +391,8 @@ const AdminContent = () => {
             onClose={() => setPanfletoOpen(false)}
             licenca={slug}
             nomeConsultor={form.name || ""}
+            telefoneConsultor={form.phone || ""}
+            igreenId={form.igreen_id || ""}
           />
         </Suspense>
       )}
