@@ -1,58 +1,70 @@
 
 
-## Diagnóstico: por que o OTP não chega no portal
+## Bug: link errado enviado após OTP
 
-O cliente digitou `873723` no WhatsApp e **o webhook capturou corretamente** (salvou em `customers.otp_code`). Mas o portal nunca recebeu o código por **3 problemas em cadeia**:
+### O que está acontecendo
 
-### Problema 1: Variável de ambiente errada no Supabase (CRÍTICO)
-O webhook (`otp-intercept.ts`) tenta avisar o worker via `Deno.env.get("WORKER_PORTAL_URL")` — **mas o secret cadastrado no Supabase chama `PORTAL_WORKER_URL`** (invertido). Resultado: o webhook salva no banco, mas **nunca POSTa para `/confirm-otp` do worker**. O worker só descobre o OTP via polling no Supabase a cada 4.5s (estratégia 2 do `aguardarOTP`).
+Após o cliente digitar o OTP, o worker procura o link de validação facial na página com a estratégia 1:
 
-### Problema 2: VALDEIR atual nem chegou ao "aguardando OTP"
-Logs mostram que esta automação travou na FASE 4 (WhatsApp) com `Modal MUI interceptando pointer events` e virou `automation_failed` ANTES de clicar em Finalizar. Browser fechou. Quando o cliente digitou `873723`, **não havia browser aberto** para receber o código.
+```js
+'a[href*="certisign"]', 'a[href*="assinatura"]', 'a[href*="sign"]',  // ← BUG
+'a[href*="facial"]', 'a[href*="biometria"]', 'a[href*="validacao"]',
+```
 
-### Problema 3: Link facial não sai pelo WhatsApp
-Mesmo nas automações que **funcionaram** (VALDEIR antigo + SIRLENE — ambos com `link_facial` salvo no banco), o `sendLinkToCustomer()` no `server.mjs` falha com `Whapi 401`. Isso porque o `pageUrl` retornado é a URL do portal iGreen e ele tenta Evolution + Whapi como fallback. O **`sendFacialLinkToCustomer` (que usa Evolution e funciona) nunca chega a ser efetivo** porque a função genérica do server sobrescreve a tentativa.
+O seletor `a[href*="sign"]` faz match parcial com qualquer URL que contenha `sign` — incluindo `B2C_1A_SIGNUP_SIGNIN_MFA_FRONT` da CPFL. Quando a página pós-OTP renderiza o link da CPFL (banner de autenticação da distribuidora) **antes** do link real da iGreen, o worker captura o link errado e envia ao cliente.
 
----
+O link correto da iGreen segue o padrão:
+```
+https://digital.igreenenergy.com.br/validacao-codigo/{codigoCliente}?id={consultorId}&sendcontract=true
+```
 
-## Plano de correção
+E hoje está sendo **descartado pela blacklist** em `server.mjs:195` (que ignora qualquer URL com `digital.igreenenergy.com.br` por achar que é a URL genérica do portal).
 
-### 1. Webhook Supabase — `otp-intercept.ts`
-Aceitar **ambos** os nomes de env (`WORKER_PORTAL_URL` E `PORTAL_WORKER_URL`) para notificação imediata ao worker (zero polling lag).
+### Correção
 
-### 2. Worker `playwright-automation.mjs` — Modal MUI bloqueando phone
-Antes de clicar em qualquer campo da FASE 4 (WhatsApp), fechar qualquer Modal/dialog visível com `Escape` ou clicar no backdrop. Isso resolve o `automation_failed` recorrente do VALDEIR.
+**Arquivo: `worker-portal/playwright-automation.mjs`** (estratégia de captura do link facial, ~linhas 1657-1707)
 
-### 3. Worker `playwright-automation.mjs` — aumentar timeout OTP
-Mudar `aguardarOTP(customerId, 120000)` para `300000` (5 min). Cliente leva tempo até olhar o WhatsApp depois que o código chega.
+1. **Estratégia 1 (NOVA — prioridade máxima):** procurar especificamente o padrão iGreen `digital.igreenenergy.com.br/validacao-codigo/...` no DOM, na URL atual e em iframes. Se achar, usa esse link e ignora todo o resto.
 
-### 4. Worker `server.mjs` — desativar fallback Whapi quebrado
-Remover o fallback Whapi do `sendLinkToCustomer` (linhas 332-350). Se Evolution falhar, log de erro claro e parar — sem tentar token Whapi morto que polui logs.
+2. **Estratégia 2 (refinada):** trocar `a[href*="sign"]` por seletores mais específicos:
+   - `a[href*="certisign.com"]`
+   - `a[href*="/assinatura"]`, `a[href*="/sign/"]`, `a[href*="/signature"]`
+   - `a[href*="/facial"]`, `a[href*="/biometria"]`, `a[href*="/validacao-codigo"]`, `a[href*="/reconhecimento"]`, `a[href*="/selfie"]`
+   - Remove o `*="sign"` solto que matchava `signin` da CPFL.
 
-### 5. Worker `server.mjs` — não enviar URL do portal genérica
-Detectar se `pageUrl` é a URL do portal iGreen (não-facial) e **pular o envio**. O link facial real já é enviado dentro do `playwright-automation.mjs` via `sendFacialLinkToCustomer` (que funciona). Hoje o server envia uma URL inútil por cima.
+3. **Blacklist anti-CPFL:** em qualquer estratégia, descartar URLs que contenham `cpflb2cprd`, `b2clogin.com`, `microsoftonline`, `oauth2/v2.0/authorize` — são telas de login de distribuidora, nunca o link facial.
 
-### 6. Reativar lead VALDEIR atual (UPDATE pontual)
-Resetar o lead `24712654-5b2d-40fe-a7d0-fe71cfec7cfe` (status → `data_complete`, limpar `otp_code` e `error_message`) para que o auto-recovery reprocesse com as correções dos passos 2 e 3.
+4. **Validação final:** antes de salvar e enviar, validar o link capturado contra um regex positivo: deve conter um destes domínios/paths: `digital.igreenenergy.com.br/validacao-codigo`, `certisign`, `/facial`, `/biometria`, `/selfie`, `/assinatura`. Se não passar, lança erro claro `"Link facial inválido capturado: <url>"` em vez de enviar lixo ao cliente.
 
----
+5. **Fallback construtivo:** se nenhum link foi achado mas o portal mostra texto de sucesso (`código validado`, `cadastro concluído`), tentar **construir** o link a partir do `igreen_code` do cliente no banco + `igreen_id` do consultor: `https://digital.igreenenergy.com.br/validacao-codigo/{igreen_code}?id={igreen_id}&sendcontract=true`. Se nem isso for possível, falhar explicitamente sem enviar nada.
 
-## Detalhes técnicos
+**Arquivo: `worker-portal/server.mjs`** (~linha 195)
 
-| # | Arquivo | Mudança |
-|---|---------|---------|
-| 1 | `supabase/functions/evolution-webhook/handlers/otp-intercept.ts` | `Deno.env.get("WORKER_PORTAL_URL") \|\| Deno.env.get("PORTAL_WORKER_URL")` |
-| 2 | `worker-portal/playwright-automation.mjs` (FASE 4) | `await page.keyboard.press('Escape').catch(()=>{}); await page.locator('.MuiBackdrop-root').click({force:true,timeout:2000}).catch(()=>{});` antes do `phone` |
-| 3 | `worker-portal/playwright-automation.mjs` linha 1529 | `aguardarOTP(customerId, 300000)` |
-| 4 | `worker-portal/server.mjs` linhas 332-350 | Remover bloco Whapi fallback |
-| 5 | `worker-portal/server.mjs` linha 164 | `if (result?.pageUrl && !result.pageUrl.includes('digital.igreenenergy.com.br')) await sendLinkToCustomer(...)` |
-| 6 | Migração SQL pontual | `UPDATE customers SET status='data_complete', otp_code=NULL, error_message=NULL WHERE id='24712654-5b2d-40fe-a7d0-fe71cfec7cfe'` |
+6. **Remover a blacklist** que descarta `digital.igreenenergy.com.br` — agora que a captura prioriza o padrão correto, a URL do portal iGreen passa a ser **desejada**, não evitada. O `sendLinkToCustomer` genérico continua sendo bypass redundante (o `sendFacialLinkToCustomer` interno já envia), então o `if` vira simplesmente: só envia se ainda não houver `link_facial` salvo no banco para esse cliente.
+
+**Migração SQL pontual**
+
+7. Resetar a Zilda (`8e859d0b-38b1-46ab-972e-99f8086a12c0`): limpar `link_facial`, `link_assinatura`, voltar `status='data_complete'`, `conversation_step=null` para o auto-recovery reprocessar com a correção. Manter `otp_code` resetado.
+
+### Detalhes técnicos
+
+| # | Arquivo | Linha | Mudança |
+|---|---------|-------|---------|
+| 1 | `worker-portal/playwright-automation.mjs` | ~1657 (estratégia 1) | Buscar primeiro `a[href*="digital.igreenenergy.com.br/validacao-codigo"]` + checar `page.url()` |
+| 2 | mesma | linha 1659 | Remover `'a[href*="sign"]'`, trocar por `'a[href*="certisign"]', 'a[href*="/sign/"]', 'a[href*="/signature"]'` |
+| 3 | mesma | dentro do loop de captura | `if (/cpflb2cprd\|b2clogin\|microsoftonline\|oauth2\/v2/i.test(href)) continue;` |
+| 4 | mesma | antes do `if (facialLink)` linha 1712 | `const VALID_FACIAL = /(digital\.igreenenergy\.com\.br\/validacao-codigo\|certisign\|\/facial\|\/biometria\|\/selfie\|\/assinatura)/i; if (facialLink && !VALID_FACIAL.test(facialLink)) { facialLink = null; }` |
+| 5 | mesma | novo bloco fallback | Buscar `igreen_code` do customer + `igreen_id` do consultor → construir URL canônica |
+| 6 | `worker-portal/server.mjs` | 195 | Remover bloco inteiro do `if (result?.pageUrl && !...)`. Não precisa mais — captura interna já cuida. |
+| 7 | Migração SQL | — | `UPDATE customers SET link_facial=NULL, link_assinatura=NULL, status='data_complete', conversation_step=NULL, otp_code=NULL, error_message=NULL, portal_submitted_at=NULL, updated_at=now() WHERE id='8e859d0b-38b1-46ab-972e-99f8086a12c0'` |
 
 ### O que NÃO vou alterar
-- Não vou desabilitar o intercept de OTP (funciona)
-- Não vou mexer no fluxo do browser além de fechar Modal MUI
-- Não vou deletar o `_whapiSettings` ainda (usado para `whapi-media:` legado de mídia antiga)
+
+- Não mexo no fluxo de OTP (funciona)
+- Não mexo no upload de documentos
+- Não mexo na detecção de erros do portal (validações duplicadas continuam sendo logadas)
 
 ### Após o deploy
-Itens 1-5 entram em vigor automaticamente (Edge Function + EasyPanel auto-deploy do worker). Item 6 reativa o lead atual para reprocessar.
+
+Itens 1-6 entram em vigor no próximo deploy do worker (auto-deploy EasyPanel). Item 7 reativa a Zilda — em ~5min o auto-recovery pega ela e tenta de novo. Desta vez, ao receber o OTP, capturará o link `digital.igreenenergy.com.br/validacao-codigo/...` correto e enviará via WhatsApp.
 
