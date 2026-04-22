@@ -382,6 +382,18 @@ const AdminContent = () => {
           <AIChatPanel open={aiChatOpen} onClose={() => setAiChatOpen(false)} />
         </Suspense>
       )}
+
+      {/* Panfleto Modal */}
+      {panfletoOpen && (
+        <Suspense fallback={null}>
+          <PanfletoModal
+            open={panfletoOpen}
+            onClose={() => setPanfletoOpen(false)}
+            licenca={slug}
+            nomeConsultor={form.name || ""}
+          />
+        </Suspense>
+      )}
     </div>
   );
 };
