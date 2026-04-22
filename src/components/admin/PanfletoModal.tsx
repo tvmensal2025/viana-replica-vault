@@ -28,9 +28,7 @@ const H = BG_H * SCALE;
 // Posições (em coords da imagem original 853x1280) dos overlays.
 // A imagem base agora não tem QR nem faixa de licenciado — desenhamos tudo
 // sobre a área do painel solar (canto inferior esquerdo, fundo escuro).
-const QR_BOX = { x: 32, y: 880, size: 170 };
-// Card branco do QR comporta o nome do consultor + telefone abaixo do código.
-const CARD_EXTRA_BOTTOM = 70; // espaço extra reservado pro texto do consultor
+const QR_BOX = { x: 32, y: 855, size: 170 };
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -77,7 +75,7 @@ async function renderPanfleto(
   const qrBoxX = (QR_BOX.x - qrPad) * SCALE;
   const qrBoxY = (QR_BOX.y - qrPad) * SCALE;
   const qrBoxW = (QR_BOX.size + qrPad * 2) * SCALE;
-  const qrBoxH = (QR_BOX.size + qrPad * 2 + CARD_EXTRA_BOTTOM) * SCALE;
+  const qrBoxH = (QR_BOX.size + qrPad * 2) * SCALE;
 
   ctx.save();
   ctx.shadowColor = "rgba(0,0,0,0.35)";
