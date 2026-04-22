@@ -29,7 +29,7 @@ const H = BG_H * SCALE;
 // QR card amarelo está em ~x:38-188, y:918-1078.
 // Linha "LICENCIADO ... WHATSAPP ..." está em ~y:1132.
 const QR_BOX = { x: 38, y: 918, size: 150 };
-const FOOTER_Y = 1132;
+const FOOTER_Y = 1184;
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -105,28 +105,7 @@ async function renderPanfleto(
   const qrY = QR_BOX.y * SCALE;
   ctx.drawImage(qrImg, qrX, qrY, qrPx, qrPx);
 
-  // 4) G verde no centro do QR (~22% de área)
-  const centerX = qrX + qrPx / 2;
-  const centerY = qrY + qrPx / 2;
-  const logoDiameter = qrPx * 0.22;
-  ctx.fillStyle = "#ffffff";
-  ctx.beginPath();
-  ctx.arc(centerX, centerY, logoDiameter / 2 + 4 * SCALE, 0, Math.PI * 2);
-  ctx.fill();
-  try {
-    const logo = await loadImage("/images/g-verde.png");
-    ctx.drawImage(
-      logo,
-      centerX - logoDiameter / 2,
-      centerY - logoDiameter / 2,
-      logoDiameter,
-      logoDiameter,
-    );
-  } catch {
-    /* fallback: círculo branco */
-  }
-
-  // 5) Tampar a faixa "LICENCIADO ... WHATSAPP ..." e re-escrever dinâmico
+  // 4) Tampar a faixa "LICENCIADO ... WHATSAPP ..." e re-escrever dinâmico
   const stripeY = (FOOTER_Y - 18) * SCALE;
   const stripeH = 36 * SCALE;
   ctx.fillStyle = "#0d3b1f"; // verde escuro do panfleto
