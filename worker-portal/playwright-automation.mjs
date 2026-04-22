@@ -1200,7 +1200,24 @@ export async function executarAutomacao(customerId, options = {}) {
     currentPhase = 'navegacao';
     console.log(`\n🔗 Acessando: ${PORTAL_URL}`);
     await page.goto(PORTAL_URL, { waitUntil: 'networkidle', timeout: 60000 });
-    await delay(1500);
+    await delay(2000);
+    
+    // Aguardar formulário React renderizar (campo CEP ou botão Calcular)
+    // Se VPS estiver lenta, o HTML carrega mas o JS/React demora pra montar os inputs
+    const portalReady = await page.waitForSelector(
+      'input[name="cep"], button:has-text("Calcular")',
+      { state: 'visible', timeout: 30000 }
+    ).catch(() => null);
+    if (!portalReady) {
+      console.warn('   ⚠️ Formulário não renderizou em 30s — recarregando página...');
+      await page.reload({ waitUntil: 'networkidle', timeout: 60000 });
+      await delay(3000);
+      await page.waitForSelector(
+        'input[name="cep"], button:has-text("Calcular")',
+        { state: 'visible', timeout: 30000 }
+      ).catch(() => {});
+    }
+    
     await screenshot(page, customerId, '01-portal-carregado');
     console.log('✅ Portal carregado');
     
@@ -1210,7 +1227,7 @@ export async function executarAutomacao(customerId, options = {}) {
     // ═══════════════════════════════════════════════════════════════════
 
     /** Preenche campo por name, aguardando aparecer. Usa pressSequentially para React. */
-    async function fillByName(nameAttr, value, label, timeoutMs = 10000) {
+    async function fillByName(nameAttr, value, label, timeoutMs = 20000) {
       const sel = `input[name="${nameAttr}"]`;
       try {
         await page.waitForSelector(sel, { state: 'visible', timeout: timeoutMs });
