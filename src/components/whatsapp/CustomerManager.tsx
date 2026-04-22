@@ -278,8 +278,7 @@ export function CustomerManager({ customers, consultantId, onCustomersChange, in
               {([
                 ["all", "Todos", "📊"], 
                 ["energia", "Energia", "⚡"], 
-                ["telefonia", "Telecom", "📱"], 
-                ["whatsapp", "WhatsApp", "💬"]
+                ["telefonia", "Telecom", "📱"]
               ] as const).map(([val, label, icon]) => (
                 <button 
                   key={val} 
