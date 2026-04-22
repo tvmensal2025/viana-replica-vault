@@ -522,7 +522,7 @@ async function notificarClienteOTP(customerId) {
     const remoteJid = `${phone}@s.whatsapp.net`;
 
     const nome = customer.name?.split(' ')[0] || '';
-    const message = `📱 *Código de Verificação*\n\nOlá${nome ? ' ' + nome : ''}! Você vai receber um *código numérico* no WhatsApp enviado pela iGreen/CPFL.\n\n👉 *Quando receber, digite o código aqui neste chat* para eu finalizar seu cadastro!\n\n⏳ Aguardando o código...`;
+    const message = `📱 *Código de Verificação*\n\nOlá${nome ? ' ' + nome : ''}! Você vai receber um *código numérico* no WhatsApp enviado pela iGreen Energy.\n\n👉 *Quando receber, digite o código aqui neste chat* para eu finalizar seu cadastro!\n\n⏳ Aguardando o código...`;
 
     const res = await fetch(`${evolutionUrl}/message/sendText/${instanceName}`, {
       method: 'POST',
