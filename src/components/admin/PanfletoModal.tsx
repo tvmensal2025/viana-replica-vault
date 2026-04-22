@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 import jsPDF from "jspdf";
 import { Button } from "@/components/ui/button";
@@ -173,20 +173,31 @@ async function renderPanfleto(
 export function PanfletoModal({ open, onClose, licenca, nomeConsultor }: PanfletoModalProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [rendering, setRendering] = useState(false);
+  const [ready, setReady] = useState(false);
   const { toast } = useToast();
 
   const redirectUrl = `${SUPABASE_URL}/functions/v1/qr-redirect?l=${encodeURIComponent(licenca)}`;
 
+  // Callback ref: dispara quando o canvas é montado no DOM (depois do portal do Dialog)
+  const setCanvasRef = useCallback((el: HTMLCanvasElement | null) => {
+    canvasRef.current = el;
+    if (el) setReady(true);
+  }, []);
+
   useEffect(() => {
-    if (!open || !canvasRef.current) return;
+    if (!open) {
+      setReady(false);
+      return;
+    }
+    if (!ready || !canvasRef.current) return;
     setRendering(true);
     renderPanfleto(canvasRef.current, redirectUrl, nomeConsultor)
       .catch((e) => {
         console.error("[panfleto] render error", e);
-        toast({ title: "Erro ao gerar panfleto", variant: "destructive" });
+        toast({ title: "Erro ao gerar panfleto", description: String(e?.message || e), variant: "destructive" });
       })
       .finally(() => setRendering(false));
-  }, [open, redirectUrl, nomeConsultor, toast]);
+  }, [open, ready, redirectUrl, nomeConsultor, toast]);
 
   const downloadPNG = () => {
     const canvas = canvasRef.current;
@@ -232,14 +243,16 @@ export function PanfletoModal({ open, onClose, licenca, nomeConsultor }: Panflet
             </p>
           </div>
 
-          <div className="bg-white rounded-xl border border-border overflow-hidden flex items-center justify-center p-4 min-h-[400px]">
+          <div className="relative bg-white rounded-xl border border-border overflow-hidden flex items-center justify-center p-4 min-h-[400px]">
             {rendering && (
-              <div className="absolute flex items-center gap-2 text-muted-foreground">
+              <div className="absolute inset-0 flex items-center justify-center gap-2 text-muted-foreground bg-white/80 z-10">
                 <Loader2 className="w-5 h-5 animate-spin" /> Gerando panfleto…
               </div>
             )}
             <canvas
-              ref={canvasRef}
+              ref={setCanvasRef}
+              width={W}
+              height={H}
               className="max-w-full h-auto shadow-lg"
               style={{ maxHeight: "70vh" }}
             />
