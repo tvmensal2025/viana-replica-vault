@@ -784,14 +784,14 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
       // Validar DDD
       const ddd = parseInt(phoneClean.substring(0, 2));
       if (ddd < 11 || ddd > 99) { reply = "❌ DDD inválido. Informe um telefone com DDD válido (ex: 11999998888):"; break; }
-      // Buscar telefone do consultor para evitar auto-cadastro acidental
+      // Buscar telefone do consultor + número da instância conectada para evitar auto-cadastro acidental
       try {
-        const { data: cons } = await supabase
-          .from("consultants")
-          .select("phone")
-          .eq("id", consultorId)
-          .maybeSingle();
-        if (cons?.phone && isSameContact(phoneClean, cons.phone)) {
+        const [{ data: cons }, { data: inst }] = await Promise.all([
+          supabase.from("consultants").select("phone").eq("id", consultorId).maybeSingle(),
+          supabase.from("whatsapp_instances").select("connected_phone").eq("consultant_id", consultorId).maybeSingle(),
+        ]);
+        const blockNumbers = [cons?.phone, inst?.connected_phone].filter(Boolean) as string[];
+        if (blockNumbers.some((n) => isSameContact(phoneClean, n))) {
           reply = "❌ Esse telefone é o número do consultor. Por favor, informe *seu próprio telefone* de contato:";
           break;
         }
@@ -813,10 +813,10 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
     case "ask_email": {
       const txt = (messageText || "").trim();
       const lower = txt.toLowerCase();
-      // ── PULAR explícito → marca lead como pendente de revisão (NÃO vai pro portal) ──
-      if (["pular", "skip", "não tenho", "nao tenho", "sem email", "n", "não", "nao"].includes(lower)) {
-        updates.status = "email_pendente_revisao";
-        reply = "📌 Sem problemas! Marquei seu cadastro como *pendente de e-mail*.\n\nUm consultor vai entrar em contato para finalizar com você. Obrigado! ☀️";
+      // ⚠️ Email é OBRIGATÓRIO no portal iGreen. Não aceitar PULAR — repetir até cliente fornecer email real.
+      // Se cliente disser que não tem, orientar a criar um Gmail rápido.
+      if (["pular", "skip", "não tenho", "nao tenho", "sem email", "sem e-mail", "n", "não", "nao"].includes(lower)) {
+        reply = "📧 Preciso de um *e-mail* para finalizar seu cadastro no portal iGreen.\n\nSe você não tem, pode criar um agora em *gmail.com* — leva 1 minuto.\n\nDepois é só enviar aqui (ex: nome.sobrenome@gmail.com):";
         break;
       }
       // ── Validação dura: formato + placeholder + email do consultor ──
