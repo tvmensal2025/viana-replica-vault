@@ -1,4 +1,3 @@
-// Edge function temporária para validar GEMINI_API_KEY
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -6,14 +5,17 @@ const corsHeaders = {
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
-  const key = Deno.env.get('GEMINI_API_KEY');
+  const url = new URL(req.url);
+  const which = url.searchParams.get('key') ?? 'GEMINI_API_KEY';
+  const model = url.searchParams.get('model') ?? 'gemini-2.5-flash';
+  const key = Deno.env.get(which);
   if (!key) {
-    return new Response(JSON.stringify({ ok: false, error: 'GEMINI_API_KEY missing' }), {
+    return new Response(JSON.stringify({ ok: false, error: `${which} missing` }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   }
   const r = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -26,6 +28,8 @@ Deno.serve(async (req) => {
   const data = await r.json();
   return new Response(JSON.stringify({
     ok: r.ok && !data.error,
+    which,
+    model,
     status: r.status,
     keyPrefix: key.slice(0, 10),
     text: data?.candidates?.[0]?.content?.parts?.[0]?.text ?? null,
