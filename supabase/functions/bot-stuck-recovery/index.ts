@@ -101,8 +101,8 @@ Deno.serve(async (req) => {
     } else {
       query = query
         .lt("last_bot_reply_at", cutoff)
-        .not("conversation_step", "is", null)
-        .not("status", "in", "(complete,cadastro_concluido,portal_submitting,registered_igreen)")
+        .in("conversation_step", Array.from(RESCUABLE_STEPS))
+        .not("status", "in", "(complete,cadastro_concluido,portal_submitting,registered_igreen,approved,awaiting_signature,automation_failed)")
         .neq("status", "abandoned")
         .order("last_bot_reply_at", { ascending: true })
         .limit(MAX_RESCUES_PER_RUN);
