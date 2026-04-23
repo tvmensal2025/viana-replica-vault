@@ -19,6 +19,7 @@ import { CrmAnalyticsTab } from "@/components/superadmin/CrmAnalyticsTab";
 import { AuditLogPanel } from "@/components/superadmin/AuditLogPanel";
 import { BotFunnelPanel } from "@/components/superadmin/BotFunnelPanel";
 import { WorkerPhaseTimeline } from "@/components/superadmin/WorkerPhaseTimeline";
+import { StuckLeadsWidget } from "@/components/superadmin/StuckLeadsWidget";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { logAdminAction } from "@/hooks/useAdminAudit";
 
@@ -332,6 +333,9 @@ const SuperAdmin = () => {
                 </div>
               ))}
             </div>
+
+            {/* Stuck Leads Widget — visibilidade em tempo real */}
+            <StuckLeadsWidget />
 
             {/* Search */}
             <div className="flex items-center gap-3">

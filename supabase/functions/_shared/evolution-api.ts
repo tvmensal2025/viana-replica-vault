@@ -179,8 +179,12 @@ export function createEvolutionSender(apiUrl: string, apiKey: string, instanceNa
 
 /**
  * Extrai dados da mensagem Evolution API
+ *
+ * @param body Payload bruto da Evolution
+ * @param instanceConnectedPhone (opcional) Telefone conectado da instância — se o remoteJid
+ *        for o próprio número conectado, ignoramos a mensagem (auto-mensagem do consultor).
  */
-export function parseEvolutionMessage(body: any) {
+export function parseEvolutionMessage(body: any, instanceConnectedPhone?: string | null) {
   const data = body.data || body;
   const key = data.key || {};
   const message = data.message || {};
@@ -202,6 +206,18 @@ export function parseEvolutionMessage(body: any) {
     remoteJid.includes("@broadcast")
   ) {
     return null;
+  }
+
+  // ── BLINDAGEM ANTI-SELF-MESSAGE ──
+  // Se o número remetente == número conectado da instância, é auto-mensagem
+  // (consultor mandando do próprio celular). Ignoramos para não criar lead lixo.
+  if (instanceConnectedPhone) {
+    const remotePhone = remoteJid.replace(/@s\.whatsapp\.net$/, "").replace(/@c\.us$/, "").replace(/\D/g, "");
+    const connected = String(instanceConnectedPhone).replace(/\D/g, "");
+    if (remotePhone && connected && (remotePhone === connected || remotePhone.endsWith(connected) || connected.endsWith(remotePhone))) {
+      logStructured("info", "evolution_self_message_ignored", { remoteJid, connected_phone: connected });
+      return null;
+    }
   }
 
   // Extrair texto

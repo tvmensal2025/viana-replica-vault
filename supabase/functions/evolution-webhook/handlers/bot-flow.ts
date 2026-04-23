@@ -247,6 +247,23 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
             reply = `⚠️ Não consegui ler a conta com clareza suficiente (qualidade: ${confianca}%).\n\n📸 Por favor, envie uma *foto mais nítida e bem iluminada* da conta de energia.\n\nDicas:\n• Use boa iluminação\n• Evite reflexos\n• Foco nos dados principais\n• Tire em ambiente claro`;
             break;
           }
+          // BLINDAGEM: OCR pode retornar sucesso=true com dados vazios.
+          // Exigir ao menos 3 campos críticos preenchidos.
+          const criticos = [d.nome, d.endereco, d.cep, d.cidade, d.distribuidora, d.numeroInstalacao, d.valorConta]
+            .filter((v) => v && String(v).trim().length > 0);
+          if (criticos.length < 3) {
+            jsonLog("warn", "OCR conta com poucos campos válidos", { customer_id: customer.id, validos: criticos.length });
+            const tries = (customer.ocr_conta_attempts || 0) + 1;
+            updates.ocr_conta_attempts = tries;
+            if (tries < 2) {
+              updates.conversation_step = "aguardando_conta";
+              reply = "⚠️ Recebi a conta mas não consegui extrair os dados principais.\n\n📸 Envie uma *foto mais nítida* mostrando claramente:\n• Seu nome\n• Endereço\n• Distribuidora\n• Valor da conta";
+            } else {
+              updates.conversation_step = "ask_name";
+              reply = "⚠️ Tive dificuldade em ler sua conta. Vou perguntar os dados manualmente.\n\nQual é o seu *nome completo*?";
+            }
+            break;
+          }
           updates.name = d.nome || "";
           updates.address_street = d.endereco || "";
           updates.address_number = d.numero || "";
@@ -775,8 +792,18 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
     }
 
     case "ask_email": {
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(messageText)) { reply = "❌ E-mail inválido. Digite um e-mail válido:"; break; }
-      updates.email = messageText.trim().toLowerCase();
+      const txt = (messageText || "").trim();
+      const lower = txt.toLowerCase();
+      // Permitir pular email com fallback automático
+      if (["pular", "skip", "não tenho", "nao tenho", "sem email", "n", "não", "nao"].includes(lower)) {
+        updates.email = `${customer.phone_whatsapp}@lead.igreen`;
+        console.log(`⏭️ Cliente pulou email — usando fallback ${updates.email}`);
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(txt)) {
+        reply = "❌ Não consegui ler esse e-mail.\n\n✅ Exemplo correto: *joao.silva@gmail.com*\n\nOu digite *PULAR* se preferir não informar.";
+        break;
+      } else {
+        updates.email = txt.toLowerCase();
+      }
       const merged = { ...customer, ...updates };
       const next = await autoResolveCepIfNeeded(merged, updates);
       updates.conversation_step = next;
@@ -814,7 +841,9 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
     }
 
     case "ask_complement": {
-      if (messageText.toLowerCase() !== "não" && messageText.toLowerCase() !== "nao" && messageText.toLowerCase() !== "n") {
+      const lower = (messageText || "").toLowerCase().trim();
+      const skipWords = ["não", "nao", "n", "pular", "skip", "sem complemento", "sem", "nenhum"];
+      if (!skipWords.includes(lower)) {
         updates.address_complement = messageText.trim();
       } else {
         updates.address_complement = "";

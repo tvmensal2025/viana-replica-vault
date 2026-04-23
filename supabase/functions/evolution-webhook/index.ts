@@ -72,7 +72,7 @@ Deno.serve(async (req) => {
 
     const { data: instanceData, error: instanceError } = await supabase
       .from("whatsapp_instances")
-      .select("id, instance_name, consultant_id")
+      .select("id, instance_name, consultant_id, connected_phone")
       .eq("instance_name", instanceName)
       .single();
 
@@ -103,9 +103,9 @@ Deno.serve(async (req) => {
     const sender = createEvolutionSender(EVOLUTION_API_URL, EVOLUTION_API_KEY, instanceName);
 
     // ─── 3) Parse + dedupe + filter ────────────────────────────────────
-    const parsed = parseEvolutionMessage(body);
+    const parsed = parseEvolutionMessage(body, instanceData.connected_phone);
     if (!parsed) {
-      console.log("⏭️ Mensagem ignorada (from_me ou grupo)");
+      console.log("⏭️ Mensagem ignorada (from_me, grupo, ou auto-mensagem da instância)");
       return new Response(JSON.stringify({ ok: true, msg: "ignored" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -289,34 +289,35 @@ Deno.serve(async (req) => {
     // GARANTIA: nunca deixar o cliente sem resposta. Se reply vazio E nenhum botão foi enviado dentro do handler,
     // injeta uma mensagem padrão de "continue" para evitar bot em silêncio.
     const handlerSentInline = reply === "" && Object.keys(updates).length > 0;
-    if (!reply && !handlerSentInline) {
+    let finalReply = reply;
+    if (!finalReply && !handlerSentInline) {
       console.warn(`⚠️ [SAFETY] Bot sem resposta no step "${stepToSend}" para ${customer.id} — enviando fallback`);
-      reply = `🤖 Estou aqui! Vamos continuar o cadastro?\n\nDigite *cadastrar* para retomar ou aguarde, já volto com você.`;
+      finalReply = `🤖 Estou aqui! Vamos continuar o cadastro?\n\nDigite *cadastrar* para retomar ou aguarde, já volto com você.`;
       captureError(new Error(`Bot empty reply at step ${stepToSend}`), {
         tags: { function: "evolution-webhook", kind: "empty_reply_safety" },
         extra: { customer_id: customer.id, step: stepToSend },
       });
     }
-    if (reply) {
+    if (finalReply) {
       try {
         if (stepToSend === "ask_phone_confirm") {
-          await sender.sendButtons(remoteJid, reply, [
+          await sender.sendButtons(remoteJid, finalReply, [
             { id: "sim_phone", title: "✅ Sim" },
             { id: "editar_phone", title: "✏️ Editar" },
             { id: "cancelar_phone", title: "❌ Cancelar" },
           ]);
         } else if (stepToSend === "ask_finalizar") {
-          await sender.sendButtons(remoteJid, reply, [
+          await sender.sendButtons(remoteJid, finalReply, [
             { id: "btn_finalizar", title: "✅ Finalizar" },
           ]);
         } else if (stepToSend === "ask_tipo_documento") {
-          await sender.sendButtons(remoteJid, reply || "Qual documento de identidade?", [
+          await sender.sendButtons(remoteJid, finalReply || "Qual documento de identidade?", [
             { id: "tipo_rg_novo", title: "📄 RG Novo" },
             { id: "tipo_rg_antigo", title: "📄 RG Antigo" },
             { id: "tipo_cnh", title: "🪪 CNH" },
           ]);
         } else {
-          await sender.sendText(remoteJid, reply);
+          await sender.sendText(remoteJid, finalReply);
         }
       } catch (e: any) {
         console.error("Erro enviar:", e);
@@ -327,7 +328,7 @@ Deno.serve(async (req) => {
     await supabase.from("conversations").insert({
       customer_id: customer.id,
       message_direction: "outbound",
-      message_text: reply || "[botões enviados]",
+      message_text: finalReply || "[botões enviados]",
       message_type: "text",
       conversation_step: updates.conversation_step || stepBefore,
     });

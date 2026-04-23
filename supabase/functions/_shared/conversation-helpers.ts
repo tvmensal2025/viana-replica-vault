@@ -101,10 +101,10 @@ export function getReplyForStep(step: string, c: any): string {
       return `Deseja permanecer com o celular *${fmt}* (que está enviando a mensagem)?`;
     }
     case "ask_phone": return "Informe seu *telefone* com DDD (ex: 11999998888):";
-    case "ask_email": return "Informe seu *e-mail*:";
+    case "ask_email": return "Informe seu *e-mail* (ex: joao.silva@gmail.com)\n\n_Ou digite *PULAR* se preferir não informar._";
     case "ask_cep": return "Qual o seu *CEP*? (8 dígitos)";
     case "ask_number": return `📍 Endereço: *${c.address_street || ""}*\n\nQual o *número* da residência?`;
-    case "ask_complement": return "Tem *complemento*? (ex: Apto 12)\nDigite *NÃO* se não tiver.";
+    case "ask_complement": return "Tem *complemento*? (ex: Apto 12)\n\nDigite *NÃO* ou *PULAR* se não tiver.";
     case "ask_installation_number": return "Qual o *número da instalação* de energia?\n(Campo \"Seu Código\" na conta de luz)";
     case "ask_bill_value": return "Qual o *valor médio* da sua conta de luz? (ex: 350)";
     case "ask_doc_frente_manual": return "📸 Envie a *FRENTE do seu documento* (RG ou CNH)";

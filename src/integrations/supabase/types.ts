@@ -410,6 +410,7 @@ export type Database = {
           igreen_code: string | null
           igreen_link: string | null
           last_bot_reply_at: string | null
+          last_rescue_at: string | null
           link_assinatura: string | null
           link_facial: string | null
           media_consumo: number | null
@@ -432,6 +433,7 @@ export type Database = {
           possui_procurador: boolean | null
           registered_by_igreen_id: string | null
           registered_by_name: string | null
+          rescue_attempts: number
           rg: string | null
           senha_pdf: string | null
           status: string
@@ -482,6 +484,7 @@ export type Database = {
           igreen_code?: string | null
           igreen_link?: string | null
           last_bot_reply_at?: string | null
+          last_rescue_at?: string | null
           link_assinatura?: string | null
           link_facial?: string | null
           media_consumo?: number | null
@@ -504,6 +507,7 @@ export type Database = {
           possui_procurador?: boolean | null
           registered_by_igreen_id?: string | null
           registered_by_name?: string | null
+          rescue_attempts?: number
           rg?: string | null
           senha_pdf?: string | null
           status?: string
@@ -554,6 +558,7 @@ export type Database = {
           igreen_code?: string | null
           igreen_link?: string | null
           last_bot_reply_at?: string | null
+          last_rescue_at?: string | null
           link_assinatura?: string | null
           link_facial?: string | null
           media_consumo?: number | null
@@ -576,6 +581,7 @@ export type Database = {
           possui_procurador?: boolean | null
           registered_by_igreen_id?: string | null
           registered_by_name?: string | null
+          rescue_attempts?: number
           rg?: string | null
           senha_pdf?: string | null
           status?: string
