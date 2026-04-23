@@ -6,6 +6,61 @@ export interface ValidationResult {
   warnings: string[];
 }
 
+// ── Listas de bloqueio (placeholders / contatos do consultor) ──
+const PLACEHOLDER_EMAIL_PATTERNS: RegExp[] = [
+  /@lead\.igreen$/i,
+  /^tvmensal/i,
+  /@teste/i,
+  /^teste@/i,
+  /^noreply@/i,
+  /^sem_email/i,
+  /^sem-email/i,
+  /@example\./i,
+  /@exemplo\./i,
+];
+
+const PLACEHOLDER_PHONE_PATTERNS: RegExp[] = [
+  /^sem_celular/i,
+  /^sem-celular/i,
+];
+
+/** Valida formato básico de email */
+export function isValidEmailFormat(email: string): boolean {
+  if (!email) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
+
+/** Detecta emails que são placeholders/de teste e nunca podem ir ao portal */
+export function isPlaceholderEmail(email: string | null | undefined): boolean {
+  if (!email) return true;
+  const t = String(email).trim();
+  if (t.length === 0) return true;
+  return PLACEHOLDER_EMAIL_PATTERNS.some((rx) => rx.test(t));
+}
+
+/** Detecta telefones placeholder (importação iGreen sem celular) */
+export function isPlaceholderPhone(phone: string | null | undefined): boolean {
+  if (!phone) return true;
+  const t = String(phone).trim();
+  if (t.length === 0) return true;
+  return PLACEHOLDER_PHONE_PATTERNS.some((rx) => rx.test(t));
+}
+
+/** Compara dois contatos (email ou phone) ignorando formatação trivial */
+export function isSameContact(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return false;
+  const na = String(a).trim().toLowerCase();
+  const nb = String(b).trim().toLowerCase();
+  if (na === nb) return true;
+  // Para telefones: comparar apenas dígitos
+  const da = na.replace(/\D/g, "");
+  const db = nb.replace(/\D/g, "");
+  if (da.length >= 10 && db.length >= 10) {
+    return da.slice(-11) === db.slice(-11);
+  }
+  return false;
+}
+
 export function validateCPF(cpf: string): boolean {
   if (!cpf) return false;
   const cpfClean = cpf.replace(/\D/g, "");
