@@ -72,7 +72,7 @@ Deno.serve(async (req) => {
 
     const { data: instanceData, error: instanceError } = await supabase
       .from("whatsapp_instances")
-      .select("id, instance_name, consultant_id")
+      .select("id, instance_name, consultant_id, connected_phone")
       .eq("instance_name", instanceName)
       .single();
 
@@ -103,9 +103,9 @@ Deno.serve(async (req) => {
     const sender = createEvolutionSender(EVOLUTION_API_URL, EVOLUTION_API_KEY, instanceName);
 
     // ─── 3) Parse + dedupe + filter ────────────────────────────────────
-    const parsed = parseEvolutionMessage(body);
+    const parsed = parseEvolutionMessage(body, instanceData.connected_phone);
     if (!parsed) {
-      console.log("⏭️ Mensagem ignorada (from_me ou grupo)");
+      console.log("⏭️ Mensagem ignorada (from_me, grupo, ou auto-mensagem da instância)");
       return new Response(JSON.stringify({ ok: true, msg: "ignored" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
