@@ -52,10 +52,14 @@ export function StuckLeadsWidget() {
   const load = async () => {
     setLoading(true);
     const cutoff = new Date(Date.now() - 10 * 60_000).toISOString();
+    // Só leads que efetivamente conversaram pela instância (têm conversation_step ask_*/aguardando_*)
+    // E que não estão em fases finais. Importações antigas (sem step) NÃO entram.
     const { data } = await supabase
       .from("customers")
       .select("id, name, phone_whatsapp, conversation_step, last_bot_reply_at, rescue_attempts, status, consultant_id")
       .lt("last_bot_reply_at", cutoff)
+      .not("conversation_step", "is", null)
+      .or("conversation_step.like.ask_%,conversation_step.like.aguardando_%,conversation_step.like.confirmando_%,conversation_step.like.editing_%,conversation_step.in.(welcome,menu_inicial,pos_video)")
       .not("status", "in", "(complete,cadastro_concluido,portal_submitting,registered_igreen,abandoned)")
       .order("last_bot_reply_at", { ascending: true })
       .limit(50);

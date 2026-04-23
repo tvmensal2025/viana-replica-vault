@@ -68,11 +68,14 @@ Deno.serve(async (req) => {
 
     const cutoff = new Date(Date.now() - STAGE1_MIN * 60_000).toISOString();
 
-    // Busca leads parados
+    // Busca leads parados — APENAS leads iniciados pela instância
+    // (têm conversation_step preenchido em fase de coleta).
+    // Leads importados/cadastrados manualmente (sem step ou em fases finais) ficam fora.
     const { data: stuck, error } = await supabase
       .from("customers")
       .select("id, phone_whatsapp, consultant_id, conversation_step, last_bot_reply_at, name, rescue_attempts, last_rescue_at, status")
       .lt("last_bot_reply_at", cutoff)
+      .not("conversation_step", "is", null)
       .not("status", "in", "(complete,cadastro_concluido,portal_submitting,registered_igreen)")
       .neq("status", "abandoned")
       .order("last_bot_reply_at", { ascending: true })
