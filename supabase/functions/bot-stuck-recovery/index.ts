@@ -1,6 +1,8 @@
-// Bot Stuck Recovery — cron a cada 30 min.
-// Detecta leads que pararam de receber resposta há > 5 min em steps "esperando ação do cliente"
-// e re-envia a última pergunta para reabrir a conversa.
+// Bot Stuck Recovery — cron a cada 5 min.
+// Sistema de 3 estágios de resgate progressivo:
+//   Estágio 1 (5min):  re-pergunta gentil
+//   Estágio 2 (2h):    re-pergunta com urgência + opção PULAR
+//   Estágio 3 (24h):   marca abandoned + alerta admin
 // Não toca em leads que já estão em fases finais (worker/portal/OTP/facial/complete).
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -13,7 +15,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const STUCK_MINUTES = 5;
+const STAGE1_MIN = 5;       // 5 min — primeira tentativa
+const STAGE2_MIN = 120;     // 2h — segunda tentativa com urgência
+const STAGE3_MIN = 24 * 60; // 24h — abandono
 const MAX_RESCUES_PER_RUN = 50;
 
 // Steps onde faz sentido re-perguntar. Steps técnicos (portal/otp/facial) NÃO entram.
@@ -35,6 +39,9 @@ const RESCUABLE_STEPS = new Set([
   "editing_doc_rg", "editing_doc_nascimento",
 ]);
 
+// Steps onde podemos sugerir "PULAR" (campos opcionais)
+const SKIPPABLE_STEPS = new Set(["ask_email", "ask_complement"]);
+
 const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL") || "";
 const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY") || "";
 
@@ -44,7 +51,7 @@ Deno.serve(async (req) => {
   }
 
   const startedAt = Date.now();
-  const stats = { scanned: 0, rescued: 0, skipped: 0, errors: 0 };
+  const stats = { scanned: 0, stage1: 0, stage2: 0, stage3_abandoned: 0, skipped: 0, errors: 0 };
 
   try {
     const supabase = createClient(
@@ -59,14 +66,15 @@ Deno.serve(async (req) => {
       );
     }
 
-    const cutoff = new Date(Date.now() - STUCK_MINUTES * 60_000).toISOString();
+    const cutoff = new Date(Date.now() - STAGE1_MIN * 60_000).toISOString();
 
     // Busca leads parados
     const { data: stuck, error } = await supabase
       .from("customers")
-      .select("id, phone_whatsapp, consultant_id, conversation_step, last_bot_reply_at, name")
+      .select("id, phone_whatsapp, consultant_id, conversation_step, last_bot_reply_at, name, rescue_attempts, last_rescue_at, status")
       .lt("last_bot_reply_at", cutoff)
       .not("status", "in", "(complete,cadastro_concluido,portal_submitting,registered_igreen)")
+      .neq("status", "abandoned")
       .order("last_bot_reply_at", { ascending: true })
       .limit(MAX_RESCUES_PER_RUN);
 
@@ -103,6 +111,30 @@ Deno.serve(async (req) => {
         continue;
       }
 
+      // Determina qual estágio aplicar baseado no tempo desde o último reply do bot
+      const idleMinutes = (Date.now() - new Date(lead.last_bot_reply_at).getTime()) / 60_000;
+      const attempts = lead.rescue_attempts || 0;
+
+      // Anti-spam: não enviar dois rescues seguidos no mesmo lead se o último foi < 4 min atrás
+      if (lead.last_rescue_at) {
+        const sinceLastRescue = (Date.now() - new Date(lead.last_rescue_at).getTime()) / 60_000;
+        if (sinceLastRescue < 4) {
+          stats.skipped++;
+          continue;
+        }
+      }
+
+      // ── ESTÁGIO 3: 24h+ → abandonar
+      if (idleMinutes >= STAGE3_MIN) {
+        await supabase
+          .from("customers")
+          .update({ status: "abandoned", error_message: `Lead abandonado após 24h sem resposta no step ${step}` })
+          .eq("id", lead.id);
+        stats.stage3_abandoned++;
+        console.log(`🔴 Stage3 ABANDONED ${lead.id} (step: ${step}, idle: ${Math.round(idleMinutes)}min)`);
+        continue;
+      }
+
       try {
         const instanceName = await getInstanceName(lead.consultant_id);
         if (!instanceName) {
@@ -121,14 +153,34 @@ Deno.serve(async (req) => {
           .single();
 
         const baseReply = getReplyForStep(step, full || lead);
-        const rescueMsg = `👋 Oi${lead.name ? `, ${String(lead.name).split(" ")[0]}` : ""}! Estamos por aqui esperando você.\n\n${baseReply}`;
+        const firstName = lead.name ? `, ${String(lead.name).split(" ")[0]}` : "";
+        let rescueMsg: string;
+        let stageUsed: 1 | 2;
+
+        // ── ESTÁGIO 2: 2h+ → urgência + dica de PULAR
+        if (idleMinutes >= STAGE2_MIN) {
+          stageUsed = 2;
+          const skipHint = SKIPPABLE_STEPS.has(step)
+            ? "\n\n💡 *Dica:* Se preferir, digite *PULAR* para esse campo."
+            : "";
+          rescueMsg = `⏰ Olá${firstName}! Para finalizarmos seu cadastro com a iGreen, preciso só desta informação:\n\n${baseReply}${skipHint}\n\n_Caso não queira mais continuar, é só ignorar esta mensagem._`;
+        } else {
+          // ── ESTÁGIO 1: 5min — gentil
+          stageUsed = 1;
+          rescueMsg = `👋 Oi${firstName}! Ainda está aí? Vamos continuar de onde paramos:\n\n${baseReply}`;
+        }
 
         const sent = await sender.sendText(remoteJid, rescueMsg);
         if (sent) {
-          stats.rescued++;
+          if (stageUsed === 1) stats.stage1++;
+          else stats.stage2++;
           await supabase
             .from("customers")
-            .update({ last_bot_reply_at: new Date().toISOString() })
+            .update({
+              last_bot_reply_at: new Date().toISOString(),
+              last_rescue_at: new Date().toISOString(),
+              rescue_attempts: attempts + 1,
+            })
             .eq("id", lead.id);
           await supabase.from("conversations").insert({
             customer_id: lead.id,
@@ -137,7 +189,7 @@ Deno.serve(async (req) => {
             message_type: "text",
             conversation_step: step,
           });
-          console.log(`✅ Rescued ${lead.id} (step: ${step})`);
+          console.log(`✅ Stage${stageUsed} rescued ${lead.id} (step: ${step}, idle: ${Math.round(idleMinutes)}min, attempts: ${attempts + 1})`);
         } else {
           stats.errors++;
         }
