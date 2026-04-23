@@ -5,12 +5,14 @@
   "type": "module",
   "main": "server.mjs",
   "scripts": {
-    "start": "node server.mjs",
-    "dev": "node --watch server.mjs",
+    "start": "node --import ./instrument.mjs server.mjs",
+    "dev": "node --watch --import ./instrument.mjs server.mjs",
     "test": "node ../scripts/submit-lead-to-portal.mjs --file=../scripts/fixtures/lead-test.json"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.97.0",
+    "@sentry/node": "^8.45.0",
+    "@sentry/profiling-node": "^8.45.0",
     "dotenv": "^17.3.1",
     "express": "^4.22.1",
     "playwright-chromium": "^1.49.1"
