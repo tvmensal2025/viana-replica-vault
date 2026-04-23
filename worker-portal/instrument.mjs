@@ -1,7 +1,6 @@
 // Sentry instrumentation - MUST be imported BEFORE any other module.
 // Loaded via: node --import ./instrument.mjs server.mjs
 import * as Sentry from '@sentry/node';
-import { nodeProfilingIntegration } from '@sentry/profiling-node';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -17,10 +16,8 @@ if (dsn) {
   Sentry.init({
     dsn,
     environment: process.env.NODE_ENV || 'production',
-    integrations: [nodeProfilingIntegration()],
-    sendDefaultPii: true,
+    sendDefaultPii: false,
     tracesSampleRate: 0.2,
-    profilesSampleRate: 0.2,
   });
   console.log('🛰️  Sentry inicializado (worker-portal)');
 } else {

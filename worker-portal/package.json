@@ -12,7 +12,6 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.97.0",
     "@sentry/node": "^8.45.0",
-    "@sentry/profiling-node": "^8.45.0",
     "bullmq": "^5.30.0",
     "dotenv": "^17.3.1",
     "express": "^4.22.1",
