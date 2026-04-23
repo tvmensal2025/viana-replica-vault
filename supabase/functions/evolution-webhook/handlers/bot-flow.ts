@@ -775,8 +775,18 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
     }
 
     case "ask_email": {
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(messageText)) { reply = "❌ E-mail inválido. Digite um e-mail válido:"; break; }
-      updates.email = messageText.trim().toLowerCase();
+      const txt = (messageText || "").trim();
+      const lower = txt.toLowerCase();
+      // Permitir pular email com fallback automático
+      if (["pular", "skip", "não tenho", "nao tenho", "sem email", "n", "não", "nao"].includes(lower)) {
+        updates.email = `${customer.phone_whatsapp}@lead.igreen`;
+        console.log(`⏭️ Cliente pulou email — usando fallback ${updates.email}`);
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(txt)) {
+        reply = "❌ Não consegui ler esse e-mail.\n\n✅ Exemplo correto: *joao.silva@gmail.com*\n\nOu digite *PULAR* se preferir não informar.";
+        break;
+      } else {
+        updates.email = txt.toLowerCase();
+      }
       const merged = { ...customer, ...updates };
       const next = await autoResolveCepIfNeeded(merged, updates);
       updates.conversation_step = next;
@@ -814,7 +824,9 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
     }
 
     case "ask_complement": {
-      if (messageText.toLowerCase() !== "não" && messageText.toLowerCase() !== "nao" && messageText.toLowerCase() !== "n") {
+      const lower = (messageText || "").toLowerCase().trim();
+      const skipWords = ["não", "nao", "n", "pular", "skip", "sem complemento", "sem", "nenhum"];
+      if (!skipWords.includes(lower)) {
         updates.address_complement = messageText.trim();
       } else {
         updates.address_complement = "";
