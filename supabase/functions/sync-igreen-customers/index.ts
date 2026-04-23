@@ -63,22 +63,29 @@ function cleanDevolutiva(raw: string): string {
 function buildRecord(c: Record<string, unknown>): Record<string, unknown> | null {
   const phoneRaw = get(c, "celular", "telefone", "phone", "whatsapp", "Celular", "Telefone");
   let phone = normalizePhone(String(phoneRaw || ""));
+  let isPlaceholderPhone = false;
 
   if (!phone || phone.length < 12) {
     const codigo = safeStr(get(c, "codigoCliente", "codigo", "Codigo", "Código", "codigoIgreen", "id"));
     const instalacao = safeStr(get(c, "instalacao", "numeroInstalacao", "numero_instalacao", "Instalação"));
     const fallbackId = codigo || instalacao;
-    if (fallbackId) phone = `sem_celular_${fallbackId.replace(/\D/g, "")}`;
-    else return null;
+    if (fallbackId) {
+      phone = `sem_celular_${fallbackId.replace(/\D/g, "")}`;
+      isPlaceholderPhone = true;
+    } else return null;
   }
 
   const record: Record<string, unknown> = { phone_whatsapp: phone };
+  // ⚠️ Telefone NÃO foi confirmado pelo cliente — bot precisa pedir confirmação antes do portal
+  record.phone_contact_confirmed = false;
 
   const name = safeStr(get(c, "nomeCliente", "nome", "Nome", "name", "Nome do Cliente"));
   if (name) record.name = name;
 
   const statusRaw = safeStr(get(c, "andamento", "Andamento", "status"));
-  record.status = mapStatus(statusRaw || undefined);
+  // Se o telefone é placeholder (sem celular real), marca como contato_incompleto
+  // — bot bloqueia portal até cliente confirmar telefone real
+  record.status = isPlaceholderPhone ? "contato_incompleto" : mapStatus(statusRaw || undefined);
 
   const cpf = safeStr(get(c, "cpf", "CPF", "documento", "Documento"));
   if (cpf) record.cpf = cpf.replace(/\D/g, "");
