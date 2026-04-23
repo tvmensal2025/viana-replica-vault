@@ -286,13 +286,28 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
           reply = "";
         } else {
           console.error("❌ OCR conta falhou:", ocrData.erro);
-          updates.conversation_step = "aguardando_conta";
-          reply = "⚠️ Não consegui ler a conta. Tente enviar uma foto mais nítida ou com melhor iluminação.";
+          const tries = (customer.ocr_conta_attempts || 0) + 1;
+          updates.ocr_conta_attempts = tries;
+          if (tries < 2) {
+            updates.conversation_step = "aguardando_conta";
+            reply = "⚠️ Não consegui ler a conta. Por favor, envie uma *foto mais nítida e bem iluminada* (sem reflexos).";
+          } else {
+            console.warn(`⏭️ OCR conta falhou ${tries}x — pulando para coleta manual`);
+            updates.conversation_step = "ask_name";
+            reply = "⚠️ Não consegui ler sua conta de luz, mas tudo bem! Vou te perguntar os dados manualmente.\n\nQual é o seu *nome completo*?";
+          }
         }
       } catch (e) {
         console.error("❌ Erro OCR conta:", e);
-        updates.conversation_step = "aguardando_conta";
-        reply = "⚠️ Erro ao processar a conta. Tente enviar novamente.";
+        const tries = (customer.ocr_conta_attempts || 0) + 1;
+        updates.ocr_conta_attempts = tries;
+        if (tries < 2) {
+          updates.conversation_step = "aguardando_conta";
+          reply = "⚠️ Erro ao processar a conta. Tente enviar novamente.";
+        } else {
+          updates.conversation_step = "ask_name";
+          reply = "⚠️ Tive um problema ao ler sua conta. Vou continuar perguntando os dados.\n\nQual é o seu *nome completo*?";
+        }
       }
       break;
     }

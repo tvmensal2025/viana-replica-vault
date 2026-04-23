@@ -409,6 +409,7 @@ export type Database = {
           id: string
           igreen_code: string | null
           igreen_link: string | null
+          last_bot_reply_at: string | null
           link_assinatura: string | null
           link_facial: string | null
           media_consumo: number | null
@@ -421,6 +422,8 @@ export type Database = {
           numero_instalacao: string | null
           observacao: string | null
           ocr_confianca: number | null
+          ocr_conta_attempts: number
+          ocr_doc_attempts: number
           otp_code: string | null
           otp_received_at: string | null
           phone_landline: string | null
@@ -478,6 +481,7 @@ export type Database = {
           id?: string
           igreen_code?: string | null
           igreen_link?: string | null
+          last_bot_reply_at?: string | null
           link_assinatura?: string | null
           link_facial?: string | null
           media_consumo?: number | null
@@ -490,6 +494,8 @@ export type Database = {
           numero_instalacao?: string | null
           observacao?: string | null
           ocr_confianca?: number | null
+          ocr_conta_attempts?: number
+          ocr_doc_attempts?: number
           otp_code?: string | null
           otp_received_at?: string | null
           phone_landline?: string | null
@@ -547,6 +553,7 @@ export type Database = {
           id?: string
           igreen_code?: string | null
           igreen_link?: string | null
+          last_bot_reply_at?: string | null
           link_assinatura?: string | null
           link_facial?: string | null
           media_consumo?: number | null
@@ -559,6 +566,8 @@ export type Database = {
           numero_instalacao?: string | null
           observacao?: string | null
           ocr_confianca?: number | null
+          ocr_conta_attempts?: number
+          ocr_doc_attempts?: number
           otp_code?: string | null
           otp_received_at?: string | null
           phone_landline?: string | null
