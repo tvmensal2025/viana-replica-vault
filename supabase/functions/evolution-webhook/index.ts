@@ -278,6 +278,29 @@ Deno.serve(async (req) => {
     if (Object.keys(updates).length > 0 || reply) {
       (updates as any).last_bot_reply_at = new Date().toISOString();
     }
+    // ── GARANTIA ANTI-TRAVA ──
+    // Se o cliente está respondendo e o bot está progredindo (há reply OU updates de step/dado),
+    // qualquer status "parado" (abandoned/stuck_*/email_pendente_revisao/contato_incompleto)
+    // DEVE ser zerado para "pending". Senão o lead fica visualmente travado mesmo avançando no fluxo.
+    const STUCK_STATES = new Set([
+      "abandoned",
+      "stuck_finalizar",
+      "stuck_contact",
+      "email_pendente_revisao",
+      "contato_incompleto",
+      "automation_failed",
+    ]);
+    if (
+      (Object.keys(updates).length > 0 || reply) &&
+      customer?.status &&
+      STUCK_STATES.has(customer.status) &&
+      !(updates as any).status
+    ) {
+      (updates as any).status = "pending";
+      (updates as any).error_message = null;
+      (updates as any).rescue_attempts = 0;
+      console.log(`♻️ [auto-resume] ${customer.id}: status "${customer.status}" → "pending" (cliente respondeu, bot avançando)`);
+    }
     if (Object.keys(updates).length > 0) {
       console.log(`📝 Salvando updates para ${customer.id}:`, JSON.stringify(updates).substring(0, 500));
       const { error: updateError } = await supabase.from("customers").update(updates).eq("id", customer.id).select();
