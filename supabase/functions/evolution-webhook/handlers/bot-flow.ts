@@ -5,7 +5,12 @@
 // Behavior is identical to the previous inline version. Only structural change:
 // the closure variables are now properties of `ctx`.
 
-import { validateCustomerForPortal } from "../../_shared/validators.ts";
+import {
+  validateCustomerForPortal,
+  isPlaceholderEmail,
+  isValidEmailFormat,
+  isSameContact,
+} from "../../_shared/validators.ts";
 import {
   fetchWithTimeout,
   fetchInsecure,
