@@ -247,6 +247,23 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
             reply = `⚠️ Não consegui ler a conta com clareza suficiente (qualidade: ${confianca}%).\n\n📸 Por favor, envie uma *foto mais nítida e bem iluminada* da conta de energia.\n\nDicas:\n• Use boa iluminação\n• Evite reflexos\n• Foco nos dados principais\n• Tire em ambiente claro`;
             break;
           }
+          // BLINDAGEM: OCR pode retornar sucesso=true com dados vazios.
+          // Exigir ao menos 3 campos críticos preenchidos.
+          const criticos = [d.nome, d.endereco, d.cep, d.cidade, d.distribuidora, d.numeroInstalacao, d.valorConta]
+            .filter((v) => v && String(v).trim().length > 0);
+          if (criticos.length < 3) {
+            jsonLog("warn", "OCR conta com poucos campos válidos", { customer_id: customer.id, validos: criticos.length });
+            const tries = (customer.ocr_conta_attempts || 0) + 1;
+            updates.ocr_conta_attempts = tries;
+            if (tries < 2) {
+              updates.conversation_step = "aguardando_conta";
+              reply = "⚠️ Recebi a conta mas não consegui extrair os dados principais.\n\n📸 Envie uma *foto mais nítida* mostrando claramente:\n• Seu nome\n• Endereço\n• Distribuidora\n• Valor da conta";
+            } else {
+              updates.conversation_step = "ask_name";
+              reply = "⚠️ Tive dificuldade em ler sua conta. Vou perguntar os dados manualmente.\n\nQual é o seu *nome completo*?";
+            }
+            break;
+          }
           updates.name = d.nome || "";
           updates.address_street = d.endereco || "";
           updates.address_number = d.numero || "";
