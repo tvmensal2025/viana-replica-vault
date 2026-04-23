@@ -27,6 +27,24 @@ interface StuckLead {
   consultant_id: string | null;
 }
 
+const ACTIVE_STUCK_STEPS = [
+  "welcome", "menu_inicial", "pos_video",
+  "aguardando_conta", "confirmando_dados_conta",
+  "ask_tipo_documento", "aguardando_doc_frente", "aguardando_doc_verso",
+  "confirmando_dados_doc",
+  "ask_name", "ask_cpf", "ask_rg", "ask_birth_date",
+  "ask_phone_confirm", "ask_phone", "ask_email",
+  "ask_cep", "ask_number", "ask_complement",
+  "ask_installation_number", "ask_bill_value",
+  "ask_doc_frente_manual", "ask_doc_verso_manual",
+  "ask_finalizar", "finalizando",
+  "editing_conta_menu", "editing_conta_nome", "editing_conta_endereco",
+  "editing_conta_cep", "editing_conta_distribuidora", "editing_conta_instalacao",
+  "editing_conta_valor",
+  "editing_doc_menu", "editing_doc_nome", "editing_doc_cpf",
+  "editing_doc_rg", "editing_doc_nascimento",
+] as const;
+
 const STEP_LABELS: Record<string, string> = {
   ask_name: "Aguardando nome",
   ask_cpf: "Aguardando CPF",
@@ -73,13 +91,14 @@ export function StuckLeadsWidget() {
   const load = async () => {
     setLoading(true);
     const cutoff = new Date(Date.now() - 10 * 60_000).toISOString();
+    const activeSteps = `(${ACTIVE_STUCK_STEPS.join(",")})`;
     // Só leads que efetivamente conversaram pela instância (têm conversation_step ask_*/aguardando_*)
     // E que não estão em fases finais. Importações antigas (sem step) NÃO entram.
     const { data } = await supabase
       .from("customers")
       .select("id, name, phone_whatsapp, conversation_step, last_bot_reply_at, rescue_attempts, status, consultant_id")
       .or(
-        `and(last_bot_reply_at.lt.${cutoff},conversation_step.not.is.null,status.not.in.(complete,cadastro_concluido,portal_submitting,registered_igreen,abandoned)),` +
+        `and(last_bot_reply_at.lt.${cutoff},conversation_step.in.${activeSteps},status.not.in.(complete,cadastro_concluido,portal_submitting,registered_igreen,approved,awaiting_signature,automation_failed,abandoned)),` +
         `status.in.(stuck_finalizar,stuck_contact,email_pendente_revisao,contato_incompleto)`
       )
       .order("last_bot_reply_at", { ascending: true })
