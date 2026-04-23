@@ -259,11 +259,19 @@ Deno.serve(async (req) => {
     });
 
     // ─── 9) Persist updates ────────────────────────────────────────────
+    // Marca timestamp da última atividade do bot — usado pelo cron de leads parados
+    if (Object.keys(updates).length > 0 || reply) {
+      (updates as any).last_bot_reply_at = new Date().toISOString();
+    }
     if (Object.keys(updates).length > 0) {
       console.log(`📝 Salvando updates para ${customer.id}:`, JSON.stringify(updates).substring(0, 500));
       const { error: updateError } = await supabase.from("customers").update(updates).eq("id", customer.id).select();
       if (updateError) {
         console.error(`❌ ERRO ao salvar updates para ${customer.id}:`, updateError);
+        captureError(updateError as any, {
+          tags: { function: "evolution-webhook", kind: "customer_update_failed" },
+          extra: { customer_id: customer.id, updates_keys: Object.keys(updates) },
+        });
       }
       if (updates.conversation_step && updates.conversation_step !== stepBefore) {
         await logStepTransition(supabase, {
@@ -278,6 +286,17 @@ Deno.serve(async (req) => {
 
     // ─── 10) Send reply ────────────────────────────────────────────────
     const stepToSend = updates.conversation_step || stepBefore;
+    // GARANTIA: nunca deixar o cliente sem resposta. Se reply vazio E nenhum botão foi enviado dentro do handler,
+    // injeta uma mensagem padrão de "continue" para evitar bot em silêncio.
+    const handlerSentInline = reply === "" && Object.keys(updates).length > 0;
+    if (!reply && !handlerSentInline) {
+      console.warn(`⚠️ [SAFETY] Bot sem resposta no step "${stepToSend}" para ${customer.id} — enviando fallback`);
+      reply = `🤖 Estou aqui! Vamos continuar o cadastro?\n\nDigite *cadastrar* para retomar ou aguarde, já volto com você.`;
+      captureError(new Error(`Bot empty reply at step ${stepToSend}`), {
+        tags: { function: "evolution-webhook", kind: "empty_reply_safety" },
+        extra: { customer_id: customer.id, step: stepToSend },
+      });
+    }
     if (reply) {
       try {
         if (stepToSend === "ask_phone_confirm") {
