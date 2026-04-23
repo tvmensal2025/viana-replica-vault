@@ -21,6 +21,7 @@ import {
 import { handleConnectionUpdate } from "./handlers/connection.ts";
 import { tryInterceptOtp } from "./handlers/otp-intercept.ts";
 import { runBotFlow } from "./handlers/bot-flow.ts";
+import { captureError } from "../_shared/sentry.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -317,6 +318,7 @@ Deno.serve(async (req) => {
     });
   } catch (err) {
     console.error("Evolution webhook error:", err);
+    captureError(err, { tags: { function: "evolution-webhook" } });
     return new Response(JSON.stringify({ error: String(err) }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

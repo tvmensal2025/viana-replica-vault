@@ -13,6 +13,8 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { writeFileSync, existsSync, readFileSync, unlinkSync } from 'fs';
 import dotenv from 'dotenv';
+// Sentry — fallback caso a flag --import não seja suportada (Node < 20.6)
+import * as Sentry from '@sentry/node';
 // SOLUÇÃO 2: Import ESTÁTICO garante UMA ÚNICA instância do módulo (e do activeBrowser)
 import { executarAutomacao } from './playwright-automation.mjs';
 
@@ -1014,6 +1016,17 @@ async function recuperarLeadsPendentes() {
 
 // Polling: verificar leads pendentes a cada 5 segundos (fallback se webhook não chamar)
 setInterval(recuperarLeadsPendentes, 5 * 1000);
+
+// Sentry: handler de erros do Express. Deve vir DEPOIS de todas as rotas
+// e ANTES de qualquer outro middleware de erro.
+try { Sentry.setupExpressErrorHandler(app); } catch (_) {}
+
+// Fallback error handler — captura qualquer erro não tratado
+app.use((err, _req, res, _next) => {
+  try { Sentry.captureException(err); } catch (_) {}
+  console.error('❌ Erro não tratado:', err);
+  res.status(500).json({ error: err?.message || 'Internal error' });
+});
 
 // Iniciar servidor
 app.listen(PORT, () => {

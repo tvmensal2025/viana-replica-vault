@@ -1,5 +1,6 @@
 import { fetchWithTimeout, withRetry, TIMEOUT_FETCH_IMAGE, TIMEOUT_GEMINI } from "./utils.ts";
 import { normalizarRG, validarDataNascimento, validarNomeOCR, validarCPFDigitos } from "./conversation-helpers.ts";
+import { captureError } from "./sentry.ts";
 
 // ─── Baixar imagem (Evolution API ou URL direta) ────────────────────
 export async function baixarImagem(
@@ -178,6 +179,7 @@ Se não encontrar um campo, use "". NÃO invente dados.`;
     return { sucesso: true, dados };
   } catch (e: any) {
     console.error("❌ OCR Conta erro:", e.message || e);
+    captureError(e, { tags: { module: "ocr", phase: "conta" } });
     return { sucesso: false, erro: e.message || String(e) };
   }
 }
@@ -355,6 +357,7 @@ export async function ocrDocumento(imagemUrl: string | null, geminiApiKey: strin
     return { sucesso: true, dados };
   } catch (e: any) {
     console.error("❌ OCR Doc erro:", e.message || e);
+    captureError(e, { tags: { module: "ocr", phase: "documento" } });
     return { sucesso: false, erro: e.message || String(e) };
   }
 }

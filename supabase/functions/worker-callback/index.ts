@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createEvolutionSender } from "../_shared/evolution-api.ts";
+import { captureError } from "../_shared/sentry.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -181,6 +182,7 @@ Deno.serve(async (req) => {
     });
   } catch (e: any) {
     console.error("❌ worker-callback erro:", e.message || e);
+    captureError(e, { tags: { function: "worker-callback" } });
     return new Response(JSON.stringify({ error: e.message || String(e) }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
