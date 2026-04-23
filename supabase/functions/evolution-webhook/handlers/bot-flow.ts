@@ -961,10 +961,12 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
     // ─── 11. CONFIRMAR FINALIZAR ────────
     case "ask_finalizar": {
       const resp = isButton ? buttonId : messageText.toLowerCase().trim();
-      const finalizar = resp === "btn_finalizar" || resp === "1" || resp === "finalizar" || resp === "sim" || resp === "s";
+      // Aceita botão OU texto livre (cliente quase nunca clica no botão)
+      const triggers = ["btn_finalizar", "1", "finalizar", "sim", "s", "ok", "concluir", "prosseguir", "vamos", "pode", "pode sim", "pronto"];
+      const finalizar = triggers.includes(resp);
       if (finalizar) { updates.conversation_step = "finalizando"; reply = ""; }
       else {
-        const sent = await sendButtons(remoteJid, "📋 Todos os dados foram preenchidos!\n\nDeseja finalizar o cadastro?", [
+        const sent = await sendButtons(remoteJid, "📋 Todos os dados foram preenchidos!\n\nDeseja finalizar o cadastro?\n\n_(Você também pode digitar *FINALIZAR* ou *OK*)_", [
           { id: "btn_finalizar", title: "✅ Finalizar" },
         ]);
         if (!sent) reply = "Digite *FINALIZAR* ou *1* para confirmar o cadastro:";
