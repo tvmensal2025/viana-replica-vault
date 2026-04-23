@@ -224,6 +224,23 @@ async function processNextInQueue() {
     pushActivity('job_failed', jobCustomerId, `Falha (${attempts}/3): ${error.message}`);
     console.error(`❌ FILA: Lead ${jobCustomerId} falhou (tentativa ${attempts}/3): ${error.message}`);
 
+    // Reportar ao Sentry com tags ricas (phase, customer_id, attempt)
+    try {
+      Sentry.withScope((scope) => {
+        scope.setTags({
+          module: 'playwright-automation',
+          customer_id: String(jobCustomerId),
+          attempt: String(attempts),
+          final_attempt: attempts >= 3 ? 'true' : 'false',
+        });
+        scope.setExtras({
+          options: currentJob?.options || {},
+          queue_size: queue.length,
+        });
+        Sentry.captureException(error);
+      });
+    } catch (_) { /* sentry opcional */ }
+
     if (attempts < 3) {
       // Re-enfileirar para retry automático — NUNCA deixar de abrir
       const retryJob = {
