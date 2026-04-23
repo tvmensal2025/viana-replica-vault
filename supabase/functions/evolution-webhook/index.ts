@@ -169,11 +169,26 @@ Deno.serve(async (req) => {
 
     let customer = activeRecords?.[0] || null;
 
+    // ── Status que devem ser resetados quando o cliente volta a interagir ──
+    // abandoned/stuck_*: cliente sumiu mas voltou; retomar de onde parou (não resetar step)
+    // automation_failed: erro técnico — reset completo para welcome
+    const RESUMABLE_STATUSES = new Set([
+      "abandoned",
+      "stuck_finalizar",
+      "stuck_contact",
+      "email_pendente_revisao",
+    ]);
     if (customer && customer.status === "automation_failed") {
       console.log(`♻️ Telefone ${phone}: automation_failed → resetando para welcome`);
       await supabase.from("customers").update({ conversation_step: "welcome", status: "pending", error_message: null }).eq("id", customer.id);
       customer.conversation_step = "welcome";
       customer.status = "pending";
+    } else if (customer && RESUMABLE_STATUSES.has(customer.status)) {
+      console.log(`♻️ Telefone ${phone}: ${customer.status} → cliente voltou, status=pending (mantendo step "${customer.conversation_step}")`);
+      await supabase.from("customers").update({ status: "pending", error_message: null, rescue_attempts: 0 }).eq("id", customer.id);
+      customer.status = "pending";
+      customer.error_message = null;
+      customer.rescue_attempts = 0;
     }
 
     if (customer && stepsFinalizados.includes(customer.conversation_step || "")) {

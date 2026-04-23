@@ -47,7 +47,8 @@ const RESCUABLE_STEPS = new Set([
 ]);
 
 // Steps onde podemos sugerir "PULAR" (campos opcionais)
-const SKIPPABLE_STEPS = new Set(["ask_email", "ask_complement"]);
+// ⚠️ ask_email NÃO é skippable — email é obrigatório no portal iGreen
+const SKIPPABLE_STEPS = new Set(["ask_complement"]);
 
 const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL") || "";
 const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY") || "";

@@ -109,7 +109,7 @@ export function getReplyForStep(step: string, c: any): string {
       return `📞 Esse é o seu *telefone de contato*?\n\n*${fmt}*\n\nToque em *Sim* se for o seu, ou em *Outro número* para informar outro telefone.`;
     }
     case "ask_phone": return "Informe seu *telefone* com DDD (ex: 11999998888):";
-    case "ask_email": return "Informe seu *e-mail* (ex: joao.silva@gmail.com)\n\n_Ou digite *PULAR* se preferir não informar._";
+    case "ask_email": return "📧 Informe seu *e-mail* para finalizarmos seu cadastro no portal iGreen (ex: joao.silva@gmail.com)\n\n_Se não tiver e-mail, crie um agora em *gmail.com* — leva 1 minuto._";
     case "ask_cep": return "Qual o seu *CEP*? (8 dígitos)";
     case "ask_number": return `📍 Endereço: *${c.address_street || ""}*\n\nQual o *número* da residência?`;
     case "ask_complement": return "Tem *complemento*? (ex: Apto 12)\n\nDigite *NÃO* ou *PULAR* se não tiver.";
