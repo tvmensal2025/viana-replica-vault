@@ -19,6 +19,13 @@ const STAGE1_MIN = 5;       // 5 min — primeira tentativa
 const STAGE2_MIN = 120;     // 2h — segunda tentativa com urgência
 const STAGE3_MIN = 24 * 60; // 24h — abandono
 const MAX_RESCUES_PER_RUN = 50;
+const RESCUE_THROTTLE_MIN = 30; // anti-spam: mínimo 30 min entre dois rescues no mesmo lead
+const MAX_ATTEMPTS_BEFORE_STUCK = 3; // após 3 sem resposta → marca como stuck_*
+
+// Steps que viram stuck_finalizar quando esgotam tentativas
+const FINALIZAR_STEPS = new Set(["ask_finalizar", "finalizando"]);
+// Steps que viram stuck_contact (faltando telefone/email)
+const CONTACT_STEPS = new Set(["ask_phone_confirm", "ask_phone", "ask_email"]);
 
 // Steps onde faz sentido re-perguntar. Steps técnicos (portal/otp/facial) NÃO entram.
 const RESCUABLE_STEPS = new Set([
@@ -143,8 +150,27 @@ Deno.serve(async (req) => {
       // Anti-spam: não enviar dois rescues seguidos no mesmo lead se o último foi < 4 min atrás
       if (lead.last_rescue_at) {
         const sinceLastRescue = (Date.now() - new Date(lead.last_rescue_at).getTime()) / 60_000;
-        if (sinceLastRescue < 4) {
+        if (sinceLastRescue < RESCUE_THROTTLE_MIN) {
           stats.skipped++;
+          continue;
+        }
+      }
+
+      // ── Após N tentativas sem resposta → mover para fila de ação manual ──
+      if (attempts >= MAX_ATTEMPTS_BEFORE_STUCK) {
+        let newStatus: string | null = null;
+        if (FINALIZAR_STEPS.has(step)) newStatus = "stuck_finalizar";
+        else if (CONTACT_STEPS.has(step)) newStatus = "stuck_contact";
+        if (newStatus) {
+          await supabase
+            .from("customers")
+            .update({
+              status: newStatus,
+              error_message: `Lead travado em ${step} após ${attempts} tentativas de resgate sem resposta`,
+            })
+            .eq("id", lead.id);
+          stats.skipped++;
+          console.log(`🟡 ${newStatus} ${lead.id} (step: ${step}, attempts: ${attempts})`);
           continue;
         }
       }
