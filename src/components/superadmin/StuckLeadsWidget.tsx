@@ -1,8 +1,20 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { AlertTriangle, Clock, RefreshCw, Phone, MessageSquare } from "lucide-react";
+import { AlertTriangle, Clock, RefreshCw, Phone, MessageSquare, Send, CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
 
 interface StuckLead {
   id: string;
@@ -47,7 +59,9 @@ function formatIdle(iso: string | null): { text: string; severity: "low" | "medi
 export function StuckLeadsWidget() {
   const [leads, setLeads] = useState<StuckLead[]>([]);
   const [loading, setLoading] = useState(true);
-  const [resending, setResending] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [pendingAction, setPendingAction] = useState<null | "rescue" | "complete" | "abandoned">(null);
+  const [executing, setExecuting] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -65,6 +79,12 @@ export function StuckLeadsWidget() {
       .limit(50);
     setLeads((data as any) || []);
     setLoading(false);
+    setSelectedIds((prev) => {
+      const ids = new Set((data as any[] | null)?.map((l) => l.id) || []);
+      const next = new Set<string>();
+      prev.forEach((id) => ids.has(id) && next.add(id));
+      return next;
+    });
   };
 
   useEffect(() => {
@@ -73,15 +93,69 @@ export function StuckLeadsWidget() {
     return () => clearInterval(t);
   }, []);
 
-  const triggerRescue = async () => {
-    setResending("all");
+  const toggleOne = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    setSelectedIds((prev) => (prev.size === leads.length ? new Set() : new Set(leads.map((l) => l.id))));
+  };
+
+  const executeAction = async () => {
+    if (!pendingAction || selectedIds.size === 0) return;
+    const ids = Array.from(selectedIds);
+    setExecuting(true);
     try {
-      await supabase.functions.invoke("bot-stuck-recovery", { body: {} });
-      setTimeout(load, 2500);
+      if (pendingAction === "rescue") {
+        const { error } = await supabase.functions.invoke("bot-stuck-recovery", {
+          body: { customer_ids: ids },
+        });
+        if (error) throw error;
+        toast.success(`Resgate disparado para ${ids.length} lead(s)`);
+      } else {
+        const newStatus = pendingAction === "complete" ? "complete" : "abandoned";
+        const updates: Record<string, any> = { status: newStatus };
+        if (pendingAction === "complete") updates.conversation_step = null;
+        const { error } = await supabase.from("customers").update(updates).in("id", ids);
+        if (error) throw error;
+        toast.success(
+          pendingAction === "complete"
+            ? `${ids.length} lead(s) marcado(s) como convertido(s)`
+            : `${ids.length} lead(s) marcado(s) como abandonado(s)`,
+        );
+      }
+      setSelectedIds(new Set());
+      setTimeout(load, 1500);
+    } catch (e: any) {
+      toast.error(`Erro: ${e?.message || e}`);
     } finally {
-      setResending(null);
+      setExecuting(false);
+      setPendingAction(null);
     }
   };
+
+  const actionConfig = {
+    rescue: {
+      title: "Disparar resgate?",
+      desc: `Será enviada mensagem de resgate via WhatsApp para ${selectedIds.size} lead(s) selecionado(s).`,
+      confirmLabel: "Sim, enviar",
+    },
+    complete: {
+      title: "Marcar como convertidos?",
+      desc: `${selectedIds.size} lead(s) serão marcados como concluídos. Eles sairão da lista e não receberão mais mensagens automáticas.`,
+      confirmLabel: "Sim, marcar convertidos",
+    },
+    abandoned: {
+      title: "Marcar como abandonados?",
+      desc: `${selectedIds.size} lead(s) serão marcados como abandonados (sem envio de mensagem). Eles sairão da lista e não receberão mais resgates.`,
+      confirmLabel: "Sim, abandonar",
+    },
+  } as const;
 
   return (
     <div className="premium-card p-5">
@@ -99,16 +173,6 @@ export function StuckLeadsWidget() {
           <Badge variant="outline" className="text-xs">
             {leads.length} parado(s)
           </Badge>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={triggerRescue}
-            disabled={resending === "all" || leads.length === 0}
-            className="h-8"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${resending === "all" ? "animate-spin" : ""}`} />
-            Resgatar agora
-          </Button>
           <Button size="sm" variant="ghost" onClick={load} disabled={loading} className="h-8 w-8 p-0">
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
           </Button>
@@ -122,7 +186,59 @@ export function StuckLeadsWidget() {
           ✨ Nenhum lead travado. Tudo fluindo normalmente.
         </div>
       ) : (
-        <div className="space-y-1.5 max-h-96 overflow-auto">
+        <>
+          {/* Toolbar de seleção */}
+          <div className="flex items-center justify-between gap-3 mb-3 px-1">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <Checkbox
+                checked={selectedIds.size > 0 && selectedIds.size === leads.length}
+                onCheckedChange={toggleAll}
+              />
+              <span className="text-xs text-muted-foreground">
+                {selectedIds.size === 0
+                  ? "Selecionar todos"
+                  : `${selectedIds.size} selecionado(s)`}
+              </span>
+            </label>
+          </div>
+
+          {/* Barra de ações em massa */}
+          {selectedIds.size > 0 && (
+            <div className="flex flex-wrap gap-2 mb-3 p-2 rounded-lg border border-border/40 bg-card/40">
+              <Button
+                size="sm"
+                variant="default"
+                onClick={() => setPendingAction("rescue")}
+                disabled={executing}
+                className="h-8"
+              >
+                <Send className="w-3.5 h-3.5 mr-1.5" />
+                Continuar resgate
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setPendingAction("complete")}
+                disabled={executing}
+                className="h-8 border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-500"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />
+                Marcar convertido
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setPendingAction("abandoned")}
+                disabled={executing}
+                className="h-8 border-red-500/30 text-red-500 hover:bg-red-500/10 hover:text-red-500"
+              >
+                <XCircle className="w-3.5 h-3.5 mr-1.5" />
+                Marcar abandonado
+              </Button>
+            </div>
+          )}
+
+          <div className="space-y-1.5 max-h-96 overflow-auto">
           {leads.map((lead) => {
             const idle = formatIdle(lead.last_bot_reply_at);
             const stepLabel = STEP_LABELS[lead.conversation_step || ""] || lead.conversation_step || "—";
@@ -132,11 +248,21 @@ export function StuckLeadsWidget() {
                 : idle.severity === "medium"
                 ? "text-amber-500 bg-amber-500/10 border-amber-500/20"
                 : "text-blue-500 bg-blue-500/10 border-blue-500/20";
+            const isSelected = selectedIds.has(lead.id);
             return (
               <div
                 key={lead.id}
-                className="flex items-center justify-between gap-3 p-3 rounded-lg border border-border/40 bg-card/40 hover:bg-card/70 transition-colors"
+                className={`flex items-center justify-between gap-3 p-3 rounded-lg border transition-colors ${
+                  isSelected
+                    ? "border-primary/40 bg-primary/5"
+                    : "border-border/40 bg-card/40 hover:bg-card/70"
+                }`}
               >
+                <Checkbox
+                  checked={isSelected}
+                  onCheckedChange={() => toggleOne(lead.id)}
+                  className="shrink-0"
+                />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-foreground truncate">
@@ -164,8 +290,26 @@ export function StuckLeadsWidget() {
               </div>
             );
           })}
-        </div>
+          </div>
+        </>
       )}
+
+      <AlertDialog open={pendingAction !== null} onOpenChange={(o) => !o && setPendingAction(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{pendingAction && actionConfig[pendingAction].title}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingAction && actionConfig[pendingAction].desc}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={executing}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={executeAction} disabled={executing}>
+              {executing ? "Executando..." : pendingAction && actionConfig[pendingAction].confirmLabel}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

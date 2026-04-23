@@ -68,18 +68,40 @@ Deno.serve(async (req) => {
 
     const cutoff = new Date(Date.now() - STAGE1_MIN * 60_000).toISOString();
 
+    // Aceita customer_ids opcional no body para resgate seletivo via UI
+    let customerIds: string[] | null = null;
+    try {
+      if (req.method === "POST") {
+        const body = await req.json().catch(() => ({}));
+        if (Array.isArray(body?.customer_ids) && body.customer_ids.length > 0) {
+          customerIds = body.customer_ids.filter((x: any) => typeof x === "string");
+        }
+      }
+    } catch {
+      // ignore — sem body é cron normal
+    }
+
     // Busca leads parados — APENAS leads iniciados pela instância
     // (têm conversation_step preenchido em fase de coleta).
     // Leads importados/cadastrados manualmente (sem step ou em fases finais) ficam fora.
-    const { data: stuck, error } = await supabase
+    let query = supabase
       .from("customers")
-      .select("id, phone_whatsapp, consultant_id, conversation_step, last_bot_reply_at, name, rescue_attempts, last_rescue_at, status")
-      .lt("last_bot_reply_at", cutoff)
-      .not("conversation_step", "is", null)
-      .not("status", "in", "(complete,cadastro_concluido,portal_submitting,registered_igreen)")
-      .neq("status", "abandoned")
-      .order("last_bot_reply_at", { ascending: true })
-      .limit(MAX_RESCUES_PER_RUN);
+      .select("id, phone_whatsapp, consultant_id, conversation_step, last_bot_reply_at, name, rescue_attempts, last_rescue_at, status");
+
+    if (customerIds && customerIds.length > 0) {
+      // Modo seletivo: ignora cutoff/status filters — admin escolheu manualmente
+      query = query.in("id", customerIds);
+    } else {
+      query = query
+        .lt("last_bot_reply_at", cutoff)
+        .not("conversation_step", "is", null)
+        .not("status", "in", "(complete,cadastro_concluido,portal_submitting,registered_igreen)")
+        .neq("status", "abandoned")
+        .order("last_bot_reply_at", { ascending: true })
+        .limit(MAX_RESCUES_PER_RUN);
+    }
+
+    const { data: stuck, error } = await query;
 
     if (error) {
       captureError(error as any, { tags: { function: "bot-stuck-recovery", kind: "query_failed" } });
