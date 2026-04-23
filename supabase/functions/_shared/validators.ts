@@ -178,10 +178,8 @@ export function sanitizeCustomerData(customer: any): any {
   if (sanitized.address_neighborhood) sanitized.address_neighborhood = sanitized.address_neighborhood.trim();
   if (sanitized.address_city) sanitized.address_city = sanitized.address_city.trim();
   if (sanitized.address_state) sanitized.address_state = sanitized.address_state.trim().toUpperCase();
-  if (!sanitized.email && sanitized.phone_whatsapp) {
-    const phoneClean = sanitized.phone_whatsapp.replace(/\D/g, "");
-    sanitized.email = `${phoneClean}@lead.igreen`;
-  }
+  // ⚠️ Removido: NUNCA gerar email placeholder @lead.igreen automaticamente.
+  // Email só é gravado quando o cliente responde explicitamente em ask_email.
   if (sanitized.rg) sanitized.rg = sanitized.rg.trim();
   return sanitized;
 }
