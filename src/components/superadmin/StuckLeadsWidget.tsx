@@ -48,6 +48,13 @@ const STEP_LABELS: Record<string, string> = {
   ask_finalizar: "Aguardando finalização",
 };
 
+const STATUS_BADGES: Record<string, { label: string; className: string }> = {
+  stuck_finalizar: { label: "🛑 Travado em Finalizar", className: "bg-red-500/15 text-red-500 border-red-500/30" },
+  stuck_contact: { label: "📵 Falta contato", className: "bg-orange-500/15 text-orange-500 border-orange-500/30" },
+  email_pendente_revisao: { label: "✉️ Email pendente", className: "bg-amber-500/15 text-amber-500 border-amber-500/30" },
+  contato_incompleto: { label: "⚠️ Sem celular real", className: "bg-yellow-500/15 text-yellow-500 border-yellow-500/30" },
+};
+
 function formatIdle(iso: string | null): { text: string; severity: "low" | "medium" | "high" } {
   if (!iso) return { text: "—", severity: "low" };
   const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
@@ -71,10 +78,10 @@ export function StuckLeadsWidget() {
     const { data } = await supabase
       .from("customers")
       .select("id, name, phone_whatsapp, conversation_step, last_bot_reply_at, rescue_attempts, status, consultant_id")
-      .lt("last_bot_reply_at", cutoff)
-      .not("conversation_step", "is", null)
-      .or("conversation_step.like.ask_%,conversation_step.like.aguardando_%,conversation_step.like.confirmando_%,conversation_step.like.editing_%,conversation_step.in.(welcome,menu_inicial,pos_video)")
-      .not("status", "in", "(complete,cadastro_concluido,portal_submitting,registered_igreen,abandoned)")
+      .or(
+        `and(last_bot_reply_at.lt.${cutoff},conversation_step.not.is.null,status.not.in.(complete,cadastro_concluido,portal_submitting,registered_igreen,abandoned)),` +
+        `status.in.(stuck_finalizar,stuck_contact,email_pendente_revisao,contato_incompleto)`
+      )
       .order("last_bot_reply_at", { ascending: true })
       .limit(50);
     setLeads((data as any) || []);
@@ -272,6 +279,11 @@ export function StuckLeadsWidget() {
                       <Phone className="w-2.5 h-2.5 mr-1" />
                       {lead.phone_whatsapp}
                     </Badge>
+                    {STATUS_BADGES[lead.status] && (
+                      <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${STATUS_BADGES[lead.status].className}`}>
+                        {STATUS_BADGES[lead.status].label}
+                      </Badge>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 mt-1">
                     <MessageSquare className="w-3 h-3 text-muted-foreground" />
