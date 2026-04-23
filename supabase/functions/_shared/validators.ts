@@ -6,6 +6,61 @@ export interface ValidationResult {
   warnings: string[];
 }
 
+// ── Listas de bloqueio (placeholders / contatos do consultor) ──
+const PLACEHOLDER_EMAIL_PATTERNS: RegExp[] = [
+  /@lead\.igreen$/i,
+  /^tvmensal/i,
+  /@teste/i,
+  /^teste@/i,
+  /^noreply@/i,
+  /^sem_email/i,
+  /^sem-email/i,
+  /@example\./i,
+  /@exemplo\./i,
+];
+
+const PLACEHOLDER_PHONE_PATTERNS: RegExp[] = [
+  /^sem_celular/i,
+  /^sem-celular/i,
+];
+
+/** Valida formato básico de email */
+export function isValidEmailFormat(email: string): boolean {
+  if (!email) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
+
+/** Detecta emails que são placeholders/de teste e nunca podem ir ao portal */
+export function isPlaceholderEmail(email: string | null | undefined): boolean {
+  if (!email) return true;
+  const t = String(email).trim();
+  if (t.length === 0) return true;
+  return PLACEHOLDER_EMAIL_PATTERNS.some((rx) => rx.test(t));
+}
+
+/** Detecta telefones placeholder (importação iGreen sem celular) */
+export function isPlaceholderPhone(phone: string | null | undefined): boolean {
+  if (!phone) return true;
+  const t = String(phone).trim();
+  if (t.length === 0) return true;
+  return PLACEHOLDER_PHONE_PATTERNS.some((rx) => rx.test(t));
+}
+
+/** Compara dois contatos (email ou phone) ignorando formatação trivial */
+export function isSameContact(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return false;
+  const na = String(a).trim().toLowerCase();
+  const nb = String(b).trim().toLowerCase();
+  if (na === nb) return true;
+  // Para telefones: comparar apenas dígitos
+  const da = na.replace(/\D/g, "");
+  const db = nb.replace(/\D/g, "");
+  if (da.length >= 10 && db.length >= 10) {
+    return da.slice(-11) === db.slice(-11);
+  }
+  return false;
+}
+
 export function validateCPF(cpf: string): boolean {
   if (!cpf) return false;
   const cpfClean = cpf.replace(/\D/g, "");
@@ -37,8 +92,19 @@ export function validateCustomerForPortal(customer: any): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  if (!customer.email || customer.email.trim().length === 0) {
-    warnings.push("Email não informado - será gerado automaticamente");
+  // ── Email: nunca pode ser vazio, placeholder ou do consultor dono ──
+  const emailRaw = (customer.email || "").trim();
+  if (!emailRaw) {
+    errors.push("Email é obrigatório");
+  } else if (!isValidEmailFormat(emailRaw)) {
+    errors.push("Email com formato inválido");
+  } else if (isPlaceholderEmail(emailRaw)) {
+    errors.push("Email placeholder/temporário não pode ir ao portal");
+  } else if (
+    customer.consultant_email &&
+    isSameContact(emailRaw, customer.consultant_email)
+  ) {
+    errors.push("Email do consultor não pode ser usado como email do cliente");
   }
   if (!customer.name || customer.name.trim().length < 3) errors.push("Nome inválido ou muito curto");
   if (!validateCPF(customer.cpf || "")) errors.push("CPF inválido");
@@ -50,7 +116,26 @@ export function validateCustomerForPortal(customer: any): ValidationResult {
   if (!customer.address_neighborhood || customer.address_neighborhood.trim().length < 2) errors.push("Bairro inválido");
   if (!customer.address_city || customer.address_city.trim().length < 2) errors.push("Cidade inválida");
   if (!customer.address_state || customer.address_state.trim().length !== 2) errors.push("Estado (UF) inválido");
-  if (!validatePhone(customer.phone_whatsapp || "")) errors.push("Telefone inválido");
+  // ── Telefone: deve estar confirmado pelo cliente no chat ──
+  // O telefone que vai ao portal é phone_landline (confirmado), não phone_whatsapp (chave da conversa)
+  const phoneForPortal = (customer.phone_landline || "").replace(/\D/g, "");
+  const phoneConfirmed = customer.phone_contact_confirmed === true;
+  if (isPlaceholderPhone(customer.phone_whatsapp)) {
+    errors.push("Telefone placeholder (importação) — cliente precisa confirmar telefone real");
+  } else if (!phoneConfirmed) {
+    errors.push("Telefone não foi confirmado pelo cliente no chat");
+  } else if (!phoneForPortal || phoneForPortal.length < 10 || phoneForPortal.length > 11) {
+    errors.push("Telefone inválido (precisa ter DDD + número)");
+  } else {
+    const ddd = parseInt(phoneForPortal.substring(0, 2));
+    if (ddd < 11 || ddd > 99) errors.push("Telefone com DDD inválido");
+    if (
+      customer.consultant_phone &&
+      isSameContact(phoneForPortal, customer.consultant_phone)
+    ) {
+      errors.push("Telefone do consultor não pode ser usado como telefone do cliente");
+    }
+  }
   const billValue = typeof customer.electricity_bill_value === "string"
     ? parseFloat(customer.electricity_bill_value)
     : customer.electricity_bill_value;
@@ -93,10 +178,8 @@ export function sanitizeCustomerData(customer: any): any {
   if (sanitized.address_neighborhood) sanitized.address_neighborhood = sanitized.address_neighborhood.trim();
   if (sanitized.address_city) sanitized.address_city = sanitized.address_city.trim();
   if (sanitized.address_state) sanitized.address_state = sanitized.address_state.trim().toUpperCase();
-  if (!sanitized.email && sanitized.phone_whatsapp) {
-    const phoneClean = sanitized.phone_whatsapp.replace(/\D/g, "");
-    sanitized.email = `${phoneClean}@lead.igreen`;
-  }
+  // ⚠️ Removido: NUNCA gerar email placeholder @lead.igreen automaticamente.
+  // Email só é gravado quando o cliente responde explicitamente em ask_email.
   if (sanitized.rg) sanitized.rg = sanitized.rg.trim();
   return sanitized;
 }

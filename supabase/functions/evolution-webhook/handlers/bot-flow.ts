@@ -5,7 +5,12 @@
 // Behavior is identical to the previous inline version. Only structural change:
 // the closure variables are now properties of `ctx`.
 
-import { validateCustomerForPortal } from "../../_shared/validators.ts";
+import {
+  validateCustomerForPortal,
+  isPlaceholderEmail,
+  isValidEmailFormat,
+  isSameContact,
+} from "../../_shared/validators.ts";
 import {
   fetchWithTimeout,
   fetchInsecure,
@@ -753,6 +758,8 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
           ? num.replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3")
           : num.replace(/(\d{2})(\d{4})(\d{4})/, "($1) $2-$3");
         updates.phone_whatsapp = normalizePhone(num);
+        // ✅ Cliente CONFIRMOU explicitamente que o número de WhatsApp é o telefone de contato
+        updates.phone_contact_confirmed = true;
         const merged = { ...customer, ...updates };
         const next = await autoResolveCepIfNeeded(merged, updates);
         updates.conversation_step = next;
@@ -779,11 +786,28 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
     case "ask_phone": {
       const phoneClean = messageText.replace(/\D/g, "");
       if (phoneClean.length < 10 || phoneClean.length > 11) { reply = "❌ Telefone inválido. Digite com DDD (ex: 11999998888):"; break; }
+      // Validar DDD
+      const ddd = parseInt(phoneClean.substring(0, 2));
+      if (ddd < 11 || ddd > 99) { reply = "❌ DDD inválido. Informe um telefone com DDD válido (ex: 11999998888):"; break; }
+      // Buscar telefone do consultor para evitar auto-cadastro acidental
+      try {
+        const { data: cons } = await supabase
+          .from("consultants")
+          .select("phone")
+          .eq("id", consultorId)
+          .maybeSingle();
+        if (cons?.phone && isSameContact(phoneClean, cons.phone)) {
+          reply = "❌ Esse telefone é o número do consultor. Por favor, informe *seu próprio telefone* de contato:";
+          break;
+        }
+      } catch (_) { /* segue */ }
       const num11 = phoneClean.length >= 11 ? phoneClean.slice(-11) : phoneClean;
       updates.phone_landline = num11.length === 11
         ? num11.replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3")
         : num11.replace(/(\d{2})(\d{4})(\d{4})/, "($1) $2-$3");
       updates.phone_whatsapp = normalizePhone(num11);
+      // ✅ Cliente DIGITOU o telefone — confirmado explicitamente
+      updates.phone_contact_confirmed = true;
       const merged = { ...customer, ...updates };
       const next = await autoResolveCepIfNeeded(merged, updates);
       updates.conversation_step = next;
@@ -794,16 +818,34 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
     case "ask_email": {
       const txt = (messageText || "").trim();
       const lower = txt.toLowerCase();
-      // Permitir pular email com fallback automático
+      // ── PULAR explícito → marca lead como pendente de revisão (NÃO vai pro portal) ──
       if (["pular", "skip", "não tenho", "nao tenho", "sem email", "n", "não", "nao"].includes(lower)) {
-        updates.email = `${customer.phone_whatsapp}@lead.igreen`;
-        console.log(`⏭️ Cliente pulou email — usando fallback ${updates.email}`);
-      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(txt)) {
-        reply = "❌ Não consegui ler esse e-mail.\n\n✅ Exemplo correto: *joao.silva@gmail.com*\n\nOu digite *PULAR* se preferir não informar.";
+        updates.status = "email_pendente_revisao";
+        reply = "📌 Sem problemas! Marquei seu cadastro como *pendente de e-mail*.\n\nUm consultor vai entrar em contato para finalizar com você. Obrigado! ☀️";
         break;
-      } else {
-        updates.email = txt.toLowerCase();
       }
+      // ── Validação dura: formato + placeholder + email do consultor ──
+      if (!isValidEmailFormat(txt)) {
+        reply = "❌ Não consegui ler esse e-mail.\n\n✅ Exemplo correto: *joao.silva@gmail.com*\n\nInforme um *e-mail pessoal real*:";
+        break;
+      }
+      if (isPlaceholderEmail(txt)) {
+        reply = "❌ Esse e-mail não pode ser usado.\n\nInforme um *e-mail pessoal real* (ex: nome@gmail.com):";
+        break;
+      }
+      // Bloquear email do consultor dono
+      try {
+        const { data: cons } = await supabase
+          .from("consultants")
+          .select("igreen_portal_email")
+          .eq("id", consultorId)
+          .maybeSingle();
+        if (cons?.igreen_portal_email && isSameContact(txt, cons.igreen_portal_email)) {
+          reply = "❌ Esse e-mail é do consultor. Por favor, informe *seu próprio e-mail pessoal* (ex: nome@gmail.com):";
+          break;
+        }
+      } catch (_) { /* segue */ }
+      updates.email = txt.toLowerCase();
       const merged = { ...customer, ...updates };
       const next = await autoResolveCepIfNeeded(merged, updates);
       updates.conversation_step = next;
@@ -919,10 +961,12 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
     // ─── 11. CONFIRMAR FINALIZAR ────────
     case "ask_finalizar": {
       const resp = isButton ? buttonId : messageText.toLowerCase().trim();
-      const finalizar = resp === "btn_finalizar" || resp === "1" || resp === "finalizar" || resp === "sim" || resp === "s";
+      // Aceita botão OU texto livre (cliente quase nunca clica no botão)
+      const triggers = ["btn_finalizar", "1", "finalizar", "sim", "s", "ok", "concluir", "prosseguir", "vamos", "pode", "pode sim", "pronto"];
+      const finalizar = triggers.includes(resp);
       if (finalizar) { updates.conversation_step = "finalizando"; reply = ""; }
       else {
-        const sent = await sendButtons(remoteJid, "📋 Todos os dados foram preenchidos!\n\nDeseja finalizar o cadastro?", [
+        const sent = await sendButtons(remoteJid, "📋 Todos os dados foram preenchidos!\n\nDeseja finalizar o cadastro?\n\n_(Você também pode digitar *FINALIZAR* ou *OK*)_", [
           { id: "btn_finalizar", title: "✅ Finalizar" },
         ]);
         if (!sent) reply = "Digite *FINALIZAR* ou *1* para confirmar o cadastro:";
@@ -991,7 +1035,24 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
   // AUTO-FINALIZAÇÃO (BLOCO ESPECIAL — extraído verbatim do index.ts antigo)
   // ═══════════════════════════════════════════════════════════════════
   if (updates.conversation_step === "finalizando") {
-    const merged = { ...customer, ...updates };
+    // Carregar dados do consultor dono para validação reforçada
+    let consultantRow: any = null;
+    try {
+      const { data: c } = await supabase
+        .from("consultants")
+        .select("id, phone, igreen_portal_email, cadastro_url")
+        .eq("id", customer.consultant_id || consultorId)
+        .maybeSingle();
+      consultantRow = c;
+    } catch (_) { /* segue sem checar */ }
+
+    const merged = {
+      ...customer,
+      ...updates,
+      // Injeta dados do consultor para que validateCustomerForPortal possa comparar
+      consultant_email: consultantRow?.igreen_portal_email || null,
+      consultant_phone: consultantRow?.phone || null,
+    };
     const validation = validateCustomerForPortal(merged);
     if (!validation.valid) {
       logStructured("warn", "validation_failed", {
@@ -999,6 +1060,18 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
       });
       let redirected = false;
       for (const err of validation.errors) {
+        // ── Email: placeholder, formato, consultor, ou ausente → volta a perguntar ──
+        if (err.includes("Email")) {
+          updates.conversation_step = "ask_email";
+          reply = `⚠️ ${err}\n\nInforme um *e-mail pessoal real* (ex: nome@gmail.com):`;
+          redirected = true; break;
+        }
+        // ── Telefone não confirmado / placeholder / DDD inválido / do consultor ──
+        if (err.includes("Telefone") || err.includes("telefone")) {
+          updates.conversation_step = "ask_phone_confirm";
+          reply = `⚠️ ${err}\n\nPreciso confirmar seu telefone de contato. Aguarde a próxima mensagem...`;
+          redirected = true; break;
+        }
         if (err.includes("CPF")) { updates.conversation_step = "ask_cpf"; reply = `⚠️ ${err}\n\nQual o seu *CPF*? (apenas números)`; redirected = true; break; }
         if (err.includes("RG")) { updates.conversation_step = "ask_rg"; reply = `⚠️ ${err}\n\nQual o seu *RG*?`; redirected = true; break; }
         if (err.includes("CEP")) { updates.conversation_step = "ask_cep"; reply = `⚠️ ${err}\n\nQual o seu *CEP*? (8 dígitos)`; redirected = true; break; }
@@ -1007,7 +1080,6 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
         if (err.includes("Bairro")) { updates.conversation_step = "editing_conta_endereco"; reply = `⚠️ ${err}\n\nDigite o *endereço completo* (rua, número, bairro):`; redirected = true; break; }
         if (err.includes("Cidade")) { updates.conversation_step = "ask_cep"; reply = `⚠️ ${err}\n\nInforme o *CEP* correto para completar a cidade:`; redirected = true; break; }
         if (err.includes("Estado")) { updates.conversation_step = "ask_cep"; reply = `⚠️ ${err}\n\nInforme o *CEP* correto:`; redirected = true; break; }
-        if (err.includes("Telefone")) { updates.conversation_step = "ask_phone"; reply = `⚠️ ${err}\n\nInforme seu *telefone* com DDD:`; redirected = true; break; }
         if (err.includes("Valor")) { updates.conversation_step = "ask_bill_value"; reply = `⚠️ ${err}\n\nQual o *valor* da sua conta de luz?`; redirected = true; break; }
         if (err.includes("Foto da conta")) { updates.conversation_step = "aguardando_conta"; reply = `⚠️ ${err}\n\n📸 Envie a foto da conta de energia:`; redirected = true; break; }
         if (err.includes("Documento") && err.includes("frente")) { updates.conversation_step = "ask_doc_frente_manual"; reply = `⚠️ ${err}\n\n📸 Envie a frente do documento:`; redirected = true; break; }
@@ -1019,12 +1091,28 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
         updates.conversation_step = "ask_name";
         reply = `⚠️ ${firstError}\n\nQual é o seu *nome completo*?`;
       }
+      // Se o passo redirecionado for ask_phone_confirm, reenviar os botões aqui
+      if (updates.conversation_step === "ask_phone_confirm") {
+        const msgConfirm = getReplyForStep("ask_phone_confirm", merged);
+        await sendButtons(remoteJid, msgConfirm, [
+          { id: "sim_phone", title: "✅ Sim, é meu" },
+          { id: "editar_phone", title: "✏️ Usar outro número" },
+        ]);
+        reply = "";
+      }
     } else {
       updates.possui_procurador = false;
       updates.conta_pdf_protegida = false;
       updates.debitos_aberto = false;
       updates.status = "portal_submitting";
       updates.conversation_step = "portal_submitting";
+
+      // ✅ Regenerar igreen_link a partir do cadastro_url do consultor dono
+      // (impede o bug em que o lead é submetido com o link de outro consultor)
+      if (consultantRow?.cadastro_url) {
+        updates.igreen_link = consultantRow.cadastro_url;
+        console.log(`🔗 igreen_link regenerado para consultor dono: ${consultantRow.id}`);
+      }
 
       console.log(`📝 Salvando updates ANTES do portal worker para ${customer.id}:`, JSON.stringify(updates).substring(0, 500));
       const { error: saveError } = await supabase.from("customers").update(updates).eq("id", customer.id).select();
