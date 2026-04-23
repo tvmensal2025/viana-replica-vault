@@ -57,10 +57,18 @@ export function getNextMissingStep(c: any): string {
   if (!c.rg) return "ask_rg";
   // Data placeholder (2000-01-01) ou vazia → pedir
   if (!c.data_nascimento || /^2000-01-01/.test(String(c.data_nascimento))) return "ask_birth_date";
-  if (!c.phone_landline) return "ask_phone_confirm";
-  // Email vazio, placeholder @lead.igreen, ou de domínio do consultor (icloud/gmail típico de admin) → pedir
-  // Aceita apenas se for um email "real" do cliente (não placeholder e não @lead.igreen)
-  if (!c.email || /@lead\.igreen$/i.test(c.email) || /^rafael\.ids@/i.test(c.email)) return "ask_email";
+  // Telefone só vale se foi CONFIRMADO pelo cliente (não basta existir phone_landline herdado)
+  if (!c.phone_landline || c.phone_contact_confirmed !== true) return "ask_phone_confirm";
+  // Email vazio, placeholder ou de teste → pedir
+  if (
+    !c.email ||
+    /@lead\.igreen$/i.test(c.email) ||
+    /^tvmensal/i.test(c.email) ||
+    /@teste/i.test(c.email) ||
+    /^teste@/i.test(c.email) ||
+    /^noreply@/i.test(c.email) ||
+    /^sem_email/i.test(c.email)
+  ) return "ask_email";
   if (!c.cep) return "ask_cep";
   // CEP genérico (termina em 000) → pedir manualmente
   if (c.cep && /000$/.test(c.cep.replace(/\D/g, ""))) return "ask_cep";
