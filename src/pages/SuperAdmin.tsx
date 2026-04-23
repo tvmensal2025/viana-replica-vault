@@ -334,6 +334,9 @@ const SuperAdmin = () => {
               ))}
             </div>
 
+            {/* Stuck Leads Widget — visibilidade em tempo real */}
+            <StuckLeadsWidget />
+
             {/* Search */}
             <div className="flex items-center gap-3">
               <div className="relative flex-1 max-w-md">
