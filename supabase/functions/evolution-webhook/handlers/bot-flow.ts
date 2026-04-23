@@ -749,8 +749,7 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
     case "ask_phone_confirm": {
       const resp = isButton ? buttonId : messageText.toLowerCase().trim();
       const sim = resp === "sim_phone" || resp === "1" || resp === "sim" || resp === "s";
-      const editar = resp === "editar_phone" || resp === "2" || resp === "editar";
-      const cancelar = resp === "cancelar_phone" || resp === "3" || resp === "cancelar" || resp === "cancel";
+      const editar = resp === "editar_phone" || resp === "2" || resp === "editar" || resp === "outro" || resp === "outro número" || resp === "outro numero";
       if (sim) {
         const p = (customer.phone_whatsapp || phone).replace(/\D/g, "");
         const num = p.length >= 11 ? p.slice(-11) : p;
@@ -767,17 +766,13 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
       } else if (editar) {
         updates.conversation_step = "ask_phone";
         reply = "Informe o *telefone* com DDD (ex: 11999998888):";
-      } else if (cancelar) {
-        updates.conversation_step = "ask_birth_date";
-        reply = "Qual sua *data de nascimento*? (DD/MM/AAAA)";
       } else {
         const msgConfirm = getReplyForStep("ask_phone_confirm", customer);
         const sent = await sendButtons(remoteJid, msgConfirm, [
           { id: "sim_phone", title: "✅ Sim" },
-          { id: "editar_phone", title: "✏️ Editar" },
-          { id: "cancelar_phone", title: "❌ Cancelar" },
+          { id: "editar_phone", title: "📱 Outro número" },
         ]);
-        if (!sent) reply = "Digite *1* (Sim), *2* (Editar) ou *3* (Cancelar):";
+        if (!sent) reply = "Digite *1* se esse telefone é seu, ou *2* para informar outro número:";
         else reply = "";
       }
       break;
@@ -789,14 +784,14 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
       // Validar DDD
       const ddd = parseInt(phoneClean.substring(0, 2));
       if (ddd < 11 || ddd > 99) { reply = "❌ DDD inválido. Informe um telefone com DDD válido (ex: 11999998888):"; break; }
-      // Buscar telefone do consultor para evitar auto-cadastro acidental
+      // Buscar telefone do consultor + número da instância conectada para evitar auto-cadastro acidental
       try {
-        const { data: cons } = await supabase
-          .from("consultants")
-          .select("phone")
-          .eq("id", consultorId)
-          .maybeSingle();
-        if (cons?.phone && isSameContact(phoneClean, cons.phone)) {
+        const [{ data: cons }, { data: inst }] = await Promise.all([
+          supabase.from("consultants").select("phone").eq("id", consultorId).maybeSingle(),
+          supabase.from("whatsapp_instances").select("connected_phone").eq("consultant_id", consultorId).maybeSingle(),
+        ]);
+        const blockNumbers = [cons?.phone, inst?.connected_phone].filter(Boolean) as string[];
+        if (blockNumbers.some((n) => isSameContact(phoneClean, n))) {
           reply = "❌ Esse telefone é o número do consultor. Por favor, informe *seu próprio telefone* de contato:";
           break;
         }
@@ -818,10 +813,10 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
     case "ask_email": {
       const txt = (messageText || "").trim();
       const lower = txt.toLowerCase();
-      // ── PULAR explícito → marca lead como pendente de revisão (NÃO vai pro portal) ──
-      if (["pular", "skip", "não tenho", "nao tenho", "sem email", "n", "não", "nao"].includes(lower)) {
-        updates.status = "email_pendente_revisao";
-        reply = "📌 Sem problemas! Marquei seu cadastro como *pendente de e-mail*.\n\nUm consultor vai entrar em contato para finalizar com você. Obrigado! ☀️";
+      // ⚠️ Email é OBRIGATÓRIO no portal iGreen. Não aceitar PULAR — repetir até cliente fornecer email real.
+      // Se cliente disser que não tem, orientar a criar um Gmail rápido.
+      if (["pular", "skip", "não tenho", "nao tenho", "sem email", "sem e-mail", "n", "não", "nao"].includes(lower)) {
+        reply = "📧 Preciso de um *e-mail* para finalizar seu cadastro no portal iGreen.\n\nSe você não tem, pode criar um agora em *gmail.com* — leva 1 minuto.\n\nDepois é só enviar aqui (ex: nome.sobrenome@gmail.com):";
         break;
       }
       // ── Validação dura: formato + placeholder + email do consultor ──

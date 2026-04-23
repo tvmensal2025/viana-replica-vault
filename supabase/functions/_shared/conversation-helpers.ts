@@ -106,7 +106,7 @@ export function getReplyForStep(step: string, c: any): string {
       // Remove 55 prefix for display
       if (p.startsWith("55") && p.length >= 12) p = p.substring(2);
       const fmt = p.length >= 11 ? `(${p.slice(0, 2)}) ${p.slice(2, 7)}-${p.slice(7)}` : (c.phone_whatsapp || "");
-      return `Deseja permanecer com o celular *${fmt}* (que está enviando a mensagem)?`;
+      return `📞 Esse é o seu *telefone de contato*?\n\n*${fmt}*\n\nToque em *Sim* se for o seu, ou em *Outro número* para informar outro telefone.`;
     }
     case "ask_phone": return "Informe seu *telefone* com DDD (ex: 11999998888):";
     case "ask_email": return "Informe seu *e-mail* (ex: joao.silva@gmail.com)\n\n_Ou digite *PULAR* se preferir não informar._";
