@@ -1,96 +1,89 @@
 
 
-## Gerar panfleto pronto + remover número pessoal do fallback
+## Trocar todas as chaves Google Cloud da nova conta
 
-### 1. Salvar o "G verde" como asset do projeto
+Você vai gerar novas API keys no novo projeto Google Cloud (que aparece na sua tela com R$ 1.785 de crédito) e a gente substitui as chaves antigas em todos os pontos do sistema sem deixar nada de fora.
 
-Copiar o arquivo enviado (`Cópia de G - Verde-3.png`) para `public/images/g-verde.png`. Vai ser usado tanto no centro do QR quanto no panfleto.
+### 1. O que o sistema usa hoje do Google Cloud
 
-### 2. Remover número pessoal do fallback do `qr-redirect`
+Mapeei o código inteiro. Hoje o projeto usa **uma única API do Google Cloud**: a **Generative Language API (Gemini)**. Não há uso de Vision API, Maps, Firebase ou Google Auth.
 
-Hoje a edge function `supabase/functions/qr-redirect/index.ts` tem:
-```ts
-const FALLBACK_PHONE = "5511989000650"; // ← seu número pessoal, marcado erradamente como "iGreen oficial"
-```
+| Onde é usado | API/Modelo | Para quê |
+|---|---|---|
+| `supabase/functions/_shared/ocr.ts` | `gemini-2.5-flash` (generateContent) | OCR de conta de luz, RG (frente/verso), CNH, comprovante de endereço |
+| `supabase/functions/evolution-webhook/index.ts` | passa `GEMINI_API_KEY` para handlers | Dispara o OCR quando chega imagem/PDF no WhatsApp |
+| `supabase/functions/igreen-chat/index.ts` | `gemini-2.0-flash` (streamGenerateContent) | Assistente IA da landing page (fallback quando Lovable AI cai) |
+| `supabase/functions/extract-pdf-text/index.ts` | `google/gemini-2.5-flash` via Lovable AI Gateway | Extração de texto de PDF — **NÃO usa sua chave Google, usa LOVABLE_API_KEY**, fica de fora da troca |
 
-Trocar a lógica de fallback final: se não houver `connected_phone` nem `consultants.phone`, em vez de mandar pra um número fixo, redirecionar pra **landing page do consultor** (`https://igreen.institutodossonhos.com.br/{licenca}`) — assim o cliente vê a página com formulário/contato e o panfleto continua sem quebrar, **sem expor número pessoal de ninguém**.
+**Secrets atuais no Supabase que serão substituídos:**
+- `GEMINI_API_KEY` (principal — usado pelo OCR)
+- `GOOGLE_AI_API_KEY` (fallback do `igreen-chat`)
+- `GOOGLE_VISION_API_KEY` (existe no Supabase mas **não é referenciado em nenhum lugar do código** — vou deixar você decidir se mantém ou apaga)
 
-Caso a licença nem exista no banco (panfleto antigo de licença removida), redirecionar pro site institucional `https://igreen.institutodossonhos.com.br/`.
+### 2. APIs que você precisa habilitar no novo projeto Google Cloud
 
-### 3. Novo botão "📄 Panfleto" no painel `/admin` aba **Links**
+Antes de gerar as keys, no novo projeto (do print) ative:
 
-Em `src/components/admin/LinksTab.tsx`, no card "Página de Cadastro" (que já é o fluxo do QR pro WhatsApp), adicionar um botão **"📄 Panfleto"** ao lado de "QR Code" e "Copiar".
+1. **Generative Language API** — obrigatória (OCR + chat IA)  
+   → `https://console.cloud.google.com/apis/library/generativelanguage.googleapis.com`
 
-Ao clicar, abre um novo modal `PanfletoModal` (componente novo, em `src/components/admin/PanfletoModal.tsx`) que:
+Só essa. Como não usamos Vision/Maps, não precisa habilitar mais nada.
 
-**Renderiza o panfleto completo em um `<canvas>` 1240x1748px (A5 a 300dpi, pronto pra gráfica):**
+### 3. Como você vai gerar as chaves
 
-```text
-┌───────────────────────────────────────┐
-│   [G verde]  iGreen Energy            │ ← topo verde com logo
-│                                       │
-│   Economize de 8% a 20%               │ ← headline
-│   na sua conta de luz                 │
-│                                       │
-│   ✓ Sem obra, sem instalação          │
-│   ✓ Sem mudar de distribuidora        │
-│   ✓ Energia 100% limpa                │
-│                                       │
-│         ┌─────────────┐               │
-│         │  ▓▓ QR ▓▓  │               │ ← QR com G verde no centro
-│         │  ▓▓ ▓G▓ ▓▓ │               │
-│         │  ▓▓▓▓▓▓▓▓▓ │               │
-│         └─────────────┘               │
-│                                       │
-│   Aponte a câmera e fale agora        │
-│   com {nomeDoConsultor}               │
-│                                       │
-│   www.igreen.institutodossonhos...    │
-└───────────────────────────────────────┘
-```
+No novo projeto Google Cloud:
 
-**O QR aponta pra:**
-```
-https://zlzasfhcxcznaprrragl.supabase.co/functions/v1/qr-redirect?l={licenca_do_consultor}
-```
+1. Vá em **APIs e Serviços → Credenciais → Criar credenciais → Chave de API**
+2. Crie **uma chave** (pode chamar de "iGreen Gemini Produção")
+3. Em "Restrições de API", restrinja a chave para **somente Generative Language API** (segurança)
+4. Copie o valor (`AIzaSy...`)
 
-Gerado com `qrcode` (lib que já tá no projeto via `qrcode.react`) em **error correction H** (~30%), com o `g-verde.png` desenhado no centro ocupando ~22% da área (margem branca redonda atrás pra contraste).
+Você pode usar **a mesma chave** para `GEMINI_API_KEY` e `GOOGLE_AI_API_KEY` (são o mesmo provedor, apenas nomes diferentes que o código aceita), ou gerar duas chaves separadas se quiser isolar OCR vs Chat.
 
-**Modal tem 3 botões:**
-- **Baixar PNG** (1240x1748, pronto pra WhatsApp/redes)
-- **Baixar PDF A5** (mesmo conteúdo, vetor — ideal pra gráfica imprimir milhares)
-- **Copiar link do redirect** (caso queira compartilhar só o link)
+### 4. Onde a troca acontece (eu faço quando aprovar)
 
-### 4. Detalhes técnicos
+Quando você aprovar este plano, vou:
 
-- Lib nova: `jspdf` (PDF) e `qrcode` (gerar QR como dataURL pra desenhar no canvas, em vez de SVG). `qrcode.react` continua sendo usado nos QRs avulsos.
-- Cores: verde primário `#16a34a` (já no design system), texto `#0F172A`, fundo branco.
-- Fontes: Montserrat Bold pra títulos, Inter regular pro corpo (já carregadas no projeto).
-- Nome do consultor vem de `form.name` (já disponível no `Admin.tsx` via `useAdminAuth`).
-- Licença vem de `slug` (já calculado no `Admin.tsx`).
-- O modal recebe `{ licenca, nomeConsultor }` por props.
+**a) Atualizar os secrets no Supabase Edge Functions** com a(s) nova(s) chave(s):
+- `GEMINI_API_KEY` → nova chave
+- `GOOGLE_AI_API_KEY` → nova chave (mesma ou outra)
+- `GOOGLE_VISION_API_KEY` → opcional (apagar ou atualizar — me diga sua preferência)
+
+Os secrets são propagados automaticamente para todas as edge functions na hora — **não precisa redeploy**.
+
+**b) Validar funcionamento** rodando dois testes diretos:
+- Teste 1: chamada simples ao endpoint Gemini com a nova chave (confirma que a chave é válida e a API está habilitada)
+- Teste 2: chamar a edge function `evolution-webhook` em modo simulado para garantir que o OCR responde 200
+
+**c) Verificar logs** das edge functions `evolution-webhook`, `igreen-chat` e `whatsapp-bot` por 2 minutos para garantir que não aparece "GEMINI_API_KEY não configurada" nem 401/403 do Google.
 
 ### 5. O que NÃO muda
 
-- Mensagem pré-salva (`DEFAULT_MESSAGE`) — mantida.
-- QR Code padrão dos outros links (UTM, landing) — continua funcionando como antes.
-- Lógica de redirect dinâmico (`connected_phone` → `consultants.phone` → fallback) — só muda o **fallback final**, que sai de "número pessoal" pra "landing page do consultor / site institucional".
-- IDs de tracking (`page_events` continua registrando `qr_scan`).
+- `LOVABLE_API_KEY` (Lovable AI Gateway) — continua o mesmo, é gerenciado pela Lovable
+- `extract-pdf-text` — usa Lovable AI, não depende da sua chave Google
+- Modelos usados (`gemini-2.5-flash` e `gemini-2.0-flash`) — continuam iguais
+- Nenhum código TypeScript precisa ser editado — a troca é só de secret
+
+### 6. Riscos e mitigação
+
+| Risco | Mitigação |
+|---|---|
+| Chave nova sem cota / API não habilitada | Teste 1 acima detecta antes de afetar produção |
+| Chave antiga fica ativa em paralelo | Você pode revogar a chave antiga no console Google só **depois** dos testes passarem |
+| `GOOGLE_VISION_API_KEY` órfão | Vou apontar e você decide se apaga |
+
+### 7. O que preciso de você para executar
+
+Quando aprovar e mudar para modo padrão, vou pedir a chave nova via tool segura de secret (não cola aqui no chat). Você cola lá e eu já aplico + testo.
 
 ### Arquivos afetados
 
-| # | Arquivo | Ação |
-|---|---------|------|
-| 1 | `public/images/g-verde.png` | Novo (cópia do upload) |
-| 2 | `supabase/functions/qr-redirect/index.ts` | Trocar fallback final pra landing page; remover `FALLBACK_PHONE` |
-| 3 | `src/components/admin/PanfletoModal.tsx` | Novo componente — gera panfleto em canvas + exporta PNG/PDF |
-| 4 | `src/components/admin/LinksTab.tsx` | Adicionar botão "📄 Panfleto" no card de Cadastro + prop nova |
-| 5 | `src/pages/Admin.tsx` | Estado `panfletoOpen` + render do modal + passar `nomeConsultor` pra `LinksTab` |
-| 6 | `package.json` | Adicionar `jspdf` e `qrcode` |
+Nenhum arquivo de código será editado. A mudança é 100% em **secrets do Supabase**:
 
-### Após salvar
-
-- Frontend (itens 3-6): entram no próximo build automático.
-- Edge function `qr-redirect` (item 2): redeploy automático ao salvar.
-- Você abre `/admin` → aba **Links** → card "Página de Cadastro" → botão **📄 Panfleto** → baixa PNG ou PDF e manda pra gráfica.
+| # | Recurso | Ação |
+|---|---|---|
+| 1 | Supabase secret `GEMINI_API_KEY` | Atualizar com nova chave |
+| 2 | Supabase secret `GOOGLE_AI_API_KEY` | Atualizar com nova chave |
+| 3 | Supabase secret `GOOGLE_VISION_API_KEY` | Decisão sua: manter, atualizar ou apagar |
+| 4 | Edge functions `evolution-webhook`, `igreen-chat`, `whatsapp-bot` | Apenas validação por log (sem código novo) |
 
