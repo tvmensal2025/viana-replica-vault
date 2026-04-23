@@ -15,6 +15,7 @@ import { existsSync, writeFileSync, readFileSync, copyFileSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { logPhase, WORKER_VERSION_TAG } from './phase-logger.mjs';
+import * as Sentry from '@sentry/node';
 
 const CONSULTOR_ID_FALLBACK = process.env.IGREEN_CONSULTOR_ID || '124170';
 // PORTAL_URL agora é gerado dinamicamente por cliente (usa igreen_id do consultor)
@@ -1850,15 +1851,30 @@ export async function executarAutomacao(customerId, options = {}) {
     console.error(`   Tempo: ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
     console.error('='.repeat(70));
     
+    // SENTRY: Capturar erro com contexto completo da automação
+    try {
+      Sentry.withScope((scope) => {
+        scope.setTags({
+          module: 'playwright-automation',
+          phase: currentPhase,
+          customer_id: customerId,
+        });
+        scope.setExtras({
+          duration_seconds: ((Date.now() - startTime) / 1000).toFixed(1),
+          headless: options?.headless,
+          url: (typeof page !== 'undefined' && page) ? page.url() : 'N/A',
+        });
+        Sentry.captureException(error);
+      });
+    } catch (_) { /* sentry opcional */ }
+    
     try {
       if (typeof page !== 'undefined' && page) {
         await screenshot(page, customerId, `ERROR-${currentPhase}`);
-        // Capturar contexto extra para diagnóstico
         const errUrl = page.url();
         const errText = await page.textContent('body').catch(() => '');
         console.error(`   📎 URL no momento do erro: ${errUrl}`);
         console.error(`   📄 Texto da página (200 chars): ${(errText || '').substring(0, 200).replace(/\s+/g, ' ')}`);
-        // Salvar HTML dump do erro
         const htmlDump = await page.content().catch(() => null);
         if (htmlDump) {
           const dumpPath = join(SCREENSHOTS_DIR, `${customerId}-ERROR-${currentPhase}-${Date.now()}.html`);
