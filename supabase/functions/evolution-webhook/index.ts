@@ -266,12 +266,38 @@ Deno.serve(async (req) => {
 
     // ─── 8) Run bot flow ───────────────────────────────────────────────
     const stepBefore = customer.conversation_step || "welcome";
-    const { reply, updates } = await runBotFlow({
-      supabase, sender, customer, consultorId, nomeRepresentante,
-      remoteJid, phone, messageText, buttonId, isFile, isButton,
-      hasImage, hasDocument, imageMessage, documentMessage, message, key, messageId,
-      fileUrl, fileBase64, geminiApiKey: GEMINI_API_KEY,
-    });
+    let reply = "";
+    let updates: Record<string, any> = {};
+    try {
+      const result = await runBotFlow({
+        supabase, sender, customer, consultorId, nomeRepresentante,
+        remoteJid, phone, messageText, buttonId, isFile, isButton,
+        hasImage, hasDocument, imageMessage, documentMessage, message, key, messageId,
+        fileUrl, fileBase64, geminiApiKey: GEMINI_API_KEY,
+      });
+      reply = result.reply;
+      updates = result.updates;
+    } catch (botErr: any) {
+      // GARANTIA FINAL: Se o bot quebrar (exceção), o cliente NUNCA fica sem resposta.
+      // Logamos o erro, registramos no lead, e mandamos uma mensagem amigável pedindo pra repetir.
+      console.error(`💥 [bot-flow crash] step=${stepBefore} customer=${customer.id}:`, botErr);
+      captureError(botErr, {
+        tags: { function: "evolution-webhook", kind: "bot_flow_crash" },
+        extra: { customer_id: customer.id, step: stepBefore },
+      });
+      reply = "🤖 Tive um probleminha técnico ao processar sua mensagem. Pode me enviar novamente, por favor? Se continuar, me responda *MENU* para recomeçarmos juntos. 🙏";
+      updates = {};
+      // Garante que o lead não fica preso em status confuso
+      try {
+        await supabase
+          .from("customers")
+          .update({
+            error_message: `bot_crash@${stepBefore}: ${String(botErr?.message || botErr).substring(0, 250)}`,
+            last_bot_reply_at: new Date().toISOString(),
+          })
+          .eq("id", customer.id);
+      } catch (_) { /* não bloquear o reply ao cliente */ }
+    }
 
     // ─── 9) Persist updates ────────────────────────────────────────────
     // Marca timestamp da última atividade do bot — usado pelo cron de leads parados
