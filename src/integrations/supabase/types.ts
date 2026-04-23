@@ -427,6 +427,7 @@ export type Database = {
           ocr_doc_attempts: number
           otp_code: string | null
           otp_received_at: string | null
+          phone_contact_confirmed: boolean
           phone_landline: string | null
           phone_whatsapp: string
           portal_submitted_at: string | null
@@ -501,6 +502,7 @@ export type Database = {
           ocr_doc_attempts?: number
           otp_code?: string | null
           otp_received_at?: string | null
+          phone_contact_confirmed?: boolean
           phone_landline?: string | null
           phone_whatsapp: string
           portal_submitted_at?: string | null
@@ -575,6 +577,7 @@ export type Database = {
           ocr_doc_attempts?: number
           otp_code?: string | null
           otp_received_at?: string | null
+          phone_contact_confirmed?: boolean
           phone_landline?: string | null
           phone_whatsapp?: string
           portal_submitted_at?: string | null
