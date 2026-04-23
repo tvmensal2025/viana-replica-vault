@@ -4,6 +4,7 @@
  */
 
 import { fetchWithTimeout, logStructured, TIMEOUT_WHAPI } from "./utils.ts";
+import { captureError } from "./sentry.ts";
 
 export interface EvolutionButton {
   id: string;
@@ -25,49 +26,55 @@ export interface EvolutionInstance {
 export function createEvolutionSender(apiUrl: string, apiKey: string, instanceName: string) {
   const baseUrl = apiUrl.replace(/\/$/, "");
 
-  async function sendText(remoteJid: string, text: string): Promise<boolean> {
-    try {
-      const res = await fetchWithTimeout(`${baseUrl}/message/sendText/${instanceName}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "apikey": apiKey,
-        },
-        body: JSON.stringify({
-          number: remoteJid,
-          text: text,
-        }),
-        timeout: TIMEOUT_WHAPI,
-      });
-
-      if (!res.ok) {
-        const errorText = await res.text();
-        logStructured("error", "evolution_send_text_failed", {
-          instance: instanceName,
-          status: res.status,
-          error: errorText.substring(0, 200),
-        });
-        return false;
+  // Retry helper para envios — exponential backoff (300ms, 900ms, 2.7s)
+  async function sendWithRetry(label: string, doSend: () => Promise<Response>): Promise<boolean> {
+    let lastStatus = 0;
+    let lastBody = "";
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const res = await doSend();
+        if (res.ok) return true;
+        lastStatus = res.status;
+        lastBody = (await res.text()).substring(0, 200);
+        // 4xx (exceto 408/429) não vale retry
+        if (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 429) {
+          break;
+        }
+      } catch (error: any) {
+        lastBody = error?.message || String(error);
       }
-
-      return true;
-    } catch (error: any) {
-      logStructured("error", "evolution_send_text_exception", {
-        instance: instanceName,
-        error: error?.message,
-      });
-      return false;
+      if (attempt < 3) {
+        await new Promise((r) => setTimeout(r, 300 * Math.pow(3, attempt - 1)));
+      }
     }
+    logStructured("error", `evolution_${label}_failed_final`, {
+      instance: instanceName,
+      status: lastStatus,
+      error: lastBody,
+    });
+    captureError(new Error(`Evolution ${label} failed after 3 attempts: ${lastBody}`), {
+      tags: { function: "evolution-api", instance: instanceName, kind: label },
+      extra: { status: lastStatus },
+    });
+    return false;
+  }
+
+  async function sendText(remoteJid: string, text: string): Promise<boolean> {
+    return sendWithRetry("send_text", () =>
+      fetchWithTimeout(`${baseUrl}/message/sendText/${instanceName}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "apikey": apiKey },
+        body: JSON.stringify({ number: remoteJid, text }),
+        timeout: TIMEOUT_WHAPI,
+      })
+    );
   }
 
   async function sendButtons(remoteJid: string, message: string, buttons: EvolutionButton[]): Promise<boolean> {
-    try {
-      const res = await fetchWithTimeout(`${baseUrl}/message/sendButtons/${instanceName}`, {
+    const ok = await sendWithRetry("send_buttons", () =>
+      fetchWithTimeout(`${baseUrl}/message/sendButtons/${instanceName}`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "apikey": apiKey,
-        },
+        headers: { "Content-Type": "application/json", "apikey": apiKey },
         body: JSON.stringify({
           number: remoteJid,
           title: "Escolha uma opção",
@@ -75,36 +82,17 @@ export function createEvolutionSender(apiUrl: string, apiKey: string, instanceNa
           footer: "iGreen Energy",
           buttons: buttons.map((b) => ({
             buttonId: b.id,
-            buttonText: {
-              displayText: b.title,
-            },
+            buttonText: { displayText: b.title },
           })),
         }),
         timeout: TIMEOUT_WHAPI,
-      });
-
-      if (res.ok) {
-        return true;
-      }
-
-      // Fallback: enviar como texto com opções numeradas
-      logStructured("warn", "evolution_buttons_fallback", {
-        instance: instanceName,
-        status: res.status,
-      });
-
-      const textWithOptions = `${message}\n\n${buttons.map((b, i) => `${i + 1}. ${b.title}`).join("\n")}`;
-      return await sendText(remoteJid, textWithOptions);
-    } catch (error: any) {
-      logStructured("error", "evolution_send_buttons_exception", {
-        instance: instanceName,
-        error: error?.message,
-      });
-
-      // Fallback: enviar como texto
-      const textWithOptions = `${message}\n\n${buttons.map((b, i) => `${i + 1}. ${b.title}`).join("\n")}`;
-      return await sendText(remoteJid, textWithOptions);
-    }
+      })
+    );
+    if (ok) return true;
+    // Fallback final: texto numerado (também com retry interno)
+    logStructured("warn", "evolution_buttons_fallback_to_text", { instance: instanceName });
+    const textWithOptions = `${message}\n\n${buttons.map((b, i) => `${i + 1}. ${b.title}`).join("\n")}`;
+    return await sendText(remoteJid, textWithOptions);
   }
 
   async function downloadMedia(key: any, message: any): Promise<string | null> {
