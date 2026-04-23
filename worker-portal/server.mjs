@@ -66,237 +66,91 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_S
 const otpCodes = new Map();
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SISTEMA DE FILA - Processa 1 lead por vez, na ordem de chegada
+// SISTEMA DE FILA - BullMQ (Redis) com fallback memória
 // ═══════════════════════════════════════════════════════════════════════════════
-const queue = [];          // Array de jobs: { customer_id, options, addedAt, status }
-let currentJob = null;     // Job sendo processado agora
-let processedCount = 0;    // Total já processados desde o boot
-let failedCount = 0;       // Total que falharam
-let isProcessingLock = false; // SOLUÇÃO 4: Mutex real para processNextInQueue
-const retryTracker = new Map(); // customer_id → número de tentativas
-// SOLUÇÃO 3: Set de IDs processados recentemente (evita re-entrada após finally)
-const recentlyProcessed = new Set();
+import {
+  initQueue, addToQueue, processNextMemoryQueue, getQueueStatus,
+  clearQueue, forceAllow, pushActivity, getActivityLog,
+  isRedisAvailable, getCurrentJob,
+} from './queue-manager.mjs';
 
-// Log de atividades (para dashboard - "por que abriu")
-const ACTIVITY_MAX = 50;
-const activityLog = [];
-function pushActivity(event, customer_id, message) {
-  activityLog.push({ at: new Date().toISOString(), event, customer_id: customer_id || null, message: message || '' });
-  if (activityLog.length > ACTIVITY_MAX) activityLog.shift();
+// ─── Função de processamento de job (usada pelo BullMQ e fallback memória) ──
+async function processJob(customer_id, options) {
+  const result = await executarAutomacao(customer_id, options);
+  if (!result?.success) {
+    throw new Error(result?.error || 'Automação terminou sem sucesso explícito');
+  }
+
+  const supabase = getSupabase();
+  let finalStatus = null;
+  if (supabase) {
+    const { data: customerStatus } = await supabase
+      .from('customers')
+      .select('status, error_message')
+      .eq('id', customer_id)
+      .single();
+    finalStatus = customerStatus?.status || null;
+    if (!finalStatus || ['portal_submitting', 'automation_failed'].includes(finalStatus)) {
+      throw new Error(`Automação não concluiu o lead no banco. Status final: ${finalStatus || 'desconhecido'}${customerStatus?.error_message ? ` | ${customerStatus.error_message}` : ''}`);
+    }
+  }
+  return { ...result, finalStatus };
 }
 
-// SOLUÇÃO 1: addToQueue agora é ASYNC e faz AWAIT no update do Supabase
-async function addToQueue(customer_id, options = {}) {
-  // Evitar duplicatas na fila
-  const alreadyInQueue = queue.some(j => j.customer_id === customer_id);
-  const isCurrentJob = currentJob?.customer_id === customer_id;
-  // SOLUÇÃO 3: Também checar se foi processado recentemente
-  const wasRecentlyProcessed = recentlyProcessed.has(customer_id);
-  if (alreadyInQueue || isCurrentJob || wasRecentlyProcessed) {
-    if (wasRecentlyProcessed) console.log(`🔒 ${customer_id} processado recentemente, ignorando`);
-    return { position: alreadyInQueue ? queue.findIndex(j => j.customer_id === customer_id) + 1 : 0, duplicate: true };
+// ─── Callbacks pós-processamento (fallback memória) ─────────────────────────
+async function onJobSuccess(customer_id, result) {
+  console.log(`✅ FILA: Lead ${customer_id} processado com sucesso!`);
+  if (result?.pageUrl) {
+    try {
+      const supabase = getSupabase();
+      let alreadySent = false;
+      if (supabase) {
+        const { data: c } = await supabase.from('customers').select('link_facial').eq('id', customer_id).single();
+        alreadySent = !!c?.link_facial;
+      }
+      if (!alreadySent) {
+        await sendLinkToCustomer(customer_id, result.pageUrl);
+      } else {
+        console.log('   ⏭️  link_facial já gravado pelo automation — pulando envio duplicado');
+      }
+    } catch (linkErr) {
+      console.warn(`   ⚠️ Falha ao decidir envio de link: ${linkErr.message}`);
+    }
   }
+}
 
-  // Controle de retentativas (máximo 3)
-  const retryCount = retryTracker.get(customer_id) || 0;
-  if (retryCount >= 3) {
-    console.log(`🚫 ${customer_id} já falhou ${retryCount}x. Não vai retentar.`);
-    return { position: -1, duplicate: false, maxRetries: true };
+async function onJobFailure(customer_id, error, attempts) {
+  console.error(`❌ FILA: Lead ${customer_id} falhou (tentativa ${attempts}/3): ${error.message}`);
+  try {
+    Sentry.withScope((scope) => {
+      scope.setTags({ module: 'playwright-automation', customer_id: String(customer_id), attempt: String(attempts) });
+      Sentry.captureException(error);
+    });
+  } catch (_) {}
+  if (attempts >= 3) {
+    const supabase = getSupabase();
+    if (supabase) {
+      try {
+        await supabase.from('customers').update({
+          status: 'automation_failed',
+          error_message: `Tentativa ${attempts}/3: ${error.message}`,
+          updated_at: new Date().toISOString(),
+        }).eq('id', customer_id);
+      } catch (_) {}
+    }
   }
+}
 
-  const job = {
-    customer_id,
-    options,
-    addedAt: new Date().toISOString(),
-    status: 'waiting',
-    attempt: retryCount + 1
-  };
-  queue.push(job);
-  const position = queue.length;
-  console.log(`📋 FILA: +1 lead (${customer_id}) | Posição: ${position} | Tentativa: ${job.attempt} | Total na fila: ${queue.length}`);
-
-  // SOLUÇÃO 1: AWAIT no update do Supabase (antes era .then() fire-and-forget)
+// ─── Helper: atualizar status no Supabase ────────────────────────────────────
+async function supabaseSetSubmitting(customer_id) {
   const supabase = getSupabase();
   if (supabase) {
-    try {
-      await supabase.from('customers').update({
-        status: 'portal_submitting',
-        updated_at: new Date().toISOString(),
-      }).eq('id', customer_id);
-      console.log(`   ✅ Status → portal_submitting (CONFIRMADO no banco)`);
-    } catch (e) {
-      console.warn(`   ⚠️  Erro ao atualizar status: ${e.message}`);
-    }
+    await supabase.from('customers').update({
+      status: 'portal_submitting',
+      updated_at: new Date().toISOString(),
+    }).eq('id', customer_id);
+    console.log(`   ✅ Status → portal_submitting (CONFIRMADO no banco)`);
   }
-  
-  // Iniciar processamento se não tem nada rodando
-  processNextInQueue();
-  
-  return { position, duplicate: false };
-}
-
-async function processNextInQueue() {
-  // SOLUÇÃO 4: Mutex real - impede execuções paralelas
-  if (isProcessingLock) return;
-  // Se já tem algo processando ou fila vazia, sai
-  if (currentJob || queue.length === 0) return;
-
-  isProcessingLock = true;
-
-  // Pegar próximo da fila
-  currentJob = queue.shift();
-  currentJob.status = 'processing';
-  currentJob.startedAt = new Date().toISOString();
-  const jobCustomerId = currentJob.customer_id; // Salvar ID antes do finally
-
-  console.log(`\n${'='.repeat(70)}`);
-  console.log(`🚀 FILA: Processando lead ${currentJob.customer_id}`);
-  console.log(`   Entrou na fila: ${currentJob.addedAt}`);
-  console.log(`   Restantes na fila: ${queue.length}`);
-  console.log('='.repeat(70));
-  pushActivity('job_started', currentJob.customer_id, 'Automação iniciada - navegador aberto no iGreen');
-
-  try {
-    // NÃO fazer pkill aqui - a automação já gerencia o browser internamente
-    // O pkill matava o browser que a própria automação acabou de abrir!
-    // closeActiveBrowser() + killOrphanedChromium() dentro de playwright-automation.mjs
-    // já cuidam disso de forma segura.
-
-    // SOLUÇÃO 2: Usa import estático (top-level) - UMA instância do módulo
-    const result = await executarAutomacao(currentJob.customer_id, currentJob.options);
-    if (!result?.success) {
-      throw new Error(result?.error || 'Automação terminou sem sucesso explícito');
-    }
-
-    const supabase = getSupabase();
-    let finalStatus = null;
-    if (supabase) {
-      const { data: customerStatus } = await supabase
-        .from('customers')
-        .select('status, error_message')
-        .eq('id', currentJob.customer_id)
-        .single();
-      finalStatus = customerStatus?.status || null;
-      if (!finalStatus || ['portal_submitting', 'automation_failed'].includes(finalStatus)) {
-        throw new Error(`Automação não concluiu o lead no banco. Status final: ${finalStatus || 'desconhecido'}${customerStatus?.error_message ? ` | ${customerStatus.error_message}` : ''}`);
-      }
-    }
-    
-    processedCount++;
-    retryTracker.delete(currentJob.customer_id); // Sucesso: limpar contador
-    const successMessage = finalStatus === 'awaiting_otp'
-      ? 'OTP detectado e aguardando confirmação'
-      : finalStatus === 'awaiting_signature'
-        ? 'Cadastro enviado e link de assinatura gerado'
-        : 'Cadastro enviado com sucesso ao portal';
-    pushActivity('job_finished', currentJob.customer_id, successMessage);
-    console.log(`✅ FILA: Lead ${currentJob.customer_id} processado com sucesso! (Total: ${processedCount})`);
-    // Link facial já é enviado dentro do playwright-automation.mjs via
-    // sendFacialLinkToCustomer (e gravado em customers.link_facial). Aqui só
-    // disparamos sendLinkToCustomer como rede de segurança caso o automation
-    // tenha terminado SEM gravar link_facial no banco (ex: cadastro_concluido
-    // direto sem fase facial). Evita envio duplicado.
-    if (result?.pageUrl) {
-      try {
-        const supabase = getSupabase();
-        let alreadySent = false;
-        if (supabase) {
-          const { data: c } = await supabase
-            .from('customers')
-            .select('link_facial')
-            .eq('id', currentJob.customer_id)
-            .single();
-          alreadySent = !!c?.link_facial;
-        }
-        if (!alreadySent) {
-          await sendLinkToCustomer(currentJob.customer_id, result.pageUrl);
-        } else {
-          console.log('   ⏭️  link_facial já gravado pelo automation — pulando envio duplicado');
-        }
-      } catch (linkErr) {
-        console.warn(`   ⚠️ Falha ao decidir envio de link: ${linkErr.message}`);
-      }
-    }
-  } catch (error) {
-    failedCount++;
-    const attempts = (retryTracker.get(jobCustomerId) || 0) + 1;
-    retryTracker.set(jobCustomerId, attempts);
-    pushActivity('job_failed', jobCustomerId, `Falha (${attempts}/3): ${error.message}`);
-    console.error(`❌ FILA: Lead ${jobCustomerId} falhou (tentativa ${attempts}/3): ${error.message}`);
-
-    // Reportar ao Sentry com tags ricas (phase, customer_id, attempt)
-    try {
-      Sentry.withScope((scope) => {
-        scope.setTags({
-          module: 'playwright-automation',
-          customer_id: String(jobCustomerId),
-          attempt: String(attempts),
-          final_attempt: attempts >= 3 ? 'true' : 'false',
-        });
-        scope.setExtras({
-          options: currentJob?.options || {},
-          queue_size: queue.length,
-        });
-        Sentry.captureException(error);
-      });
-    } catch (_) { /* sentry opcional */ }
-
-    if (attempts < 3) {
-      // Re-enfileirar para retry automático — NUNCA deixar de abrir
-      const retryJob = {
-        customer_id: jobCustomerId,
-        options: currentJob.options || {},
-        status: 'waiting',
-        attempt: attempts,
-        addedAt: new Date().toISOString(),
-      };
-      queue.unshift(retryJob); // Frente da fila para retry rápido
-      console.log(`   🔄 Re-enfileirado para retry (${attempts}/3) - próxima tentativa em 5s`);
-    } else {
-      // Só marca automation_failed após 3 tentativas
-      const supabase = getSupabase();
-      if (supabase) {
-        try {
-          await supabase.from('customers').update({
-            status: 'automation_failed',
-            error_message: `Tentativa ${attempts}/3: ${error.message}`,
-            updated_at: new Date().toISOString(),
-          }).eq('id', jobCustomerId);
-          console.log(`   📊 Status → automation_failed (após 3 tentativas)`);
-        } catch (_) {}
-      }
-    }
-  } finally {
-    // SOLUÇÃO 3: Marcar como processado recentemente (5 min de cooldown)
-    recentlyProcessed.add(jobCustomerId);
-    setTimeout(() => recentlyProcessed.delete(jobCustomerId), 5 * 60 * 1000);
-
-    currentJob = null;
-    isProcessingLock = false;
-    // Processar próximo da fila (delay de 500ms)
-    setTimeout(() => processNextInQueue(), 500);
-  }
-}
-
-function getQueueStatus() {
-  return {
-    currentJob: currentJob ? {
-      customer_id: currentJob.customer_id,
-      startedAt: currentJob.startedAt,
-    } : null,
-    queueLength: queue.length,
-    waiting: queue.map((j, i) => ({
-      position: i + 1,
-      customer_id: j.customer_id,
-      addedAt: j.addedAt,
-    })),
-    stats: {
-      processed: processedCount,
-      failed: failedCount,
-      processing: currentJob ? 1 : 0,
-      waiting: queue.length,
-    }
-  };
 }
 
 function getSupabase() {
@@ -459,10 +313,12 @@ app.post('/submit-lead', async (req, res) => {
   console.log(`   Timestamp: ${new Date().toISOString()}`);
   console.log('='.repeat(70));
   
-  const result = await addToQueue(customer_id, { headless: isHeadless, stopBeforeSubmit });
+  const result = await addToQueue(customer_id, { headless: isHeadless, stopBeforeSubmit }, supabaseSetSubmitting);
   if (!result.duplicate) pushActivity('lead_received', customer_id, 'Lead adicionado à fila (WhatsApp finalizou cadastro)');
+  // Disparar processamento da fila em memória (se não estiver usando BullMQ)
+  processNextMemoryQueue(processJob, onJobSuccess, onJobFailure);
 
-  const status = getQueueStatus();
+  const status = await getQueueStatus();
   
   res.json({ 
     success: true, 
@@ -485,23 +341,16 @@ app.post('/submit-lead', async (req, res) => {
 // POST /clear-queue
 // Zera a fila de leads (não cancela o job atual, mas nenhum novo será processado após ele)
 ///
-app.post('/clear-queue', (req, res) => {
-  const n = queue.length;
-  queue.length = 0;
-  // Limpar retry tracker e recently processed para permitir reprocessamento
-  const retryCount = retryTracker.size;
-  retryTracker.clear();
-  recentlyProcessed.clear();
-  failedCount = 0;
-  pushActivity('queue_cleared', null, `Fila zerada + ${retryCount} retries limpos`);
-  console.log(`🧹 FILA: zerada (${n} removidos, ${retryCount} retries limpos)`);
+app.post('/clear-queue', async (req, res) => {
+  await clearQueue();
+  const cj = getCurrentJob();
+  pushActivity('queue_cleared', null, 'Fila zerada');
+  console.log('🧹 FILA: zerada');
   res.json({
     success: true,
-    message: n ? `Fila zerada (${n} lead(s) removido(s), ${retryCount} retries limpos)` : `Fila já vazia (${retryCount} retries limpos)`,
+    message: 'Fila zerada',
     queueLength: 0,
-    removed: n,
-    retriesCleared: retryCount,
-    currentJob: currentJob ? currentJob.customer_id : null,
+    currentJob: cj ? cj.customer_id : null,
     timestamp: new Date().toISOString(),
   });
 });
@@ -515,10 +364,10 @@ app.post('/force-submit', async (req, res) => {
   if (!customer_id) return res.status(400).json({ error: 'customer_id required' });
   
   // Limpar bloqueios para este lead
-  retryTracker.delete(customer_id);
-  recentlyProcessed.delete(customer_id);
+  forceAllow(customer_id);
   
-  const result = await addToQueue(customer_id, { headless: true });
+  const result = await addToQueue(customer_id, { headless: true }, supabaseSetSubmitting);
+  processNextMemoryQueue(processJob, onJobSuccess, onJobFailure);
   pushActivity('force_submit', customer_id, 'Lead forçado na fila (retry limpo)');
   
   res.json({
@@ -824,20 +673,20 @@ app.get('/page-dump/:customerId', async (req, res) => {
 // GET /queue
 // Mostra status completo da fila de processamento
 ///
-app.get('/queue', (req, res) => {
-  res.json(getQueueStatus());
+app.get('/queue', async (req, res) => {
+  res.json(await getQueueStatus());
 });
 
 //
 // GET /status
 // JSON com fila + últimas atividades (por que abriu, etc.) - sem auth para ver no navegador
 ///
-app.get('/status', (req, res) => {
-  const status = getQueueStatus();
+app.get('/status', async (req, res) => {
+  const status = await getQueueStatus();
   res.json({
     timestamp: new Date().toISOString(),
     queue: status,
-    activities: activityLog.slice(-30).reverse(),
+    activities: getActivityLog().slice(-30).reverse(),
     whyItOpens: 'O navegador abre quando um lead finaliza no WhatsApp (POST /submit-lead) ou quando o worker encontra leads pendentes no banco (polling a cada 5s).',
   });
 });
@@ -846,9 +695,9 @@ app.get('/status', (req, res) => {
 // GET /dashboard
 // Página HTML simples para ver o que está acontecendo (sem auth)
 ///
-app.get('/dashboard', (req, res) => {
-  const status = getQueueStatus();
-  const activities = activityLog.slice(-25).reverse();
+app.get('/dashboard', async (req, res) => {
+  const status = await getQueueStatus();
+  const activities = getActivityLog().slice(-25).reverse();
   const html = `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -896,8 +745,8 @@ app.get('/dashboard', (req, res) => {
 // GET /health
 // Health check endpoint
 ///
-app.get('/health', (req, res) => {
-  const status = getQueueStatus();
+app.get('/health', async (req, res) => {
+  const status = await getQueueStatus();
   res.json({ 
     status: 'ok',
     service: 'worker-portal',
@@ -907,6 +756,7 @@ app.get('/health', (req, res) => {
     memory: process.memoryUsage(),
     otpCodesInMemory: otpCodes.size,
     supabaseConfigured: !!(SUPABASE_URL && SUPABASE_KEY),
+    queueBackend: status.backend || 'memory',
     queue: status.stats,
     currentJob: status.currentJob,
   });
@@ -973,10 +823,9 @@ setInterval(cleanExpiredOtpCodes, 60 * 1000);
 // Roda na inicialização e a cada 5 segundos.
 ///
 async function recuperarLeadsPendentes() {
-  // SOLUÇÃO 5: Não rodar polling enquanto tem job processando
-  if (currentJob || isProcessingLock) {
-    return;
-  }
+  // Não rodar polling enquanto tem job processando
+  const cj = getCurrentJob();
+  if (cj) return;
 
   const supabase = getSupabase();
   if (!supabase) {
@@ -1016,8 +865,7 @@ async function recuperarLeadsPendentes() {
     console.log(`\n🔍 Encontrados ${leads.length} lead(s) pendente(s) no banco:`);
     let adicionados = 0;
     for (const lead of leads) {
-      // SOLUÇÃO 1: addToQueue agora é async, usar await
-      const result = await addToQueue(lead.id, { headless: process.env.HEADLESS === '1' });
+      const result = await addToQueue(lead.id, { headless: process.env.HEADLESS === '1' }, supabaseSetSubmitting);
       if (!result.duplicate) {
         console.log(`   📋 ${lead.name || 'Sem nome'} (${lead.id}) [${lead.status}] → posição ${result.position}`);
         adicionados++;
@@ -1025,6 +873,7 @@ async function recuperarLeadsPendentes() {
     }
     if (adicionados > 0) {
       console.log(`✅ ${adicionados} lead(s) adicionado(s) na fila automaticamente`);
+      processNextMemoryQueue(processJob, onJobSuccess, onJobFailure);
     }
   } catch (e) {
     console.error('❌ Erro na recuperação de leads:', e.message);
@@ -1046,7 +895,12 @@ app.use((err, _req, res, _next) => {
 });
 
 // Iniciar servidor
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
+  // Inicializar BullMQ (tenta conectar ao Redis, fallback pra memória)
+  await initQueue(processJob).catch((e) => {
+    console.warn(`⚠️  Erro ao inicializar BullMQ: ${e.message}. Usando fila em memória.`);
+  });
+
   console.log('\n' + '='.repeat(70));
   console.log('🚀 WORKER VPS - PORTAL IGREEN v5.1 (1 BROWSER GARANTIDO)');
   console.log('='.repeat(70));
@@ -1097,15 +951,14 @@ async function gracefulShutdown(signal) {
   isShuttingDown = true;
   console.log(`\n⏸️  ${signal} recebido.`);
   
-  if (currentJob) {
-    console.log(`   ⏳ Aguardando job atual terminar (${currentJob.customer_id})...`);
-    // Esperar até 120s pelo job atual
+  if (getCurrentJob()) {
+    console.log(`   ⏳ Aguardando job atual terminar (${getCurrentJob().customer_id})...`);
     const maxWait = 120000;
     const start = Date.now();
-    while (currentJob && (Date.now() - start) < maxWait) {
+    while (getCurrentJob() && (Date.now() - start) < maxWait) {
       await new Promise(r => setTimeout(r, 1000));
     }
-    if (currentJob) {
+    if (getCurrentJob()) {
       console.warn(`   ⚠️  Timeout esperando job. Encerrando forçado.`);
     } else {
       console.log(`   ✅ Job finalizado. Encerrando limpo.`);
