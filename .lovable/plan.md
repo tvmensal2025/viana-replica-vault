@@ -1,65 +1,90 @@
 
 
-## Instalar Sentry — 3 ambientes
+# Análise Completa: Por que JOSE ALVES travou e como blindar para SEMPRE
 
-Você confirmou: **Frontend + Worker VPS + Edge Functions**, com DSN como secret/env var.
+## O que aconteceu com JOSE ALVES (cronologia real)
 
-## O que será feito
+```
+16:47:12  Cliente disse "Oi, quero saber sobre iGreen"
+16:47:14→16:51:39  Fluxo perfeito: conta → OCR → confirmou → RG frente/verso → confirmou
+16:51:43  Bot: "Permanecer com (11) 94980-0789?"
+16:52:01  Cliente: "2" (editar)
+16:52:05  Bot: "Informe o telefone com DDD:"
+16:53:06  Cliente: "11997338798" ← número diferente do WhatsApp
+16:53:09  Bot: "Informe seu *e-mail*:"   ← ÚLTIMA mensagem
+                     ↓
+                  [silêncio total]
+                     ↓
+16:54:13  NOVO LEAD criado (78ba50f3) com phone 5511949800789  ← número da PRÓPRIA INSTÂNCIA
+```
 
-### 1. Frontend React (Vite) — `@sentry/react`
-- Instalar `@sentry/react`
-- Inicializar em `src/main.tsx` (antes do `createRoot`) com:
-  - `dsn: import.meta.env.VITE_SENTRY_DSN`
-  - `tracesSampleRate: 0.1` (10% das transações)
-  - `replaysSessionSampleRate: 0.0`, `replaysOnErrorSampleRate: 1.0` (replay só em erro)
-  - `environment: import.meta.env.MODE`
-  - Integration: `Sentry.browserTracingIntegration()` + `Sentry.replayIntegration({ maskAllText: true, blockAllMedia: true })` (LGPD-safe — não vaza dados de cliente)
-- Envolver `<App />` com `<Sentry.ErrorBoundary fallback={...}>` para capturar erros de render
-- Adicionar `VITE_SENTRY_DSN` ao `.env` (você cola o DSN lá)
+**Conclusão técnica**: O bot funcionou 100% até pedir o e-mail. O cliente simplesmente **não respondeu o e-mail** (talvez foi pego pelo cron de `crm-auto-progress` que mexeu, ou o cliente abandonou). O lead `78ba50f3` foi criado quando alguém usou o **próprio celular do suporte iGreen** para testar — o webhook não tem proteção contra "consultor manda mensagem do próprio número conectado".
 
-### 2. Worker VPS (Node/Express) — `@sentry/node`
-- Adicionar `@sentry/node` e `@sentry/profiling-node` ao `worker-portal/package.json`
-- Criar `worker-portal/instrument.mjs` (carregado **antes** de tudo via `node --import ./instrument.mjs server.mjs`):
-  - `Sentry.init({ dsn: process.env.SENTRY_DSN, sendDefaultPii: true, tracesSampleRate: 0.2, profilesSampleRate: 0.2 })`
-- Atualizar script `start` em `package.json`: `node --import ./instrument.mjs server.mjs`
-- Em `server.mjs`: chamar `Sentry.setupExpressErrorHandler(app)` **depois** de todas as rotas e antes do error handler customizado
-- Capturar erros do Playwright manualmente nos `try/catch` da `playwright-automation.mjs` com `Sentry.captureException(err, { tags: { phase, customer_id } })`
-- Você adiciona `SENTRY_DSN` no `.env` do worker na VPS
+## Os 5 buracos identificados que PODEM travar futuros cadastros
 
-### 3. Edge Functions Supabase (Deno) — via secret `SENTRY_DSN`
-- Adicionar secret `SENTRY_DSN` (vou pedir após aprovar o plano)
-- Criar helper `supabase/functions/_shared/sentry.ts` que:
-  - Importa `@sentry/deno` via `https://esm.sh/@sentry/deno@8`
-  - Inicializa uma única vez por isolate (`Sentry.init({ dsn, environment, tracesSampleRate: 0.1 })`)
-  - Exporta `captureError(err, context)` — wrap simples
-- Instrumentar as 4 funções críticas (resto fica passivo, só importa o helper):
-  - `evolution-webhook/index.ts` — captura erros do bot/OCR
-  - `_shared/ocr.ts` — captura falhas Gemini
-  - `worker-callback/index.ts` — captura erros do worker
-  - `send-scheduled-messages/index.ts` — captura falhas de envio
-- Wrap nos `catch` principais com tags: `{ function, phase, customer_id }`
+| # | Buraco | Risco | Onde |
+|---|--------|-------|------|
+| 1 | Cliente abandona após pergunta (não responde) | Lead fica eterno em `ask_email`/`ask_cpf`/etc | Sistema atual |
+| 2 | Mensagem do próprio número conectado vira novo lead | Polui base, confunde dedup | `evolution-webhook/index.ts` |
+| 3 | Validação de email/CPF/CEP rejeita silenciosamente sem orientação clara | Cliente confuso, abandona | `bot-flow.ts` |
+| 4 | OCR retorna sucesso=true mas com dados vazios | Dados em branco passam pro portal | `bot-flow.ts` linhas 250-269 |
+| 5 | Bot stuck recovery roda só a cada 30 min | JOSE ficaria parado 30min antes do resgate | `pg_cron` schedule |
 
-## Detalhes técnicos importantes
+## Plano de blindagem definitiva
 
-- **DSN é "público" por design** mas mesmo assim guardamos como secret pra poder rotacionar sem rebuild (sua escolha)
-- **LGPD/Privacidade:** Replay com `maskAllText: true` + `blockAllMedia: true` impede vazamento de CPF/RG/conta de energia
-- **Performance:** `tracesSampleRate` baixo (0.1–0.2) pra não estourar quota Sentry
-- **Worker `--import` flag** requer Node 20.6+ — seu `engines` permite `>=18`, então também adiciono fallback `import './instrument.mjs'` no topo do `server.mjs` caso a flag não funcione
-- **Deno isolates:** Sentry init roda no top-level do helper, mas com guard `if (!initialized)` pra não duplicar entre invocações quentes
+### Correção 1: Filtro anti-self-message
+Em `parseEvolutionMessage` (`_shared/evolution-api.ts`), adicionar parâmetro `instanceConnectedPhone` e ignorar quando `remoteJid` corresponde ao próprio número conectado. Atualizar `evolution-webhook/index.ts` para buscar `connected_phone` da `whatsapp_instances` e passar.
 
-## Ordem de execução (após aprovação)
+### Correção 2: Resgate ativo mais agressivo (3 níveis)
+Mudar `bot-stuck-recovery` para 3 estágios:
+- **5 min**: re-pergunta gentil ("Oi! Ainda está aí? [pergunta]")
+- **2h**: re-pergunta com urgência + opção de pular ("Para finalizar, preciso do email — ou digite *PULAR*")
+- **24h**: marca status `abandoned` + alerta no painel admin
 
-1. Pedir secret `SENTRY_DSN` (Edge Functions) — você cola o DSN
-2. Adicionar `VITE_SENTRY_DSN` ao `.env` (eu instruo onde)
-3. Instalar `@sentry/react` no frontend
-4. Atualizar `worker-portal/package.json` + criar `instrument.mjs`
-5. Criar `_shared/sentry.ts` + instrumentar 4 edge functions
-6. Validar: gerar erro de teste em cada ambiente e checar no painel Sentry
+Mudar cron de **30 min para 5 min** (combina com o threshold).
 
-## Arquivos afetados
+### Correção 3: Permitir "pular" campos opcionais via comando
+Em `ask_email`, `ask_complement` aceitar `pular`/`skip`/`não tenho` para usar fallback automático (`{phone}@lead.igreen` para email, vazio para complemento). Isso garante que o fluxo nunca trave em campo "opcional".
 
-- `src/main.tsx`, `src/App.tsx`, `.env`, `package.json`
-- `worker-portal/package.json`, `worker-portal/instrument.mjs` (novo), `worker-portal/server.mjs`, `worker-portal/playwright-automation.mjs`
-- `supabase/functions/_shared/sentry.ts` (novo)
-- `supabase/functions/evolution-webhook/index.ts`, `_shared/ocr.ts`, `worker-callback/index.ts`, `send-scheduled-messages/index.ts`
+### Correção 4: Validação OCR mais rigorosa
+No `bot-flow.ts` aguardando_conta/doc_verso, depois de `ocrData.sucesso`, validar se ao menos 3 campos críticos vieram preenchidos. Se não, tratar como falha e contar tentativa.
+
+### Correção 5: Mensagem de erro com exemplo concreto
+Trocar mensagens genéricas tipo `"❌ E-mail inválido. Digite um e-mail válido"` por:
+```
+❌ Não consegui ler esse e-mail.
+✅ Exemplo correto: joao.silva@gmail.com
+Ou digite *PULAR* se preferir não informar.
+```
+
+### Correção 6: Heartbeat no painel Super Admin
+Adicionar widget "Leads Travados Agora" no Super Admin que mostra em tempo real leads com `last_bot_reply_at > 10 min` no step `ask_*` — para você ter visibilidade imediata.
+
+### Correção 7: Fix imediato do JOSE ALVES
+Atualizar o lead `fbd0e3d1` (JOSE) — colocar email auto `5511997338798@lead.igreen` e re-enviar próxima pergunta para retomar.
+Excluir o lead lixo `78ba50f3` (auto-mensagem).
+
+## Detalhes técnicos
+
+**Arquivos a modificar:**
+- `supabase/functions/_shared/evolution-api.ts` — adicionar `instanceConnectedPhone` em `parseEvolutionMessage`
+- `supabase/functions/evolution-webhook/index.ts` — buscar `connected_phone`, passar pro parser
+- `supabase/functions/evolution-webhook/handlers/bot-flow.ts` — comando "pular" em ask_email/ask_complement, validação OCR rigorosa, mensagens com exemplo
+- `supabase/functions/bot-stuck-recovery/index.ts` — 3 estágios (5min/2h/24h)
+- Migration: alterar cron `bot-stuck-recovery-30min` → `bot-stuck-recovery-5min`
+- `src/components/superadmin/` — novo componente `StuckLeadsWidget.tsx`
+- SQL ad-hoc: corrigir JOSE ALVES + remover lead lixo
+
+**Garantias:**
+- ✅ Self-message do consultor nunca cria lead novo
+- ✅ Bot **nunca** fica em silêncio > 5 min
+- ✅ Cliente **nunca** trava em campo opcional (sempre pode pular)
+- ✅ OCR vazio é tratado como falha (não passa lixo adiante)
+- ✅ Sentry captura toda anomalia
+- ✅ Painel mostra leads travados em tempo real
+
+**O que fica intocado:**
+- Lógica do portal-worker (já estável)
+- Anti-blocking de WhatsApp
+- Estrutura do banco (apenas dados de exemplo serão corrigidos)
 
