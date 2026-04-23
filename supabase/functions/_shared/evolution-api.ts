@@ -71,6 +71,13 @@ export function createEvolutionSender(apiUrl: string, apiKey: string, instanceNa
   }
 
   async function sendButtons(remoteJid: string, message: string, buttons: EvolutionButton[]): Promise<boolean> {
+    // Evolution API v2 (Baileys) exige `type: "reply"` em cada botão.
+    const safeButtons = buttons.slice(0, 3).map((b) => ({
+      type: "reply" as const,
+      displayText: (b.title || "").substring(0, 20),
+      id: b.id,
+    }));
+
     const ok = await sendWithRetry("send_buttons", () =>
       fetchWithTimeout(`${baseUrl}/message/sendButtons/${instanceName}`, {
         method: "POST",
@@ -80,18 +87,16 @@ export function createEvolutionSender(apiUrl: string, apiKey: string, instanceNa
           title: "Escolha uma opção",
           description: message,
           footer: "iGreen Energy",
-          buttons: buttons.map((b) => ({
-            buttonId: b.id,
-            buttonText: { displayText: b.title },
-          })),
+          buttons: safeButtons,
         }),
         timeout: TIMEOUT_WHAPI,
       })
     );
     if (ok) return true;
-    // Fallback final: texto numerado (também com retry interno)
+
+    // Fallback final: texto numerado garantindo que o cliente NUNCA fica sem resposta
     logStructured("warn", "evolution_buttons_fallback_to_text", { instance: instanceName });
-    const textWithOptions = `${message}\n\n${buttons.map((b, i) => `${i + 1}. ${b.title}`).join("\n")}`;
+    const textWithOptions = `${message}\n\n${buttons.map((b, i) => `*${i + 1}.* ${b.title}`).join("\n")}\n\n_Digite o número da opção desejada._`;
     return await sendText(remoteJid, textWithOptions);
   }
 
