@@ -303,8 +303,7 @@ Deno.serve(async (req) => {
         if (stepToSend === "ask_phone_confirm") {
           await sender.sendButtons(remoteJid, finalReply, [
             { id: "sim_phone", title: "✅ Sim" },
-            { id: "editar_phone", title: "✏️ Editar" },
-            { id: "cancelar_phone", title: "❌ Cancelar" },
+            { id: "editar_phone", title: "📱 Outro número" },
           ]);
         } else if (stepToSend === "ask_finalizar") {
           await sender.sendButtons(remoteJid, finalReply, [

@@ -749,8 +749,7 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
     case "ask_phone_confirm": {
       const resp = isButton ? buttonId : messageText.toLowerCase().trim();
       const sim = resp === "sim_phone" || resp === "1" || resp === "sim" || resp === "s";
-      const editar = resp === "editar_phone" || resp === "2" || resp === "editar";
-      const cancelar = resp === "cancelar_phone" || resp === "3" || resp === "cancelar" || resp === "cancel";
+      const editar = resp === "editar_phone" || resp === "2" || resp === "editar" || resp === "outro" || resp === "outro número" || resp === "outro numero";
       if (sim) {
         const p = (customer.phone_whatsapp || phone).replace(/\D/g, "");
         const num = p.length >= 11 ? p.slice(-11) : p;
@@ -767,17 +766,13 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
       } else if (editar) {
         updates.conversation_step = "ask_phone";
         reply = "Informe o *telefone* com DDD (ex: 11999998888):";
-      } else if (cancelar) {
-        updates.conversation_step = "ask_birth_date";
-        reply = "Qual sua *data de nascimento*? (DD/MM/AAAA)";
       } else {
         const msgConfirm = getReplyForStep("ask_phone_confirm", customer);
         const sent = await sendButtons(remoteJid, msgConfirm, [
           { id: "sim_phone", title: "✅ Sim" },
-          { id: "editar_phone", title: "✏️ Editar" },
-          { id: "cancelar_phone", title: "❌ Cancelar" },
+          { id: "editar_phone", title: "📱 Outro número" },
         ]);
-        if (!sent) reply = "Digite *1* (Sim), *2* (Editar) ou *3* (Cancelar):";
+        if (!sent) reply = "Digite *1* se esse telefone é seu, ou *2* para informar outro número:";
         else reply = "";
       }
       break;
