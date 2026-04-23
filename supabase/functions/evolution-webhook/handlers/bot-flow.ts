@@ -758,6 +758,8 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
           ? num.replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3")
           : num.replace(/(\d{2})(\d{4})(\d{4})/, "($1) $2-$3");
         updates.phone_whatsapp = normalizePhone(num);
+        // ✅ Cliente CONFIRMOU explicitamente que o número de WhatsApp é o telefone de contato
+        updates.phone_contact_confirmed = true;
         const merged = { ...customer, ...updates };
         const next = await autoResolveCepIfNeeded(merged, updates);
         updates.conversation_step = next;
@@ -784,11 +786,28 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
     case "ask_phone": {
       const phoneClean = messageText.replace(/\D/g, "");
       if (phoneClean.length < 10 || phoneClean.length > 11) { reply = "❌ Telefone inválido. Digite com DDD (ex: 11999998888):"; break; }
+      // Validar DDD
+      const ddd = parseInt(phoneClean.substring(0, 2));
+      if (ddd < 11 || ddd > 99) { reply = "❌ DDD inválido. Informe um telefone com DDD válido (ex: 11999998888):"; break; }
+      // Buscar telefone do consultor para evitar auto-cadastro acidental
+      try {
+        const { data: cons } = await supabase
+          .from("consultants")
+          .select("phone")
+          .eq("id", consultorId)
+          .maybeSingle();
+        if (cons?.phone && isSameContact(phoneClean, cons.phone)) {
+          reply = "❌ Esse telefone é o número do consultor. Por favor, informe *seu próprio telefone* de contato:";
+          break;
+        }
+      } catch (_) { /* segue */ }
       const num11 = phoneClean.length >= 11 ? phoneClean.slice(-11) : phoneClean;
       updates.phone_landline = num11.length === 11
         ? num11.replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3")
         : num11.replace(/(\d{2})(\d{4})(\d{4})/, "($1) $2-$3");
       updates.phone_whatsapp = normalizePhone(num11);
+      // ✅ Cliente DIGITOU o telefone — confirmado explicitamente
+      updates.phone_contact_confirmed = true;
       const merged = { ...customer, ...updates };
       const next = await autoResolveCepIfNeeded(merged, updates);
       updates.conversation_step = next;
@@ -799,16 +818,34 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
     case "ask_email": {
       const txt = (messageText || "").trim();
       const lower = txt.toLowerCase();
-      // Permitir pular email com fallback automático
+      // ── PULAR explícito → marca lead como pendente de revisão (NÃO vai pro portal) ──
       if (["pular", "skip", "não tenho", "nao tenho", "sem email", "n", "não", "nao"].includes(lower)) {
-        updates.email = `${customer.phone_whatsapp}@lead.igreen`;
-        console.log(`⏭️ Cliente pulou email — usando fallback ${updates.email}`);
-      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(txt)) {
-        reply = "❌ Não consegui ler esse e-mail.\n\n✅ Exemplo correto: *joao.silva@gmail.com*\n\nOu digite *PULAR* se preferir não informar.";
+        updates.status = "email_pendente_revisao";
+        reply = "📌 Sem problemas! Marquei seu cadastro como *pendente de e-mail*.\n\nUm consultor vai entrar em contato para finalizar com você. Obrigado! ☀️";
         break;
-      } else {
-        updates.email = txt.toLowerCase();
       }
+      // ── Validação dura: formato + placeholder + email do consultor ──
+      if (!isValidEmailFormat(txt)) {
+        reply = "❌ Não consegui ler esse e-mail.\n\n✅ Exemplo correto: *joao.silva@gmail.com*\n\nInforme um *e-mail pessoal real*:";
+        break;
+      }
+      if (isPlaceholderEmail(txt)) {
+        reply = "❌ Esse e-mail não pode ser usado.\n\nInforme um *e-mail pessoal real* (ex: nome@gmail.com):";
+        break;
+      }
+      // Bloquear email do consultor dono
+      try {
+        const { data: cons } = await supabase
+          .from("consultants")
+          .select("igreen_portal_email")
+          .eq("id", consultorId)
+          .maybeSingle();
+        if (cons?.igreen_portal_email && isSameContact(txt, cons.igreen_portal_email)) {
+          reply = "❌ Esse e-mail é do consultor. Por favor, informe *seu próprio e-mail pessoal* (ex: nome@gmail.com):";
+          break;
+        }
+      } catch (_) { /* segue */ }
+      updates.email = txt.toLowerCase();
       const merged = { ...customer, ...updates };
       const next = await autoResolveCepIfNeeded(merged, updates);
       updates.conversation_step = next;
