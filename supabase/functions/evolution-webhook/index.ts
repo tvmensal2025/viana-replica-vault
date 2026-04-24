@@ -364,24 +364,8 @@ Deno.serve(async (req) => {
     }
     if (finalReply) {
       try {
-        if (stepToSend === "ask_phone_confirm") {
-          await sender.sendButtons(remoteJid, finalReply, [
-            { id: "sim_phone", title: "✅ Sim" },
-            { id: "editar_phone", title: "📱 Outro número" },
-          ]);
-        } else if (stepToSend === "ask_finalizar") {
-          await sender.sendButtons(remoteJid, finalReply, [
-            { id: "btn_finalizar", title: "✅ Finalizar" },
-          ]);
-        } else if (stepToSend === "ask_tipo_documento") {
-          await sender.sendButtons(remoteJid, finalReply || "Qual documento de identidade?", [
-            { id: "tipo_rg_novo", title: "📄 RG Novo" },
-            { id: "tipo_rg_antigo", title: "📄 RG Antigo" },
-            { id: "tipo_cnh", title: "🪪 CNH" },
-          ]);
-        } else {
-          await sender.sendText(remoteJid, finalReply);
-        }
+        // Envia sempre como texto (botões não funcionam na Evolution API atual)
+        await sender.sendText(remoteJid, finalReply);
       } catch (e: any) {
         console.error("Erro enviar:", e);
       }

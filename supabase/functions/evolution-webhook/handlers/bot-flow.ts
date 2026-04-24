@@ -90,6 +90,16 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
     geminiApiKey,
   } = ctx;
 
+  // ═══════════════════════════════════════════════════════════════════
+  // HELPER: Envia opções como TEXTO (botões não funcionam na Evolution API atual)
+  // Formato: mensagem + opções numeradas
+  // ═══════════════════════════════════════════════════════════════════
+  async function sendOptions(jid: string, msg: string, options: { id: string; title: string }[]): Promise<boolean> {
+    const optionsText = options.map((o, i) => `${i + 1}️⃣ ${o.title}`).join("\n");
+    const fullMsg = `${msg}\n\n${optionsText}\n\n_Digite o número da opção:_`;
+    return sendText(jid, fullMsg);
+  }
+
   const step = customer.conversation_step || "welcome";
   let reply = "";
   const updates: Record<string, any> = {};
@@ -121,7 +131,7 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
         `Já pensou em pagar menos na sua conta de luz todo mês? 💚\n` +
         `Com a *iGreen Energy* dá pra economizar de *8% a 20%*, de forma simples e sem complicação. ☀️\n\n` +
         `Posso te explicar rapidinho como funciona?`;
-      await sendButtons(remoteJid, welcomeMsg, [
+      await sendOptions(remoteJid, welcomeMsg, [
         { id: "entender_desconto", title: "💡 Quero saber mais" },
         { id: "cadastrar_agora", title: "📋 Já quero participar" },
         { id: "falar_humano", title: "🧑 Falar com humano" },
@@ -146,7 +156,7 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
         }
         await new Promise((r) => setTimeout(r, 1500));
         const posVideoMsg = "📺 Assistiu o vídeo? Agora escolha como deseja prosseguir:";
-        await sendButtons(remoteJid, posVideoMsg, [
+        await sendOptions(remoteJid, posVideoMsg, [
           { id: "cadastrar_agora", title: "📋 Cadastrar agora" },
           { id: "falar_humano", title: "🧑 Falar com humano" },
         ]);
@@ -160,7 +170,7 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
         updates.conversation_step = "aguardando_humano";
       } else {
         const retryMsg = "Sem problemas 😊 Me conta: como prefere seguir?";
-        await sendButtons(remoteJid, retryMsg, [
+        await sendOptions(remoteJid, retryMsg, [
           { id: "entender_desconto", title: "💡 Quero saber mais" },
           { id: "cadastrar_agora", title: "📋 Já quero participar" },
           { id: "falar_humano", title: "🧑 Falar com humano" },
@@ -180,7 +190,7 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
         updates.conversation_step = "aguardando_humano";
       } else {
         const retryMsg = "🤔 Não entendi. Escolha uma opção:";
-        await sendButtons(remoteJid, retryMsg, [
+        await sendOptions(remoteJid, retryMsg, [
           { id: "cadastrar_agora", title: "📋 Cadastrar agora" },
           { id: "falar_humano", title: "🧑 Falar com humano" },
         ]);
@@ -319,7 +329,7 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
             `🔢 *Nº Instalação:* ${updates.numero_instalacao || "❌"}\n` +
             `💰 *Valor:* R$ ${updates.electricity_bill_value || "❌"}\n\n` +
             "Está tudo correto?";
-          await sendButtons(remoteJid, reply, [
+          await sendOptions(remoteJid, reply, [
             { id: "sim_conta", title: "✅ SIM" },
             { id: "nao_conta", title: "❌ NÃO" },
             { id: "editar_conta", title: "✏️ EDITAR" },
@@ -359,7 +369,7 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
       if (resp === "sim_conta" || resp === "sim" || resp === "s" || resp === "1" || resp === "ok" || resp === "correto" || resp === "✅") {
         updates.conversation_step = "ask_tipo_documento";
         const tipoMsg = "✅ Dados da conta confirmados!\n\n📋 Qual documento de identidade você vai enviar?\n\nToque em uma opção:";
-        await sendButtons(remoteJid, tipoMsg, [
+        await sendOptions(remoteJid, tipoMsg, [
           { id: "tipo_rg_novo", title: "📄 RG Novo" },
           { id: "tipo_rg_antigo", title: "📄 RG Antigo" },
           { id: "tipo_cnh", title: "🪪 CNH" },
@@ -372,7 +382,7 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
         updates.conversation_step = "editing_conta_menu";
         reply = "✏️ Qual campo deseja editar?\n\n1️⃣ Nome\n2️⃣ Endereço\n3️⃣ CEP\n4️⃣ Distribuidora\n5️⃣ Nº Instalação\n6️⃣ Valor da conta\n\nDigite o número:";
       } else {
-        const sent = await sendButtons(remoteJid, "Os dados da conta estão corretos?", [
+        const sent = await sendOptions(remoteJid, "Os dados da conta estão corretos?", [
           { id: "sim_conta", title: "✅ SIM" },
           { id: "nao_conta", title: "❌ NÃO" },
           { id: "editar_conta", title: "✏️ EDITAR" },
@@ -392,7 +402,7 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
       else if (rgAntigo) { updates.document_type = "rg_antigo"; updates.conversation_step = "aguardando_doc_frente"; reply = "📄 *RG (Antigo)*\n\n📸 Envie a *FRENTE do seu RG*.\n\nFormatos: JPG, PNG ou PDF"; }
       else if (cnh) { updates.document_type = "cnh"; updates.conversation_step = "aguardando_doc_frente"; reply = "📄 *CNH*\n\n📸 Envie a *FRENTE da sua CNH*.\n\nFormatos: JPG, PNG ou PDF"; }
       else {
-        const sent = await sendButtons(remoteJid, "📋 Qual documento de identidade você vai enviar?\n\nToque em uma opção:", [
+        const sent = await sendOptions(remoteJid, "📋 Qual documento de identidade você vai enviar?\n\nToque em uma opção:", [
           { id: "tipo_rg_novo", title: "📄 RG Novo" },
           { id: "tipo_rg_antigo", title: "📄 RG Antigo" },
           { id: "tipo_cnh", title: "🪪 CNH" },
@@ -466,7 +476,7 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
         const rg = updates.rg || customer.rg || "—";
         const nasc = updates.data_nascimento || customer.data_nascimento || "_(será preenchido pelo portal via CPF)_";
         const chnConfirmMsg = `📋 *Dados extraídos da CNH:*\n\n👤 Nome: *${nome}*\n🆔 CPF: *${cpf}*\n🪪 RG: *${rg}*\n🎂 Nascimento: *${nasc}*\n\nEstá tudo correto?`;
-        await sendButtons(remoteJid, chnConfirmMsg, [
+        await sendOptions(remoteJid, chnConfirmMsg, [
           { id: "sim_doc", title: "✅ SIM" },
           { id: "nao_doc", title: "❌ NÃO" },
           { id: "editar_doc", title: "✏️ EDITAR" },
@@ -537,7 +547,7 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
             `📄 *RG:* ${d.rg || "❌ não encontrado"}\n` +
             `🎂 *Data Nasc:* ${d.dataNascimento || "❌ não encontrado"}\n\n` +
             "Está tudo correto?";
-          await sendButtons(remoteJid, reply, [
+          await sendOptions(remoteJid, reply, [
             { id: "sim_doc", title: "✅ SIM" },
             { id: "nao_doc", title: "❌ NÃO" },
             { id: "editar_doc", title: "✏️ EDITAR" },
@@ -586,7 +596,7 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
         updates.conversation_step = "editing_doc_menu";
         reply = "✏️ Qual campo deseja editar?\n\n1️⃣ Nome\n2️⃣ CPF\n3️⃣ RG\n4️⃣ Data de Nascimento\n\nDigite o número:";
       } else {
-        const sent = await sendButtons(remoteJid, "Os dados estão corretos?", [
+        const sent = await sendOptions(remoteJid, "Os dados estão corretos?", [
           { id: "sim_doc", title: "✅ SIM" },
           { id: "nao_doc", title: "❌ NÃO" },
           { id: "editar_doc", title: "✏️ EDITAR" },
@@ -616,14 +626,14 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
       updates.name = messageText.trim();
       updates.conversation_step = "confirmando_dados_conta";
       reply = `✅ Nome atualizado: *${messageText.trim()}*\n\nOs dados estão corretos agora?`;
-      { await sendButtons(remoteJid, reply, [{ id: "sim_conta", title: "✅ SIM" }, { id: "nao_conta", title: "❌ NÃO" }, { id: "editar_conta", title: "✏️ EDITAR" }]); reply = ""; }
+      { await sendOptions(remoteJid, reply, [{ id: "sim_conta", title: "✅ SIM" }, { id: "nao_conta", title: "❌ NÃO" }, { id: "editar_conta", title: "✏️ EDITAR" }]); reply = ""; }
       break;
 
     case "editing_conta_endereco":
       updates.address_street = messageText.trim();
       updates.conversation_step = "confirmando_dados_conta";
       reply = `✅ Endereço atualizado.\n\nOs dados estão corretos agora?`;
-      { await sendButtons(remoteJid, reply, [{ id: "sim_conta", title: "✅ SIM" }, { id: "nao_conta", title: "❌ NÃO" }, { id: "editar_conta", title: "✏️ EDITAR" }]); reply = ""; }
+      { await sendOptions(remoteJid, reply, [{ id: "sim_conta", title: "✅ SIM" }, { id: "nao_conta", title: "❌ NÃO" }, { id: "editar_conta", title: "✏️ EDITAR" }]); reply = ""; }
       break;
 
     case "editing_conta_cep": {
@@ -632,7 +642,7 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
         updates.cep = cepClean;
         updates.conversation_step = "confirmando_dados_conta";
         reply = `✅ CEP atualizado: *${cepClean.replace(/(\d{5})(\d{3})/, "$1-$2")}*\n\nOs dados estão corretos agora?`;
-        await sendButtons(remoteJid, reply, [{ id: "sim_conta", title: "✅ SIM" }, { id: "nao_conta", title: "❌ NÃO" }, { id: "editar_conta", title: "✏️ EDITAR" }]);
+        await sendOptions(remoteJid, reply, [{ id: "sim_conta", title: "✅ SIM" }, { id: "nao_conta", title: "❌ NÃO" }, { id: "editar_conta", title: "✏️ EDITAR" }]);
         reply = "";
       } else reply = "❌ CEP inválido. Digite os 8 números:";
       break;
@@ -642,7 +652,7 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
       updates.distribuidora = messageText.trim();
       updates.conversation_step = "confirmando_dados_conta";
       reply = `✅ Distribuidora atualizada: *${messageText.trim()}*\n\nOs dados estão corretos agora?`;
-      { await sendButtons(remoteJid, reply, [{ id: "sim_conta", title: "✅ SIM" }, { id: "nao_conta", title: "❌ NÃO" }, { id: "editar_conta", title: "✏️ EDITAR" }]); reply = ""; }
+      { await sendOptions(remoteJid, reply, [{ id: "sim_conta", title: "✅ SIM" }, { id: "nao_conta", title: "❌ NÃO" }, { id: "editar_conta", title: "✏️ EDITAR" }]); reply = ""; }
       break;
 
     case "editing_conta_instalacao": {
@@ -651,7 +661,7 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
         updates.numero_instalacao = instClean;
         updates.conversation_step = "confirmando_dados_conta";
         reply = `✅ Nº instalação atualizado: *${instClean}*\n\nOs dados estão corretos agora?`;
-        await sendButtons(remoteJid, reply, [{ id: "sim_conta", title: "✅ SIM" }, { id: "nao_conta", title: "❌ NÃO" }, { id: "editar_conta", title: "✏️ EDITAR" }]);
+        await sendOptions(remoteJid, reply, [{ id: "sim_conta", title: "✅ SIM" }, { id: "nao_conta", title: "❌ NÃO" }, { id: "editar_conta", title: "✏️ EDITAR" }]);
         reply = "";
       } else reply = "❌ Número inválido. Digite pelo menos 7 dígitos:";
       break;
@@ -663,7 +673,7 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
         updates.electricity_bill_value = val;
         updates.conversation_step = "confirmando_dados_conta";
         reply = `✅ Valor atualizado: *R$ ${val.toFixed(2)}*\n\nOs dados estão corretos agora?`;
-        await sendButtons(remoteJid, reply, [{ id: "sim_conta", title: "✅ SIM" }, { id: "nao_conta", title: "❌ NÃO" }, { id: "editar_conta", title: "✏️ EDITAR" }]);
+        await sendOptions(remoteJid, reply, [{ id: "sim_conta", title: "✅ SIM" }, { id: "nao_conta", title: "❌ NÃO" }, { id: "editar_conta", title: "✏️ EDITAR" }]);
         reply = "";
       } else reply = "❌ Valor inválido. Digite um número (ex: 350.50):";
       break;
@@ -687,7 +697,7 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
       updates.name = messageText.trim();
       updates.conversation_step = "confirmando_dados_doc";
       reply = `✅ Nome atualizado: *${messageText.trim()}*\n\nOs dados estão corretos agora?`;
-      { await sendButtons(remoteJid, reply, [{ id: "sim_doc", title: "✅ SIM" }, { id: "nao_doc", title: "❌ NÃO" }, { id: "editar_doc", title: "✏️ EDITAR" }]); reply = ""; }
+      { await sendOptions(remoteJid, reply, [{ id: "sim_doc", title: "✅ SIM" }, { id: "nao_doc", title: "❌ NÃO" }, { id: "editar_doc", title: "✏️ EDITAR" }]); reply = ""; }
       break;
 
     case "editing_doc_cpf": {
@@ -696,7 +706,7 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
         updates.cpf = cpfClean;
         updates.conversation_step = "confirmando_dados_doc";
         reply = `✅ CPF atualizado: *${cpfClean.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}*\n\nOs dados estão corretos agora?`;
-        await sendButtons(remoteJid, reply, [{ id: "sim_doc", title: "✅ SIM" }, { id: "nao_doc", title: "❌ NÃO" }, { id: "editar_doc", title: "✏️ EDITAR" }]);
+        await sendOptions(remoteJid, reply, [{ id: "sim_doc", title: "✅ SIM" }, { id: "nao_doc", title: "❌ NÃO" }, { id: "editar_doc", title: "✏️ EDITAR" }]);
         reply = "";
       } else reply = "❌ CPF inválido. Digite os 11 números:";
       break;
@@ -706,7 +716,7 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
       updates.rg = messageText.trim();
       updates.conversation_step = "confirmando_dados_doc";
       reply = `✅ RG atualizado: *${messageText.trim()}*\n\nOs dados estão corretos agora?`;
-      { await sendButtons(remoteJid, reply, [{ id: "sim_doc", title: "✅ SIM" }, { id: "nao_doc", title: "❌ NÃO" }, { id: "editar_doc", title: "✏️ EDITAR" }]); reply = ""; }
+      { await sendOptions(remoteJid, reply, [{ id: "sim_doc", title: "✅ SIM" }, { id: "nao_doc", title: "❌ NÃO" }, { id: "editar_doc", title: "✏️ EDITAR" }]); reply = ""; }
       break;
 
     case "editing_doc_nascimento": {
@@ -715,7 +725,7 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
         updates.data_nascimento = messageText.trim();
         updates.conversation_step = "confirmando_dados_doc";
         reply = `✅ Data atualizada: *${messageText.trim()}*\n\nOs dados estão corretos agora?`;
-        await sendButtons(remoteJid, reply, [{ id: "sim_doc", title: "✅ SIM" }, { id: "nao_doc", title: "❌ NÃO" }, { id: "editar_doc", title: "✏️ EDITAR" }]);
+        await sendOptions(remoteJid, reply, [{ id: "sim_doc", title: "✅ SIM" }, { id: "nao_doc", title: "❌ NÃO" }, { id: "editar_doc", title: "✏️ EDITAR" }]);
         reply = "";
       } else reply = "❌ Data inválida. Use DD/MM/AAAA (ex: 20/07/1993):";
       break;
@@ -787,7 +797,7 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
         reply = "Informe o *telefone* com DDD (ex: 11999998888):";
       } else {
         const msgConfirm = getReplyForStep("ask_phone_confirm", { ...customer, phone_whatsapp: phone });
-        const sent = await sendButtons(remoteJid, msgConfirm, [
+        const sent = await sendOptions(remoteJid, msgConfirm, [
           { id: "sim_phone", title: "✅ Sim" },
           { id: "editar_phone", title: "📱 Outro número" },
         ]);
@@ -980,7 +990,7 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
       const finalizar = triggers.includes(resp);
       if (finalizar) { updates.conversation_step = "finalizando"; reply = ""; }
       else {
-        const sent = await sendButtons(remoteJid, "📋 Todos os dados foram preenchidos!\n\nDeseja finalizar o cadastro?\n\n_(Você também pode digitar *FINALIZAR* ou *OK*)_", [
+        const sent = await sendOptions(remoteJid, "📋 Todos os dados foram preenchidos!\n\nDeseja finalizar o cadastro?\n\n_(Você também pode digitar *FINALIZAR* ou *OK*)_", [
           { id: "btn_finalizar", title: "✅ Finalizar" },
         ]);
         if (!sent) reply = "Digite *FINALIZAR* ou *1* para confirmar o cadastro:";
@@ -1135,7 +1145,7 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
       // Se o passo redirecionado for ask_phone_confirm, reenviar os botões aqui
       if (updates.conversation_step === "ask_phone_confirm") {
         const msgConfirm = getReplyForStep("ask_phone_confirm", { ...merged, phone_whatsapp: phone });
-        await sendButtons(remoteJid, msgConfirm, [
+        await sendOptions(remoteJid, msgConfirm, [
           { id: "sim_phone", title: "✅ Sim, é meu" },
           { id: "editar_phone", title: "✏️ Usar outro número" },
         ]);
