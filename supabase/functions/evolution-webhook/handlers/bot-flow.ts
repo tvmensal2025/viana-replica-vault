@@ -974,7 +974,7 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
 
     // ─── 11. CONFIRMAR FINALIZAR ────────
     case "ask_finalizar": {
-      const resp = isButton ? buttonId : messageText.toLowerCase().trim();
+      const resp = (isButton ? buttonId : messageText.toLowerCase().trim()) || "";
       // Aceita botão OU texto livre (cliente quase nunca clica no botão)
       const triggers = ["btn_finalizar", "1", "finalizar", "sim", "s", "ok", "concluir", "prosseguir", "vamos", "pode", "pode sim", "pronto"];
       const finalizar = triggers.includes(resp);

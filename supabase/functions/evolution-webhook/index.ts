@@ -10,7 +10,7 @@
 // Behavior is identical to the previous monolithic version.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { normalizePhone, jsonLog as _unusedJsonLog } from "../_shared/utils.ts";
+import { normalizePhone } from "../_shared/utils.ts";
 import { createEvolutionSender, parseEvolutionMessage, extractMediaUrl } from "../_shared/evolution-api.ts";
 import { checkAndMarkProcessed, logStepTransition, jsonLog } from "../_shared/audit.ts";
 import {
