@@ -94,6 +94,25 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
   let reply = "";
   const updates: Record<string, any> = {};
 
+  // ═══════════════════════════════════════════════════════════════════
+  // CAPTURA INTELIGENTE: Se o cliente digitar um email válido em
+  // QUALQUER step (ex: welcome, menu_inicial), salvar no banco
+  // para não perder. Caso da Judite/Erica que digitaram email
+  // antes do bot pedir.
+  // ═══════════════════════════════════════════════════════════════════
+  if (
+    messageText &&
+    !isFile &&
+    !isButton &&
+    step !== "ask_email" && // No ask_email o handler já cuida
+    isValidEmailFormat(messageText.trim()) &&
+    !isPlaceholderEmail(messageText.trim()) &&
+    !customer.email // Só salvar se ainda não tem email
+  ) {
+    updates.email = messageText.trim().toLowerCase();
+    console.log(`📧 [CAPTURA] Email "${updates.email}" salvo automaticamente (digitado no step "${step}")`);
+  }
+
   switch (step) {
     // ─── 1. BOAS-VINDAS ────────────────────
     case "welcome": {
@@ -767,7 +786,7 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
         updates.conversation_step = "ask_phone";
         reply = "Informe o *telefone* com DDD (ex: 11999998888):";
       } else {
-        const msgConfirm = getReplyForStep("ask_phone_confirm", customer);
+        const msgConfirm = getReplyForStep("ask_phone_confirm", { ...customer, phone_whatsapp: phone });
         const sent = await sendButtons(remoteJid, msgConfirm, [
           { id: "sim_phone", title: "✅ Sim" },
           { id: "editar_phone", title: "📱 Outro número" },
@@ -1030,6 +1049,21 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
   // AUTO-FINALIZAÇÃO (BLOCO ESPECIAL — extraído verbatim do index.ts antigo)
   // ═══════════════════════════════════════════════════════════════════
   if (updates.conversation_step === "finalizando") {
+    // ── AUTO-CONFIRM: Se o cliente chegou até aqui pelo WhatsApp e tem telefone válido,
+    // garantir que phone_contact_confirmed=true e phone_landline está preenchido.
+    // Evita o bug do Valdeir onde o campo não existia na época do cadastro.
+    if (!customer.phone_contact_confirmed && !updates.phone_contact_confirmed) {
+      const p = (customer.phone_whatsapp || phone || "").replace(/\D/g, "");
+      const num = p.startsWith("55") && p.length >= 12 ? p.substring(2) : p;
+      if (num.length >= 10) {
+        updates.phone_contact_confirmed = true;
+        updates.phone_landline = num.length === 11
+          ? num.replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3")
+          : num.replace(/(\d{2})(\d{4})(\d{4})/, "($1) $2-$3");
+        console.log(`📞 [AUTO-CONFIRM] Telefone auto-confirmado para finalização: ${updates.phone_landline}`);
+      }
+    }
+
     // Carregar dados do consultor dono para validação reforçada
     let consultantRow: any = null;
     try {
@@ -1088,7 +1122,7 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
       }
       // Se o passo redirecionado for ask_phone_confirm, reenviar os botões aqui
       if (updates.conversation_step === "ask_phone_confirm") {
-        const msgConfirm = getReplyForStep("ask_phone_confirm", merged);
+        const msgConfirm = getReplyForStep("ask_phone_confirm", { ...merged, phone_whatsapp: phone });
         await sendButtons(remoteJid, msgConfirm, [
           { id: "sim_phone", title: "✅ Sim, é meu" },
           { id: "editar_phone", title: "✏️ Usar outro número" },

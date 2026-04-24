@@ -148,9 +148,11 @@ Deno.serve(async (req) => {
       const idleMinutes = (Date.now() - new Date(lead.last_bot_reply_at).getTime()) / 60_000;
       const attempts = lead.rescue_attempts || 0;
 
-      // Anti-spam: não enviar dois rescues seguidos no mesmo lead se o último foi < 4 min atrás
-      if (lead.last_rescue_at) {
-        const sinceLastRescue = (Date.now() - new Date(lead.last_rescue_at).getTime()) / 60_000;
+      // Anti-spam: não enviar dois rescues seguidos no mesmo lead se o último foi < 30 min atrás
+      // TAMBÉM usar last_bot_reply_at como fallback se last_rescue_at for null
+      const lastRescueTime = lead.last_rescue_at || lead.last_bot_reply_at;
+      if (lastRescueTime) {
+        const sinceLastRescue = (Date.now() - new Date(lastRescueTime).getTime()) / 60_000;
         if (sinceLastRescue < RESCUE_THROTTLE_MIN) {
           stats.skipped++;
           continue;
