@@ -78,6 +78,7 @@ export function createEvolutionSender(apiUrl: string, apiKey: string, instanceNa
       id: b.id,
     }));
 
+    console.log(`📤 [sendButtons] -> ${remoteJid} (${safeButtons.length} botões: ${safeButtons.map(b => b.id).join(",")})`);
     const ok = await sendWithRetry("send_buttons", () =>
       fetchWithTimeout(`${baseUrl}/message/sendButtons/${instanceName}`, {
         method: "POST",
@@ -92,12 +93,18 @@ export function createEvolutionSender(apiUrl: string, apiKey: string, instanceNa
         timeout: TIMEOUT_WHAPI,
       })
     );
-    if (ok) return true;
+    if (ok) {
+      console.log(`✅ [sendButtons] entregue à Evolution`);
+      return true;
+    }
 
     // Fallback final: texto numerado garantindo que o cliente NUNCA fica sem resposta
+    console.warn(`⚠️ [sendButtons] FALHOU -> caindo para texto numerado`);
     logStructured("warn", "evolution_buttons_fallback_to_text", { instance: instanceName });
     const textWithOptions = `${message}\n\n${buttons.map((b, i) => `*${i + 1}.* ${b.title}`).join("\n")}\n\n_Digite o número da opção desejada._`;
-    return await sendText(remoteJid, textWithOptions);
+    const okText = await sendText(remoteJid, textWithOptions);
+    console.log(`${okText ? "✅" : "❌"} [sendButtons fallback texto] resultado=${okText}`);
+    return okText;
   }
 
   async function downloadMedia(key: any, message: any): Promise<string | null> {
