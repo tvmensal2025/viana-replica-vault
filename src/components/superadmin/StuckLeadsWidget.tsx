@@ -92,15 +92,18 @@ export function StuckLeadsWidget() {
     setLoading(true);
     const cutoff = new Date(Date.now() - 10 * 60_000).toISOString();
     const activeSteps = `(${ACTIVE_STUCK_STEPS.join(",")})`;
-    // Só leads que efetivamente conversaram pela instância (têm conversation_step ask_*/aguardando_*)
-    // E que não estão em fases finais. Importações antigas (sem step) NÃO entram.
+    // CRÍTICO: só mostrar leads que vieram do cadastro AUTOMÁTICO via WhatsApp.
+    // Leads importados (telefone "sem_celular_*", "sem_celular_xxx") NÃO entram.
+    // Leads sem `last_bot_reply_at` (nunca conversaram pelo bot) NÃO entram.
     const { data } = await supabase
       .from("customers")
       .select("id, name, phone_whatsapp, conversation_step, last_bot_reply_at, rescue_attempts, status, consultant_id")
-      .or(
-        `and(last_bot_reply_at.lt.${cutoff},conversation_step.in.${activeSteps},status.not.in.(complete,cadastro_concluido,portal_submitting,registered_igreen,approved,awaiting_signature,automation_failed,abandoned)),` +
-        `status.in.(stuck_finalizar,stuck_contact,email_pendente_revisao,contato_incompleto)`
-      )
+      .not("phone_whatsapp", "ilike", "sem_celular%")
+      .not("phone_whatsapp", "ilike", "sem_%")
+      .not("last_bot_reply_at", "is", null)
+      .lt("last_bot_reply_at", cutoff)
+      .filter("conversation_step", "in", activeSteps)
+      .not("status", "in", "(complete,cadastro_concluido,portal_submitting,registered_igreen,approved,awaiting_signature,automation_failed,abandoned,contato_incompleto)")
       .order("last_bot_reply_at", { ascending: true })
       .limit(50);
     setLeads((data as any) || []);
