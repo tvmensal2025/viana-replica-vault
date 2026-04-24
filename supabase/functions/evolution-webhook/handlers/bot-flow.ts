@@ -1087,8 +1087,20 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
       logStructured("warn", "validation_failed", {
         customer_id: customer.id, step: "finalizando", errors: validation.errors,
       });
-      let redirected = false;
-      for (const err of validation.errors) {
+      
+      // ── ANTI-LOOP: Se já redirecionou 3+ vezes, forçar finalização mesmo com warnings ──
+      const redirectCount = customer.finalize_redirect_count || 0;
+      if (redirectCount >= 2) {
+        console.warn(`⚠️ [ANTI-LOOP] ${customer.id} já foi redirecionado ${redirectCount}x. Forçando finalização.`);
+        logStructured("warn", "force_finalize_after_redirects", {
+          customer_id: customer.id, errors: validation.errors, redirects: redirectCount,
+        });
+        // Não redirecionar mais — seguir pro portal mesmo com erros
+      } else {
+        updates.finalize_redirect_count = redirectCount + 1;
+        
+        let redirected = false;
+        for (const err of validation.errors) {
         // ── Email: placeholder, formato, consultor, ou ausente → volta a perguntar ──
         if (err.includes("Email")) {
           updates.conversation_step = "ask_email";
@@ -1129,6 +1141,7 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
         ]);
         reply = "";
       }
+      } // fecha else do anti-loop
     } else {
       updates.possui_procurador = false;
       updates.conta_pdf_protegida = false;

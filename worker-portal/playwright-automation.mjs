@@ -945,10 +945,11 @@ async function baixarArquivo(url, caminhoSemExtensao) {
 }
 
 // ─── Formatar dados ───────────────────────────────────────────────────────────
-// ─── Fallbacks fixos para campos obrigatórios ────────────────────────────────
-// Usados quando o cliente não informou email/telefone no WhatsApp
-const FALLBACK_EMAIL = process.env.FALLBACK_EMAIL || 'tvmensal11@gmail.com';
-const FALLBACK_PHONE = process.env.FALLBACK_PHONE || '11971254913';
+// ─── Dados reais obrigatórios — NUNCA usar fallback hardcoded ────────────────
+// O bot do WhatsApp DEVE coletar email e telefone antes de enviar pro worker.
+// Se chegou aqui sem, é bug no bot — rejeitar o lead.
+const FALLBACK_EMAIL = ''; // REMOVIDO: não usar email fake
+const FALLBACK_PHONE = ''; // REMOVIDO: não usar telefone fake
 
 function formatarDados(cliente) {
   const onlyDigits = (s) => (s || '').replace(/\D+/g, '');
@@ -962,20 +963,20 @@ function formatarDados(cliente) {
   const cepFormatted = cepDigits.replace(/(\d{5})(\d{3})/, '$1-$2');
   
   // Telefone SEM código do país (portal não aceita +55)
-  // Fallback: usa FALLBACK_PHONE se cliente não informou
+  // OBRIGATÓRIO: bot deve ter coletado telefone real do cliente
   const phoneDigits = onlyDigits(cliente.phone_whatsapp || '');
   const whatsappRaw = phoneDigits.length >= 12 ? phoneDigits.slice(-11) : phoneDigits;
-  const whatsapp = whatsappRaw.length >= 10 ? whatsappRaw : onlyDigits(FALLBACK_PHONE).slice(-11);
   if (whatsappRaw.length < 10) {
-    console.warn(`   ⚠️  Telefone do cliente ausente/inválido ("${phoneDigits}") — usando fallback: ${whatsapp}`);
+    throw new Error(`Telefone do cliente ausente ou inválido ("${phoneDigits}"). O bot deveria ter coletado antes de enviar pro worker.`);
   }
+  const whatsapp = whatsappRaw;
 
-  // Email: fallback se não informado
+  // Email OBRIGATÓRIO: bot deve ter coletado email real do cliente
   const emailRaw = (cliente.email || '').trim();
-  const email = emailRaw.includes('@') ? emailRaw : FALLBACK_EMAIL;
-  if (!emailRaw.includes('@')) {
-    console.warn(`   ⚠️  Email do cliente ausente ("${emailRaw}") — usando fallback: ${email}`);
+  if (!emailRaw || !emailRaw.includes('@') || emailRaw.endsWith('@lead.igreen')) {
+    throw new Error(`Email do cliente ausente ou placeholder ("${emailRaw}"). O bot deveria ter coletado antes de enviar pro worker.`);
   }
+  const email = emailRaw;
 
   return {
     nomeCompleto: cliente.name,
@@ -1355,8 +1356,8 @@ export async function executarAutomacao(customerId, options = {}) {
     const dupEmail = await page.locator('text=/j[áa].*cadastrad/i').count().catch(() => 0);
     if (dupEmail > 0) {
       emailToUse = `${data.cpfDigits}@igreen.temp.com.br`;
-      console.log(`   ⚠️ Email duplicado → fallback: ${emailToUse}`);
-      await fillByName('email', emailToUse, 'Email (fallback)');
+      console.log(`   ⚠️ Email duplicado no portal iGreen → usando alternativo: ${emailToUse}`);
+      await fillByName('email', emailToUse, 'Email (alternativo - duplicado no portal)');
     }
     
     await fillByName('emailConfirm', emailToUse, 'Confirme email');
