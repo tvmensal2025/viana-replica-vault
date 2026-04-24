@@ -60,7 +60,9 @@ export function createEvolutionSender(apiUrl: string, apiKey: string, instanceNa
   }
 
   async function sendText(remoteJid: string, text: string): Promise<boolean> {
-    return sendWithRetry("send_text", () =>
+    const preview = (text || "").substring(0, 60).replace(/\n/g, " ");
+    console.log(`📤 [sendText] -> ${remoteJid} | "${preview}${text.length > 60 ? "..." : ""}"`);
+    const ok = await sendWithRetry("send_text", () =>
       fetchWithTimeout(`${baseUrl}/message/sendText/${instanceName}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "apikey": apiKey },
@@ -68,6 +70,8 @@ export function createEvolutionSender(apiUrl: string, apiKey: string, instanceNa
         timeout: TIMEOUT_WHAPI,
       })
     );
+    console.log(`${ok ? "✅" : "❌"} [sendText] resultado=${ok}`);
+    return ok;
   }
 
   async function sendButtons(remoteJid: string, message: string, buttons: EvolutionButton[]): Promise<boolean> {
