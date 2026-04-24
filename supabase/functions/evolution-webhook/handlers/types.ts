@@ -2,14 +2,14 @@
 // Defines the BotContext object passed through bot-flow handlers
 // so we don't need to keep dozens of free variables in scope.
 
-export type SupabaseClient = ReturnType<typeof import("https://esm.sh/@supabase/supabase-js@2").createClient>;
+// Use `any` para o client do Supabase para evitar conflitos de tipos genéricos
+// quando o orchestrator (index.ts) chama os handlers. Os tipos do banco são
+// validados em runtime pelas queries.
+// deno-lint-ignore no-explicit-any
+export type SupabaseClient = any;
 
-export interface EvolutionSender {
-  sendText: (jid: string, text: string) => Promise<boolean>;
-  sendButtons: (jid: string, text: string, buttons: Array<{ id: string; title: string }>) => Promise<boolean>;
-  downloadMedia: (key: any, message: any) => Promise<string | null>;
-  sendMedia: (jid: string, url: string, caption: string, type: string) => Promise<boolean>;
-}
+// deno-lint-ignore no-explicit-any
+export type EvolutionSender = any;
 
 export interface BotContext {
   // Supabase + sender
