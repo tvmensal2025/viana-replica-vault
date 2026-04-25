@@ -779,19 +779,42 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
       const resp = isButton ? buttonId : messageText.toLowerCase().trim();
       const sim = resp === "sim_phone" || resp === "1" || resp === "sim" || resp === "s";
       const editar = resp === "editar_phone" || resp === "2" || resp === "editar" || resp === "outro" || resp === "outro número" || resp === "outro numero";
+
+      // ── PROTEÇÃO: Se o phone_whatsapp é o número do consultor/instância,
+      // NÃO permitir confirmar — forçar digitar outro número ──
+      let phoneIsConsultant = false;
       if (sim) {
+        try {
+          const [{ data: cons }, { data: inst }] = await Promise.all([
+            supabase.from("consultants").select("phone").eq("id", consultorId).maybeSingle(),
+            supabase.from("whatsapp_instances").select("connected_phone").eq("consultant_id", consultorId).maybeSingle(),
+          ]);
+          const blockNumbers = [cons?.phone, inst?.connected_phone].filter(Boolean) as string[];
+          const whatsNum = (customer.phone_whatsapp || phone || "").replace(/\D/g, "");
+          if (blockNumbers.some((n) => isSameContact(whatsNum, n))) {
+            phoneIsConsultant = true;
+            console.log(`⚠️ [ask_phone_confirm] Telefone do WhatsApp é do consultor — forçando ask_phone`);
+          }
+        } catch (_) { /* segue */ }
+      }
+
+      if (sim && !phoneIsConsultant) {
         const p = (customer.phone_whatsapp || phone).replace(/\D/g, "");
         const num = p.length >= 11 ? p.slice(-11) : p;
         updates.phone_landline = num.length === 11
           ? num.replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3")
           : num.replace(/(\d{2})(\d{4})(\d{4})/, "($1) $2-$3");
-        updates.phone_whatsapp = normalizePhone(num);
+        // NÃO atualizar phone_whatsapp — é a chave da conversa e tem unique constraint
         // ✅ Cliente CONFIRMOU explicitamente que o número de WhatsApp é o telefone de contato
         updates.phone_contact_confirmed = true;
         const merged = { ...customer, ...updates };
         const next = await autoResolveCepIfNeeded(merged, updates);
         updates.conversation_step = next;
         reply = getReplyForStep(next, merged);
+      } else if (sim && phoneIsConsultant) {
+        // Telefone do WhatsApp é do consultor — não pode usar como contato
+        updates.conversation_step = "ask_phone";
+        reply = "⚠️ Esse número é do consultor e não pode ser usado como seu contato.\n\nInforme *seu próprio telefone* com DDD (ex: 11999998888):";
       } else if (editar) {
         updates.conversation_step = "ask_phone";
         reply = "Informe o *telefone* com DDD (ex: 11999998888):";
@@ -812,14 +835,14 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
       if (messageText.includes("@") && isValidEmailFormat(messageText.trim())) {
         console.log(`📧 [ask_phone] Cliente enviou email "${messageText.trim()}" ao invés de telefone — salvando e avançando`);
         updates.email = messageText.trim().toLowerCase();
-        // Usar telefone do WhatsApp como telefone de contato
+        // Usar telefone do WhatsApp como telefone de contato (NÃO alterar phone_whatsapp — é chave da conversa)
         const p = (customer.phone_whatsapp || phone).replace(/\D/g, "");
         const num = p.startsWith("55") && p.length >= 12 ? p.substring(2) : p;
         if (num.length >= 10) {
           updates.phone_landline = num.length === 11
             ? num.replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3")
             : num.replace(/(\d{2})(\d{4})(\d{4})/, "($1) $2-$3");
-          updates.phone_whatsapp = normalizePhone(num);
+          // NÃO atualizar phone_whatsapp — causa duplicate key violation
           updates.phone_contact_confirmed = true;
         }
         const merged = { ...customer, ...updates };
@@ -854,7 +877,9 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
       updates.phone_landline = num11.length === 11
         ? num11.replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3")
         : num11.replace(/(\d{2})(\d{4})(\d{4})/, "($1) $2-$3");
-      updates.phone_whatsapp = normalizePhone(num11);
+      // ⚠️ NÃO atualizar phone_whatsapp aqui — é a chave da conversa (número real do remetente)
+      // e tem unique constraint. Só phone_landline (telefone de contato) muda.
+      // updates.phone_whatsapp = normalizePhone(num11);  // REMOVIDO — causa duplicate key
       // ✅ Cliente DIGITOU o telefone — confirmado explicitamente
       updates.phone_contact_confirmed = true;
       const merged = { ...customer, ...updates };
@@ -1123,8 +1148,9 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
         customer_id: customer.id, step: "finalizando", errors: validation.errors,
       });
       
-      // ── ANTI-LOOP: Se já redirecionou 3+ vezes, forçar finalização mesmo com warnings ──
-      const redirectCount = customer.finalize_redirect_count || 0;
+      // ── ANTI-LOOP: Se já redirecionou 2+ vezes, forçar finalização mesmo com warnings ──
+      // Usa rescue_attempts como contador (coluna já existente) para não depender de coluna nova
+      const redirectCount = customer.rescue_attempts || 0;
       if (redirectCount >= 2) {
         console.warn(`⚠️ [ANTI-LOOP] ${customer.id} já foi redirecionado ${redirectCount}x. Forçando finalização.`);
         logStructured("warn", "force_finalize_after_redirects", {
@@ -1132,7 +1158,7 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
         });
         // Não redirecionar mais — seguir pro portal mesmo com erros
       } else {
-        updates.finalize_redirect_count = redirectCount + 1;
+        updates.rescue_attempts = redirectCount + 1;
         
         let redirected = false;
         for (const err of validation.errors) {

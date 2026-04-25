@@ -129,12 +129,10 @@ export function validateCustomerForPortal(customer: any): ValidationResult {
   } else {
     const ddd = parseInt(phoneForPortal.substring(0, 2));
     if (ddd < 11 || ddd > 99) errors.push("Telefone com DDD inválido");
-    if (
-      customer.consultant_phone &&
-      isSameContact(phoneForPortal, customer.consultant_phone)
-    ) {
-      errors.push("Telefone do consultor não pode ser usado como telefone do cliente");
-    }
+    // NOTA: Removida checagem "telefone do consultor" aqui.
+    // Essa validação já é feita nos steps ask_phone e ask_phone_confirm.
+    // Se o cliente passou por esses steps e confirmou, não bloquear na finalização.
+    // Manter aqui causava loop infinito quando consultor testava com próprio número.
   }
   const billValue = typeof customer.electricity_bill_value === "string"
     ? parseFloat(customer.electricity_bill_value)
