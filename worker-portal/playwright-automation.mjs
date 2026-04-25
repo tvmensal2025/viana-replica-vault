@@ -963,8 +963,12 @@ function formatarDados(cliente) {
   const cepFormatted = cepDigits.replace(/(\d{5})(\d{3})/, '$1-$2');
   
   // Telefone SEM código do país (portal não aceita +55)
-  // OBRIGATÓRIO: bot deve ter coletado telefone real do cliente
-  const phoneDigits = onlyDigits(cliente.phone_whatsapp || '');
+  // OBRIGATÓRIO: usar phone_landline (telefone confirmado pelo cliente no chat)
+  // Fallback para phone_whatsapp apenas se phone_landline não existir
+  const phoneLandline = onlyDigits(cliente.phone_landline || '');
+  const phoneWhatsapp = onlyDigits(cliente.phone_whatsapp || '');
+  // Preferir phone_landline (telefone real do cliente digitado no chat)
+  const phoneDigits = phoneLandline.length >= 10 ? phoneLandline : phoneWhatsapp;
   const whatsappRaw = phoneDigits.length >= 12 ? phoneDigits.slice(-11) : phoneDigits;
   if (whatsappRaw.length < 10) {
     throw new Error(`Telefone do cliente ausente ou inválido ("${phoneDigits}"). O bot deveria ter coletado antes de enviar pro worker.`);
