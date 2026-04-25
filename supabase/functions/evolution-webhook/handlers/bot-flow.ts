@@ -828,7 +828,12 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
         reply = getReplyForStep(next, merged);
         break;
       }
-      const phoneClean = messageText.replace(/\D/g, "");
+      let phoneClean = messageText.replace(/\D/g, "");
+      // Aceitar formatos: +55 11 94574-4147, 55 11945744147, (11) 94574-4147, 11945744147
+      // Remover prefixo 55 se presente (código do país)
+      if (phoneClean.startsWith("55") && phoneClean.length >= 12) {
+        phoneClean = phoneClean.substring(2);
+      }
       if (phoneClean.length < 10 || phoneClean.length > 11) { reply = "❌ Telefone inválido. Digite com DDD (ex: 11999998888):"; break; }
       // Validar DDD
       const ddd = parseInt(phoneClean.substring(0, 2));
