@@ -106,7 +106,7 @@ export function getReplyForStep(step: string, c: any): string {
       // Remove 55 prefix for display
       if (p.startsWith("55") && p.length >= 12) p = p.substring(2);
       const fmt = p.length >= 11 ? `(${p.slice(0, 2)}) ${p.slice(2, 7)}-${p.slice(7)}` : (c.phone_whatsapp || "");
-      return `📞 Esse é o seu *telefone de contato*?\n\n*${fmt}*\n\nToque em *Sim* se for o seu, ou em *Outro número* para informar outro telefone.`;
+      return `📞 Esse é o seu *telefone de contato*?\n\n*${fmt}*\n\n1️⃣ ✅ Sim, é meu\n2️⃣ 📱 Outro número\n\n_Digite o número da opção:_`;
     }
     case "ask_phone": return "Informe seu *telefone* com DDD (ex: 11999998888):";
     case "ask_email": return "📧 Informe seu *e-mail* para finalizarmos seu cadastro no portal iGreen (ex: joao.silva@gmail.com)\n\n_Se não tiver e-mail, crie um agora em *gmail.com* — leva 1 minuto._";
@@ -117,7 +117,7 @@ export function getReplyForStep(step: string, c: any): string {
     case "ask_bill_value": return "Qual o *valor médio* da sua conta de luz? (ex: 350)";
     case "ask_doc_frente_manual": return "📸 Envie a *FRENTE do seu documento* (RG ou CNH)";
     case "ask_doc_verso_manual": return "📸 Envie o *VERSO do seu documento*";
-    case "ask_finalizar": return "✅ *Todos os dados foram preenchidos!*\n\nClique em *Finalizar* para concluir seu cadastro.";
+    case "ask_finalizar": return "✅ *Todos os dados foram preenchidos!*\n\n1️⃣ ✅ Finalizar\n\n_Digite *1* ou *FINALIZAR* para concluir:_";
     case "finalizando": return "✅ Todos os dados coletados! Processando...";
     default: return `Continuando... (${step})`;
   }

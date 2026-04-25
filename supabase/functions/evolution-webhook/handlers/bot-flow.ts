@@ -808,6 +808,26 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
     }
 
     case "ask_phone": {
+      // ── DETECÇÃO INTELIGENTE: se o cliente mandou email ao invés de telefone, salvar e avançar ──
+      if (messageText.includes("@") && isValidEmailFormat(messageText.trim())) {
+        console.log(`📧 [ask_phone] Cliente enviou email "${messageText.trim()}" ao invés de telefone — salvando e avançando`);
+        updates.email = messageText.trim().toLowerCase();
+        // Usar telefone do WhatsApp como telefone de contato
+        const p = (customer.phone_whatsapp || phone).replace(/\D/g, "");
+        const num = p.startsWith("55") && p.length >= 12 ? p.substring(2) : p;
+        if (num.length >= 10) {
+          updates.phone_landline = num.length === 11
+            ? num.replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3")
+            : num.replace(/(\d{2})(\d{4})(\d{4})/, "($1) $2-$3");
+          updates.phone_whatsapp = normalizePhone(num);
+          updates.phone_contact_confirmed = true;
+        }
+        const merged = { ...customer, ...updates };
+        const next = await autoResolveCepIfNeeded(merged, updates);
+        updates.conversation_step = next;
+        reply = getReplyForStep(next, merged);
+        break;
+      }
       const phoneClean = messageText.replace(/\D/g, "");
       if (phoneClean.length < 10 || phoneClean.length > 11) { reply = "❌ Telefone inválido. Digite com DDD (ex: 11999998888):"; break; }
       // Validar DDD
