@@ -328,6 +328,8 @@ Deno.serve(async (req) => {
       console.log(`♻️ [auto-resume] ${customer.id}: status "${customer.status}" → "pending" (cliente respondeu, bot avançando)`);
     }
     if (Object.keys(updates).length > 0) {
+      // Limpar marcador interno ANTES de persistir no banco
+      delete (updates as any).__inline_sent;
       console.log(`📝 Salvando updates para ${customer.id}:`, JSON.stringify(updates).substring(0, 500));
       const { error: updateError } = await supabase.from("customers").update(updates).eq("id", customer.id).select();
       if (updateError) {

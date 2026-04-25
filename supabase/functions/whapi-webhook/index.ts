@@ -250,6 +250,7 @@ Deno.serve(async (req) => {
       (updates as any).rescue_attempts = 0;
     }
     if (Object.keys(updates).length > 0) {
+      delete (updates as any).__inline_sent;
       const { error: updateError } = await supabase.from("customers").update(updates).eq("id", customer.id).select();
       if (updateError) console.error(`❌ ERRO ao salvar updates:`, updateError);
       if (updates.conversation_step && updates.conversation_step !== stepBefore) {
