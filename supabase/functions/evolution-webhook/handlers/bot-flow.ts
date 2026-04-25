@@ -95,9 +95,8 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
   // Formato: mensagem + opções numeradas
   // ═══════════════════════════════════════════════════════════════════
   async function sendOptions(jid: string, msg: string, options: { id: string; title: string }[]): Promise<boolean> {
-    const optionsText = options.map((o, i) => `${i + 1}️⃣ ${o.title}`).join("\n");
-    const fullMsg = `${msg}\n\n${optionsText}\n\n_Digite o número da opção:_`;
-    return sendText(jid, fullMsg);
+    // Tenta enviar como botões reais (funciona no Whapi, fallback texto no Evolution)
+    return sendButtons(jid, msg, options);
   }
 
   const step = customer.conversation_step || "welcome";
