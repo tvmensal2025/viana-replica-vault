@@ -51,6 +51,7 @@ export function WhatsAppTab({ userId, pendingChatPhone, pendingChatMessage, onPe
     connectionLog,
     operationalHealth,
     consecutiveTimeouts,
+    isWhapi,
     createAndConnect,
     disconnect,
     reconnect,
@@ -298,6 +299,7 @@ export function WhatsAppTab({ userId, pendingChatPhone, pendingChatMessage, onPe
                 connectionLog={connectionLog}
                 operationalHealth={operationalHealth}
                 consecutiveTimeouts={consecutiveTimeouts}
+                isWhapi={isWhapi}
                 onConnect={createAndConnect}
                 onDisconnect={disconnect}
                 onReconnect={reconnect}

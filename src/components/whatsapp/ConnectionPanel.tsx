@@ -25,6 +25,7 @@ interface ConnectionPanelProps {
   connectionLog?: string[];
   operationalHealth?: OperationalHealth;
   consecutiveTimeouts?: number;
+  isWhapi?: boolean;
   onConnect: () => Promise<void>;
   onDisconnect: () => Promise<void>;
   onReconnect: () => Promise<void>;
@@ -154,6 +155,7 @@ export function ConnectionPanel({
   connectionLog = [],
   operationalHealth = "healthy",
   consecutiveTimeouts = 0,
+  isWhapi = false,
   onConnect,
   onDisconnect,
   onReconnect,
@@ -201,6 +203,32 @@ export function ConnectionPanel({
           </div>
           <HealthBadge health={operationalHealth} timeouts={consecutiveTimeouts} />
         </div>
+
+        {/* Whapi Super Admin — connected via Whapi Cloud, no QR needed */}
+        {isWhapi && connectionStatus === "connected" && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-3 px-4 rounded-xl bg-green-500/5 border border-green-500/15">
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-500/20 to-green-600/10 flex items-center justify-center border border-green-500/20">
+                  <Wifi className="w-6 h-6 text-green-400" />
+                </div>
+                <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-green-500 border-2 border-card flex items-center justify-center">
+                  <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                </div>
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-green-500/15 px-3 py-1 text-xs font-bold text-green-400 uppercase tracking-wider">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                    Conectado via Whapi
+                  </span>
+                </div>
+                {phoneNumber && <p className="text-sm text-muted-foreground mt-1">{phoneNumber}</p>}
+                <p className="text-xs text-muted-foreground/60 mt-0.5">Super Admin — Botões reais do WhatsApp ativados</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Loading / Auto-reconnecting */}
         {showLoadingState && (
@@ -424,8 +452,8 @@ export function ConnectionPanel({
           </div>
         )}
 
-        {/* Connected */}
-        {showConnectedState && (
+        {/* Connected (Evolution only — Whapi has its own panel above) */}
+        {showConnectedState && !isWhapi && (
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-3 px-4 rounded-xl bg-green-500/5 border border-green-500/15">
             <div className="flex items-center gap-4">
               <div className="relative">

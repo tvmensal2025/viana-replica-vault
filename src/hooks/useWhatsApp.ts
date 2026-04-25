@@ -41,6 +41,7 @@ interface UseWhatsAppReturn {
   connectionLog: string[];
   operationalHealth: OperationalHealth;
   consecutiveTimeouts: number;
+  isWhapi: boolean;
   createAndConnect: () => Promise<void>;
   disconnect: () => Promise<void>;
   reconnect: () => Promise<void>;
@@ -53,6 +54,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
   const [instanceName, setInstanceName] = useState<string | null>(null);
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [qrGeneratedAt, setQrGeneratedAt] = useState<number | null>(null);
+  const [isWhapi, setIsWhapi] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -620,6 +622,28 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
       const name = getFixedInstanceName(consultantId);
       setInstanceName(name);
 
+      // ── WHAPI CHECK: Se este consultor é o super admin (usa Whapi), pular Evolution ──
+      try {
+        const { data: settingsRows } = await supabase
+          .from("settings")
+          .select("key, value")
+          .in("key", ["superadmin_consultant_id", "whapi_connected_phone"]);
+        const settings: Record<string, string> = {};
+        settingsRows?.forEach((s: any) => { settings[s.key] = s.value; });
+
+        if (settings.superadmin_consultant_id === consultantId) {
+          // Super admin usa Whapi — não precisa de Evolution/QR Code
+          setIsWhapi(true);
+          setStatus("connected");
+          setPhoneNumber(settings.whapi_connected_phone || "+55 11 99009-2401");
+          setError(null);
+          setIsLoading(false);
+          addLog("✅ Conectado via Whapi Cloud (Super Admin)");
+          setHealth("healthy");
+          return;
+        }
+      } catch (_) { /* segue para Evolution normalmente */ }
+
       try {
         const { data: instanceRecord } = await supabase
           .from("whatsapp_instances")
@@ -703,6 +727,7 @@ export function useWhatsApp(consultantId: string): UseWhatsAppReturn {
     connectionLog,
     operationalHealth,
     consecutiveTimeouts,
+    isWhapi,
     createAndConnect,
     disconnect,
     reconnect,
