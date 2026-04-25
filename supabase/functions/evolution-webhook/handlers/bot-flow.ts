@@ -1296,6 +1296,8 @@ export async function runBotFlow(ctx: BotContext): Promise<BotResult> {
 
       // Updates ja foram salvos acima — limpar para o caller nao salvar de novo
       for (const k of Object.keys(updates)) delete updates[k];
+      // Marcar que o handler já enviou mensagem inline (evita fallback "Estou aqui!")
+      updates.__inline_sent = true;
       reply = "";
     }
   }
